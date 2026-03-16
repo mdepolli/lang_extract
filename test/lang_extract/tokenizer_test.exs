@@ -19,5 +19,23 @@ defmodule LangExtract.TokenizerTest do
     test "empty string returns empty list" do
       assert [] = Tokenizer.tokenize("")
     end
+
+    test "keeps contractions as single tokens" do
+      tokens = Tokenizer.tokenize("don't won't")
+      words = Enum.filter(tokens, &(&1.type == :word))
+      assert [%Token{text: "don't"}, %Token{text: "won't"}] = words
+    end
+
+    test "groups numbers with separators" do
+      tokens = Tokenizer.tokenize("costs $1,234.56 total")
+      number = Enum.find(tokens, &(&1.type == :number))
+      assert %Token{text: "1,234.56", byte_start: 7, byte_end: 15} = number
+    end
+
+    test "preserves whitespace runs" do
+      tokens = Tokenizer.tokenize("a  b")
+      ws = Enum.find(tokens, &(&1.type == :whitespace))
+      assert %Token{text: "  ", byte_start: 1, byte_end: 3} = ws
+    end
   end
 end
