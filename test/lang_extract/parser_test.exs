@@ -128,4 +128,62 @@ defmodule LangExtract.ParserTest do
                Parser.parse(json)
     end
   end
+
+  describe "LangExtract.extract/3" do
+    test "parses, aligns, and merges class/attributes onto spans" do
+      source = "But soft! What light through yonder window breaks?"
+
+      json =
+        Jason.encode!(%{
+          "extractions" => [
+            %{"class" => "quote", "text" => "soft", "attributes" => %{"tone" => "gentle"}},
+            %{"class" => "object", "text" => "window"}
+          ]
+        })
+
+      assert {:ok, spans} = LangExtract.extract(source, json)
+      assert length(spans) == 2
+
+      [soft, window] = spans
+
+      assert %LangExtract.Span{
+               text: "soft",
+               status: :exact,
+               class: "quote",
+               attributes: %{"tone" => "gentle"}
+             } = soft
+
+      assert soft.byte_start != nil
+
+      assert %LangExtract.Span{
+               text: "window",
+               status: :exact,
+               class: "object",
+               attributes: %{}
+             } = window
+
+      assert window.byte_start != nil
+    end
+
+    test "merges class/attributes onto not_found spans" do
+      json =
+        Jason.encode!(%{
+          "extractions" => [
+            %{"class" => "thing", "text" => "nonexistent phrase", "attributes" => %{"a" => 1}}
+          ]
+        })
+
+      assert {:ok, [span]} = LangExtract.extract("hello world", json)
+      assert span.status == :not_found
+      assert span.class == "thing"
+      assert span.attributes == %{"a" => 1}
+    end
+
+    test "propagates parser errors" do
+      assert {:error, :invalid_json} = LangExtract.extract("source", "bad json")
+
+      assert {:error, :missing_extractions} =
+               LangExtract.extract("source", Jason.encode!(%{"wrong" => []}))
+    end
+  end
 end
