@@ -41,6 +41,23 @@ defmodule LangExtract.AlignerTest do
       assert [%Span{text: "Hello", byte_start: 0, byte_end: 5, status: :exact}] =
                Aligner.align(source, ["Hello"])
     end
+
+    test "aligns multibyte UTF-8 text with correct byte offsets" do
+      source = "café señor bueno"
+
+      assert [%Span{text: "señor", byte_start: 6, byte_end: 12, status: :exact}] =
+               Aligner.align(source, ["señor"])
+    end
+
+    test "byte offsets round-trip via binary_part" do
+      source = "naïve résumé format"
+
+      [span] = Aligner.align(source, ["résumé"])
+      assert span.status == :exact
+
+      length = span.byte_end - span.byte_start
+      assert binary_part(source, span.byte_start, length) == "résumé"
+    end
   end
 
   describe "edge cases" do
