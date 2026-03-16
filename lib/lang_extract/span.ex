@@ -9,9 +9,11 @@ defmodule LangExtract.Span do
           text: String.t(),
           byte_start: non_neg_integer() | nil,
           byte_end: non_neg_integer() | nil,
-          status: status()
+          status: status(),
+          class: String.t() | nil,
+          attributes: map()
         }
 
   @enforce_keys [:text, :status]
-  defstruct [:text, :byte_start, :byte_end, :status]
+  defstruct [:text, :byte_start, :byte_end, :status, :class, attributes: %{}]
 end
