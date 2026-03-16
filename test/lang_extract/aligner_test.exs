@@ -57,4 +57,38 @@ defmodule LangExtract.AlignerTest do
                Aligner.align("hi", ["this is much longer than source"])
     end
   end
+
+  describe "fuzzy matching" do
+    test "matches when most tokens overlap" do
+      source = "the quick brown fox jumps"
+      # LLM returned "quick brown dog" — "dog" not in source, falls to fuzzy.
+      # Windows of size 3 over source words:
+      #   [the,quick,brown]=2/3  [quick,brown,fox]=2/3  [brown,fox,jumps]=1/3
+      # First best window wins: indices 0-2, byte_start=0 ("the"), byte_end=15 ("brown")
+      extraction = "quick brown dog"
+
+      assert [%Span{byte_start: 0, byte_end: 15, status: :fuzzy}] =
+               Aligner.align(source, [extraction], fuzzy_threshold: 0.6)
+    end
+
+    test "returns not_found below threshold" do
+      source = "the quick brown fox"
+      extraction = "completely different words here"
+
+      assert [%Span{status: :not_found}] = Aligner.align(source, [extraction])
+    end
+
+    test "respects custom fuzzy threshold" do
+      source = "the quick brown fox jumps"
+      # 1 of 3 tokens match — 0.33 ratio
+      extraction = "quick red cat"
+
+      # Default threshold 0.75 → not found
+      assert [%Span{status: :not_found}] = Aligner.align(source, [extraction])
+
+      # Lowered threshold → fuzzy match
+      assert [%Span{status: :fuzzy}] =
+               Aligner.align(source, [extraction], fuzzy_threshold: 0.3)
+    end
+  end
 end
