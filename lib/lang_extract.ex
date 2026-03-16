@@ -51,7 +51,7 @@ defmodule LangExtract do
 
       enriched =
         Enum.zip(extractions, spans)
-        |> Enum.map(fn {extraction, span} ->
+        |> Enum.map(fn {extraction, %Span{} = span} ->
           %Span{span | class: extraction.class, attributes: extraction.attributes}
         end)
 
