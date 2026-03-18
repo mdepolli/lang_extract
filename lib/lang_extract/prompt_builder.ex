@@ -8,10 +8,20 @@ defmodule LangExtract.PromptBuilder do
 
   alias LangExtract.{FormatHandler, PromptTemplate}
 
+  @doc """
+  Builds a Q&A-formatted prompt from a template and chunk text.
+
+  ## Options
+
+    * `:previous_chunk` - text from the previous chunk for cross-chunk coreference (default: `nil`)
+    * `:context_window_chars` - trailing grapheme count from previous chunk to include
+      (default: `nil`, meaning use full previous chunk). Operates on graphemes, not bytes.
+
+  """
   @spec build(PromptTemplate.t(), String.t(), keyword()) :: String.t()
   def build(%PromptTemplate{} = template, chunk_text, opts \\ []) do
     [
-      template.description,
+      non_empty(template.description),
       format_examples(template.examples),
       format_context(opts),
       chunk_text
@@ -31,6 +41,9 @@ defmodule LangExtract.PromptBuilder do
     end)
     |> Enum.join("\n\n")
   end
+
+  defp non_empty(""), do: nil
+  defp non_empty(str), do: str
 
   defp format_context(opts) do
     case Keyword.get(opts, :previous_chunk) do

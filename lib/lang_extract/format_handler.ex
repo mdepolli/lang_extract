@@ -19,7 +19,7 @@ defmodule LangExtract.FormatHandler do
   end
 
   defp serialize_extraction(%Extraction{class: class, text: text, attributes: attributes}) do
-    %{class => text, "#{class}#{@attribute_suffix}" => attributes || %{}}
+    %{class => text, "#{class}#{@attribute_suffix}" => attributes}
   end
 
   @spec normalize(String.t()) :: {:ok, String.t()} | {:error, :invalid_format}
@@ -32,7 +32,7 @@ defmodule LangExtract.FormatHandler do
         {:ok, Jason.encode!(%{decoded | "extractions" => normalized})}
 
       {:ok, _} ->
-        {:ok, cleaned}
+        {:error, :invalid_format}
 
       {:error, _} ->
         {:error, :invalid_format}

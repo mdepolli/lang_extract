@@ -172,7 +172,7 @@ defmodule LangExtract.ParserTest do
     test "propagates parser errors" do
       assert {:error, :invalid_format} = LangExtract.extract("source", "bad json")
 
-      assert {:error, :missing_extractions} =
+      assert {:error, :invalid_format} =
                LangExtract.extract("source", Jason.encode!(%{"wrong" => []}))
     end
 

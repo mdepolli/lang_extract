@@ -62,6 +62,17 @@ defmodule LangExtract.FormatHandlerTest do
       assert decoded == %{"extractions" => []}
     end
 
+    test "handles nil attributes without error" do
+      extraction = %Extraction{class: "thing", text: "stuff", attributes: nil}
+
+      result = FormatHandler.format_extractions([extraction])
+      decoded = decode_fenced_json(result)
+
+      [item] = decoded["extractions"]
+      assert item["thing"] == "stuff"
+      assert item["thing_attributes"] == nil
+    end
+
     test "preserves nested attributes" do
       extraction = %Extraction{
         class: "finding",
@@ -103,6 +114,22 @@ defmodule LangExtract.FormatHandlerTest do
 
     test "passes through already-canonical JSON unchanged" do
       entry = %{"class" => "drug", "text" => "aspirin", "attributes" => %{}}
+      input = Jason.encode!(%{"extractions" => [entry]})
+
+      assert {:ok, json} = FormatHandler.normalize(input)
+      decoded = Jason.decode!(json)
+
+      assert decoded == %{"extractions" => [entry]}
+    end
+
+    test "passes through canonical entry with extra keys untouched" do
+      entry = %{
+        "class" => "drug",
+        "text" => "aspirin",
+        "attributes" => %{},
+        "html_attributes" => "data-id='5'"
+      }
+
       input = Jason.encode!(%{"extractions" => [entry]})
 
       assert {:ok, json} = FormatHandler.normalize(input)

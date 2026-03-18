@@ -83,6 +83,7 @@ defmodule LangExtract.PromptBuilderTest do
 
       assert result =~ "Example text."
       assert result =~ "Target text."
+      refute String.starts_with?(result, "\n")
     end
   end
 end
