@@ -4,7 +4,7 @@ defmodule LangExtract do
   Maps extraction strings back to exact byte positions in source text.
   """
 
-  alias LangExtract.{Aligner, Parser, Span}
+  alias LangExtract.{Aligner, FormatHandler, Parser, Span}
 
   @doc """
   Aligns extraction strings to byte spans in source text.
@@ -30,6 +30,10 @@ defmodule LangExtract do
   Parses LLM output, aligns extractions against source text, and returns
   enriched spans with class and attributes.
 
+  Accepts both canonical (`{"extractions": [...]}`) and dynamic-key format
+  (where each entry uses the class name as the key). Strips markdown fences
+  and think tags before parsing.
+
   ## Options
 
     * `:fuzzy_threshold` - minimum overlap ratio for fuzzy match (default `0.75`)
@@ -43,9 +47,10 @@ defmodule LangExtract do
 
   """
   @spec extract(String.t(), String.t(), keyword()) ::
-          {:ok, [Span.t()]} | {:error, :invalid_json | :missing_extractions}
+          {:ok, [Span.t()]} | {:error, :invalid_format | :invalid_json | :missing_extractions}
   def extract(source, raw_llm_output, opts \\ []) do
-    with {:ok, extractions} <- Parser.parse(raw_llm_output) do
+    with {:ok, canonical} <- FormatHandler.normalize(raw_llm_output),
+         {:ok, extractions} <- Parser.parse(canonical) do
       texts = Enum.map(extractions, & &1.text)
       spans = Aligner.align(source, texts, opts)
 
