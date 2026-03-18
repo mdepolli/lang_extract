@@ -4,6 +4,18 @@ defmodule LangExtract.Provider.ClaudeTest do
   alias LangExtract.Provider.Claude
 
   describe "build_request/2" do
+    setup do
+      original = System.get_env("ANTHROPIC_API_KEY")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("ANTHROPIC_API_KEY", original),
+          else: System.delete_env("ANTHROPIC_API_KEY")
+      end)
+
+      :ok
+    end
+
     test "builds correct request with default opts" do
       assert {:ok, {client, path, request_opts}} =
                Claude.build_request("Extract entities.", api_key: "sk-test")
@@ -40,8 +52,6 @@ defmodule LangExtract.Provider.ClaudeTest do
                Claude.build_request("prompt", api_key: "sk-opts")
 
       assert client.options[:headers]["x-api-key"] == "sk-opts"
-
-      System.delete_env("ANTHROPIC_API_KEY")
     end
 
     test "falls back to ANTHROPIC_API_KEY env var" do
@@ -51,8 +61,6 @@ defmodule LangExtract.Provider.ClaudeTest do
                Claude.build_request("prompt", [])
 
       assert client.options[:headers]["x-api-key"] == "sk-env"
-
-      System.delete_env("ANTHROPIC_API_KEY")
     end
 
     test "returns error when api key is missing" do

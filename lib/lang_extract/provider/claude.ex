@@ -29,7 +29,7 @@ defmodule LangExtract.Provider.Claude do
   def build_request(prompt, opts) do
     api_key = Keyword.get(opts, :api_key) || System.get_env("ANTHROPIC_API_KEY")
 
-    if is_nil(api_key) do
+    if is_nil(api_key) or api_key == "" do
       {:error, :missing_api_key}
     else
       model = Keyword.get(opts, :model, @default_model)
