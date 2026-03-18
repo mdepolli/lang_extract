@@ -32,16 +32,6 @@ defmodule LangExtract.ParserTest do
       assert {:ok, []} = Parser.parse(json)
     end
 
-    test "strips markdown fences with json language tag" do
-      json = ~s(```json\n{"extractions": [{"class": "x", "text": "y"}]}\n```)
-      assert {:ok, [%Extraction{class: "x", text: "y"}]} = Parser.parse(json)
-    end
-
-    test "strips markdown fences without language tag" do
-      json = ~s(```\n{"extractions": [{"class": "x", "text": "y"}]}\n```)
-      assert {:ok, [%Extraction{class: "x", text: "y"}]} = Parser.parse(json)
-    end
-
     test "returns error for invalid JSON" do
       assert {:error, :invalid_json} = Parser.parse("not json at all")
     end

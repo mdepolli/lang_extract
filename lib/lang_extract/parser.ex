@@ -1,8 +1,9 @@
 defmodule LangExtract.Parser do
   @moduledoc """
-  Parses raw LLM output JSON into `%LangExtract.Extraction{}` structs.
+  Parses canonical JSON into `%LangExtract.Extraction{}` structs.
 
-  Handles optional markdown fence stripping and validates each entry
+  Expects clean JSON input — fence stripping and think-tag removal are
+  handled upstream by `LangExtract.FormatHandler`. Validates each entry
   before constructing structs.
   """
 
@@ -10,13 +11,10 @@ defmodule LangExtract.Parser do
 
   alias LangExtract.Extraction
 
-  @fence_pattern ~r/```(?:json)?\s*(.*?)\s*```/s
-
   @spec parse(String.t()) ::
           {:ok, [Extraction.t()]} | {:error, :invalid_json | :missing_extractions}
   def parse(raw) when is_binary(raw) do
     raw
-    |> strip_fences()
     |> Jason.decode()
     |> case do
       {:ok, %{"extractions" => entries}} when is_list(entries) ->
@@ -27,13 +25,6 @@ defmodule LangExtract.Parser do
 
       {:error, _} ->
         {:error, :invalid_json}
-    end
-  end
-
-  defp strip_fences(raw) do
-    case Regex.run(@fence_pattern, raw) do
-      [_, content] -> content
-      _ -> raw
     end
   end
 
