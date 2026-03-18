@@ -19,7 +19,9 @@ defmodule LangExtract.MixProject do
 
   defp deps do
     [
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      {:httpower, "~> 0.20"},
+      {:finch, "~> 0.19"}
     ]
   end
 end
