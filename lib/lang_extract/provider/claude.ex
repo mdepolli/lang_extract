@@ -40,20 +40,18 @@ defmodule LangExtract.Provider.Claude do
           base_url: base_url,
           headers: %{
             "x-api-key" => api_key,
-            "anthropic-version" => @api_version,
-            "content-type" => "application/json"
+            "anthropic-version" => @api_version
           }
         )
 
-      body =
-        Jason.encode!(%{
-          "model" => model,
-          "max_tokens" => max_tokens,
-          "temperature" => temperature,
-          "messages" => [%{"role" => "user", "content" => prompt}]
-        })
+      payload = %{
+        "model" => model,
+        "max_tokens" => max_tokens,
+        "temperature" => temperature,
+        "messages" => [%{"role" => "user", "content" => prompt}]
+      }
 
-      {:ok, {client, "/v1/messages", [body: body]}}
+      {:ok, {client, "/v1/messages", [json: payload]}}
     end
   end
 

@@ -23,7 +23,7 @@ defmodule LangExtract.Provider.ClaudeTest do
       assert path == "/v1/messages"
       assert client.base_url == "https://api.anthropic.com"
 
-      body = Jason.decode!(request_opts[:body])
+      body = request_opts[:json]
       assert body["model"] == "claude-sonnet-4-20250514"
       assert body["max_tokens"] == 4096
       assert body["temperature"] == 0
@@ -39,7 +39,7 @@ defmodule LangExtract.Provider.ClaudeTest do
                  temperature: 0.5
                )
 
-      body = Jason.decode!(request_opts[:body])
+      body = request_opts[:json]
       assert body["model"] == "claude-opus-4-20250514"
       assert body["max_tokens"] == 1024
       assert body["temperature"] == 0.5

@@ -20,7 +20,7 @@ defmodule LangExtract.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
-      {:httpower, "~> 0.20"},
+      {:httpower, "~> 0.21"},
       {:finch, "~> 0.19"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]

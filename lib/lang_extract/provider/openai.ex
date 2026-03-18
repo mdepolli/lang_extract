@@ -39,15 +39,12 @@ defmodule LangExtract.Provider.OpenAI do
       client =
         HTTPower.new(
           base_url: base_url,
-          headers: %{
-            "authorization" => "Bearer #{api_key}",
-            "content-type" => "application/json"
-          }
+          headers: %{"authorization" => "Bearer #{api_key}"}
         )
 
       messages = build_messages(prompt, json_mode)
 
-      request_body =
+      payload =
         %{
           "model" => model,
           "max_tokens" => max_tokens,
@@ -56,7 +53,7 @@ defmodule LangExtract.Provider.OpenAI do
         }
         |> maybe_add_response_format(json_mode)
 
-      {:ok, {client, "/v1/chat/completions", [body: Jason.encode!(request_body)]}}
+      {:ok, {client, "/v1/chat/completions", [json: payload]}}
     end
   end
 

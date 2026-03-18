@@ -22,10 +22,10 @@ defmodule LangExtract.Provider.GeminiTest do
 
       assert path == "/v1beta/models/gemini-2.0-flash:generateContent?key=test-key"
       assert client.base_url == "https://generativelanguage.googleapis.com"
-      assert client.options[:headers]["content-type"] == "application/json"
-      refute Map.has_key?(client.options[:headers], "authorization")
+      # No auth header — key is in query param; content-type set by json: option
+      refute Map.has_key?(client.options[:headers] || %{}, "authorization")
 
-      body = Jason.decode!(request_opts[:body])
+      body = request_opts[:json]
       assert body["contents"] == [%{"parts" => [%{"text" => "Extract entities."}]}]
 
       assert body["generationConfig"] == %{
@@ -46,7 +46,7 @@ defmodule LangExtract.Provider.GeminiTest do
 
       assert path == "/v1beta/models/gemini-1.5-pro:generateContent?key=test-key"
 
-      body = Jason.decode!(request_opts[:body])
+      body = request_opts[:json]
       assert body["generationConfig"]["maxOutputTokens"] == 1024
       assert body["generationConfig"]["temperature"] == 0.7
     end

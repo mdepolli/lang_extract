@@ -24,7 +24,7 @@ defmodule LangExtract.Provider.OpenAITest do
       assert client.base_url == "https://api.openai.com"
       assert client.options[:headers]["authorization"] == "Bearer sk-test"
 
-      body = Jason.decode!(request_opts[:body])
+      body = request_opts[:json]
       assert body["model"] == "gpt-4o-mini"
       assert body["max_tokens"] == 4096
       assert body["temperature"] == 0
@@ -40,7 +40,7 @@ defmodule LangExtract.Provider.OpenAITest do
       assert {:ok, {_client, _path, request_opts}} =
                OpenAI.build_request("Tell me a story.", api_key: "sk-test", json_mode: false)
 
-      body = Jason.decode!(request_opts[:body])
+      body = request_opts[:json]
       refute Map.has_key?(body, "response_format")
       assert body["messages"] == [%{"role" => "user", "content" => "Tell me a story."}]
     end
@@ -54,7 +54,7 @@ defmodule LangExtract.Provider.OpenAITest do
                  temperature: 0.7
                )
 
-      body = Jason.decode!(request_opts[:body])
+      body = request_opts[:json]
       assert body["model"] == "gpt-4o"
       assert body["max_tokens"] == 1024
       assert body["temperature"] == 0.7

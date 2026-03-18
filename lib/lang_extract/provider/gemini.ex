@@ -35,24 +35,20 @@ defmodule LangExtract.Provider.Gemini do
         Provider.common_opts(opts, @defaults)
 
       client =
-        HTTPower.new(
-          base_url: base_url,
-          headers: %{"content-type" => "application/json"}
-        )
+        HTTPower.new(base_url: base_url)
 
       path = "/v1beta/models/#{model}:generateContent?key=#{api_key}"
 
-      body =
-        Jason.encode!(%{
-          "contents" => [%{"parts" => [%{"text" => prompt}]}],
-          "generationConfig" => %{
-            "temperature" => temperature,
-            "maxOutputTokens" => max_tokens,
-            "responseMimeType" => "application/json"
-          }
-        })
+      payload = %{
+        "contents" => [%{"parts" => [%{"text" => prompt}]}],
+        "generationConfig" => %{
+          "temperature" => temperature,
+          "maxOutputTokens" => max_tokens,
+          "responseMimeType" => "application/json"
+        }
+      }
 
-      {:ok, {client, path, [body: body]}}
+      {:ok, {client, path, [json: payload]}}
     end
   end
 
