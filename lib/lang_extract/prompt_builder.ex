@@ -34,12 +34,10 @@ defmodule LangExtract.PromptBuilder do
   defp format_examples([]), do: nil
 
   defp format_examples(examples) do
-    examples
-    |> Enum.map(fn example ->
+    Enum.map_join(examples, "\n\n", fn example ->
       formatted = FormatHandler.format_extractions(example.extractions)
       "#{example.text}\n#{formatted}"
     end)
-    |> Enum.join("\n\n")
   end
 
   defp non_empty(""), do: nil

@@ -9,7 +9,7 @@ defmodule LangExtract.PromptValidator do
   what to do with the results (log, raise, ignore).
   """
 
-  alias LangExtract.{Aligner, Extraction, ExampleData, PromptTemplate}
+  alias LangExtract.{Aligner, ExampleData, Extraction, PromptTemplate}
 
   defmodule Issue do
     @moduledoc """

@@ -127,19 +127,20 @@ defmodule LangExtract.Aligner do
       {best, _freq} =
         rest
         |> Enum.with_index(window_size)
-        |> Enum.reduce({init_best, init_freq}, fn {incoming, idx},
-                                                  {{best_ratio, _, _} = best, freq} ->
-          outgoing = Enum.at(source_texts, idx - window_size)
-          freq = freq |> add_token(incoming) |> remove_token(outgoing)
-          overlap = compute_overlap(freq, ext_freq)
-          ratio = overlap / window_size
-
-          best = if ratio > best_ratio, do: {ratio, idx - window_size + 1, idx}, else: best
-          {best, freq}
-        end)
+        |> Enum.reduce({init_best, init_freq}, &slide_step(&1, &2, source_texts, ext_freq, window_size))
 
       best
     end
+  end
+
+  defp slide_step({incoming, idx}, {{best_ratio, _, _} = best, freq}, source_texts, ext_freq, window_size) do
+    outgoing = Enum.at(source_texts, idx - window_size)
+    freq = freq |> add_token(incoming) |> remove_token(outgoing)
+    overlap = compute_overlap(freq, ext_freq)
+    ratio = overlap / window_size
+
+    best = if ratio > best_ratio, do: {ratio, idx - window_size + 1, idx}, else: best
+    {best, freq}
   end
 
   defp build_freq(tokens) do

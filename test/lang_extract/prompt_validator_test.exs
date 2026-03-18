@@ -1,7 +1,7 @@
 defmodule LangExtract.PromptValidatorTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.{Extraction, ExampleData, PromptTemplate, PromptValidator}
+  alias LangExtract.{ExampleData, Extraction, PromptTemplate, PromptValidator}
 
   describe "validate/1" do
     test "returns :ok when all examples align exactly" do

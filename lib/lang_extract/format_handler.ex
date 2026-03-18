@@ -78,15 +78,7 @@ defmodule LangExtract.FormatHandler do
       [class_key] ->
         attr_key = "#{class_key}#{@attribute_suffix}"
 
-        attributes =
-          if attr_key in matched_attr_keys do
-            case Map.get(entry, attr_key) do
-              attrs when is_map(attrs) -> attrs
-              _ -> %{}
-            end
-          else
-            %{}
-          end
+        attributes = resolve_attributes(entry, attr_key, matched_attr_keys)
 
         %{"class" => class_key, "text" => Map.get(entry, class_key), "attributes" => attributes}
 
@@ -96,4 +88,15 @@ defmodule LangExtract.FormatHandler do
   end
 
   defp normalize_entry(entry), do: entry
+
+  defp resolve_attributes(entry, attr_key, matched_attr_keys) do
+    if attr_key in matched_attr_keys do
+      case Map.get(entry, attr_key) do
+        attrs when is_map(attrs) -> attrs
+        _ -> %{}
+      end
+    else
+      %{}
+    end
+  end
 end
