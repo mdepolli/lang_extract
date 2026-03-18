@@ -76,6 +76,12 @@ defmodule LangExtract.Provider.GeminiTest do
       assert {:error, :missing_api_key} = Gemini.build_request("prompt", [])
     end
 
+    test "returns error when api key is empty string" do
+      System.put_env("GEMINI_API_KEY", "")
+
+      assert {:error, :missing_api_key} = Gemini.build_request("prompt", [])
+    end
+
     test "custom base_url is used" do
       assert {:ok, {client, _path, _request_opts}} =
                Gemini.build_request("prompt",
@@ -197,6 +203,11 @@ defmodule LangExtract.Provider.GeminiTest do
 
     test "maps HTTP 500 to server_error" do
       response = %HTTPower.Response{status: 500, headers: %{}, body: %{}}
+      assert {:error, :server_error} = Gemini.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 503 to server_error" do
+      response = %HTTPower.Response{status: 503, headers: %{}, body: %{}}
       assert {:error, :server_error} = Gemini.parse_response({:ok, response})
     end
 

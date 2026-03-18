@@ -84,6 +84,12 @@ defmodule LangExtract.Provider.OpenAITest do
       assert {:error, :missing_api_key} = OpenAI.build_request("prompt", [])
     end
 
+    test "returns error when api key is empty string" do
+      System.put_env("OPENAI_API_KEY", "")
+
+      assert {:error, :missing_api_key} = OpenAI.build_request("prompt", [])
+    end
+
     test "custom base_url is used" do
       assert {:ok, {client, _path, _request_opts}} =
                OpenAI.build_request("prompt",
