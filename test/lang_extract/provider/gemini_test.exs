@@ -87,6 +87,130 @@ defmodule LangExtract.Provider.GeminiTest do
     end
   end
 
+  describe "parse_response/1" do
+    test "extracts text from successful response" do
+      response = %HTTPower.Response{
+        status: 200,
+        headers: %{},
+        body: %{
+          "candidates" => [
+            %{
+              "content" => %{
+                "parts" => [%{"text" => "extracted entities here"}]
+              }
+            }
+          ]
+        }
+      }
+
+      assert {:ok, "extracted entities here"} = Gemini.parse_response({:ok, response})
+    end
+
+    test "extracts text from first part when multiple parts present" do
+      response = %HTTPower.Response{
+        status: 200,
+        headers: %{},
+        body: %{
+          "candidates" => [
+            %{
+              "content" => %{
+                "parts" => [
+                  %{"text" => "first part"},
+                  %{"text" => "second part"}
+                ]
+              }
+            }
+          ]
+        }
+      }
+
+      assert {:ok, "first part"} = Gemini.parse_response({:ok, response})
+    end
+
+    test "returns empty_response when candidates list is empty" do
+      response = %HTTPower.Response{
+        status: 200,
+        headers: %{},
+        body: %{"candidates" => []}
+      }
+
+      assert {:error, :empty_response} = Gemini.parse_response({:ok, response})
+    end
+
+    test "returns empty_response when candidate has no content key (safety blocked)" do
+      response = %HTTPower.Response{
+        status: 200,
+        headers: %{},
+        body: %{
+          "candidates" => [
+            %{"finishReason" => "SAFETY"}
+          ]
+        }
+      }
+
+      assert {:error, :empty_response} = Gemini.parse_response({:ok, response})
+    end
+
+    test "returns empty_response when parts list is empty" do
+      response = %HTTPower.Response{
+        status: 200,
+        headers: %{},
+        body: %{
+          "candidates" => [
+            %{"content" => %{"parts" => []}}
+          ]
+        }
+      }
+
+      assert {:error, :empty_response} = Gemini.parse_response({:ok, response})
+    end
+
+    test "returns empty_response when body has no candidates key" do
+      response = %HTTPower.Response{
+        status: 200,
+        headers: %{},
+        body: %{"something" => "else"}
+      }
+
+      assert {:error, :empty_response} = Gemini.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 400 to bad_request with body" do
+      response = %HTTPower.Response{
+        status: 400,
+        headers: %{},
+        body: %{"error" => %{"message" => "invalid model"}}
+      }
+
+      assert {:error, {:bad_request, %{"error" => _}}} = Gemini.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 401 to unauthorized" do
+      response = %HTTPower.Response{status: 401, headers: %{}, body: %{}}
+      assert {:error, :unauthorized} = Gemini.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 429 to rate_limited" do
+      response = %HTTPower.Response{status: 429, headers: %{}, body: %{}}
+      assert {:error, :rate_limited} = Gemini.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 500 to server_error" do
+      response = %HTTPower.Response{status: 500, headers: %{}, body: %{}}
+      assert {:error, :server_error} = Gemini.parse_response({:ok, response})
+    end
+
+    test "maps other HTTP status codes to api_error" do
+      response = %HTTPower.Response{status: 418, headers: %{}, body: %{"error" => "teapot"}}
+      assert {:error, {:api_error, 418, _}} = Gemini.parse_response({:ok, response})
+    end
+
+    test "maps HTTPower error to request_error" do
+      error = %HTTPower.Error{reason: :timeout, message: "Request timeout"}
+      assert {:error, {:request_error, :timeout}} = Gemini.parse_response({:error, error})
+    end
+  end
+
   describe "infer/2 integration" do
     @tag :external
     test "makes a real API call and returns a string response" do
