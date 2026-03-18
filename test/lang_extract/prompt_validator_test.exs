@@ -159,4 +159,43 @@ defmodule LangExtract.PromptValidatorTest do
       assert :ok = PromptValidator.validate(template)
     end
   end
+
+  describe "validate!/1" do
+    test "returns :ok when all examples align" do
+      template = %PromptTemplate{
+        description: "Extract.",
+        examples: [
+          %ExampleData{
+            text: "Patient has diabetes.",
+            extractions: [
+              %Extraction{class: "condition", text: "diabetes", attributes: %{}}
+            ]
+          }
+        ]
+      }
+
+      assert :ok = PromptValidator.validate!(template)
+    end
+
+    test "raises ValidationError with issues when alignment fails" do
+      template = %PromptTemplate{
+        description: "Extract.",
+        examples: [
+          %ExampleData{
+            text: "Patient has diabetes.",
+            extractions: [
+              %Extraction{class: "drug", text: "tylenol", attributes: %{}}
+            ]
+          }
+        ]
+      }
+
+      error = assert_raise PromptValidator.ValidationError, fn ->
+        PromptValidator.validate!(template)
+      end
+
+      assert length(error.issues) == 1
+      assert Exception.message(error) =~ "1 alignment issue(s) found"
+    end
+  end
 end
