@@ -222,18 +222,28 @@ defmodule LangExtract.Provider.GeminiTest do
     end
   end
 
-  describe "infer/2 integration" do
-    @tag :external
-    test "makes a real API call and returns a string response" do
-      api_key = System.get_env("GEMINI_API_KEY")
+  describe "infer/2" do
+    setup do
+      HTTPower.Test.setup()
+    end
 
-      if is_nil(api_key) do
-        IO.puts("Skipping: GEMINI_API_KEY not set")
-      else
-        assert {:ok, response} = Gemini.infer("Respond with exactly: hello", api_key: api_key)
-        assert is_binary(response)
-        assert String.length(response) > 0
-      end
+    test "full pipeline returns extracted text" do
+      HTTPower.Test.stub(fn conn ->
+        HTTPower.Test.json(conn, %{
+          "candidates" => [
+            %{
+              "content" => %{"parts" => [%{"text" => "hello"}]},
+              "finishReason" => "STOP"
+            }
+          ]
+        })
+      end)
+
+      assert {:ok, "hello"} = Gemini.infer("Say hello.", api_key: "gm-test")
+    end
+
+    test "returns error on missing api key" do
+      assert {:error, :missing_api_key} = Gemini.infer("prompt")
     end
   end
 end

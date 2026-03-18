@@ -22,7 +22,8 @@ defmodule LangExtract.MixProject do
       {:jason, "~> 1.4"},
       {:httpower, "~> 0.21"},
       {:finch, "~> 0.19"},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:plug, "~> 1.15", only: :test}
     ]
   end
 end

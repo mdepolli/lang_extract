@@ -1,1 +1,1 @@
-ExUnit.start(exclude: [:external])
+ExUnit.start()

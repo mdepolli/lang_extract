@@ -194,18 +194,23 @@ defmodule LangExtract.Provider.ClaudeTest do
     end
   end
 
-  describe "infer/2 integration" do
-    @tag :external
-    test "makes a real API call and returns a string response" do
-      api_key = System.get_env("ANTHROPIC_API_KEY")
+  describe "infer/2" do
+    setup do
+      HTTPower.Test.setup()
+    end
 
-      if is_nil(api_key) do
-        IO.puts("Skipping: ANTHROPIC_API_KEY not set")
-      else
-        assert {:ok, response} = Claude.infer("Respond with exactly: hello", api_key: api_key)
-        assert is_binary(response)
-        assert String.length(response) > 0
-      end
+    test "full pipeline returns extracted text" do
+      HTTPower.Test.stub(fn conn ->
+        HTTPower.Test.json(conn, %{
+          "content" => [%{"type" => "text", "text" => "extracted entities"}]
+        })
+      end)
+
+      assert {:ok, "extracted entities"} = Claude.infer("Extract entities.", api_key: "sk-test")
+    end
+
+    test "returns error on missing api key" do
+      assert {:error, :missing_api_key} = Claude.infer("prompt")
     end
   end
 end
