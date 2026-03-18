@@ -110,8 +110,7 @@ defmodule LangExtract.FormatHandlerTest do
           ]
         })
 
-      assert {:ok, json} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(json)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{
                "extractions" => [
@@ -128,8 +127,7 @@ defmodule LangExtract.FormatHandlerTest do
       entry = %{"class" => "drug", "text" => "aspirin", "attributes" => %{}}
       input = Jason.encode!(%{"extractions" => [entry]})
 
-      assert {:ok, json} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(json)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{"extractions" => [entry]}
     end
@@ -144,8 +142,7 @@ defmodule LangExtract.FormatHandlerTest do
 
       input = Jason.encode!(%{"extractions" => [entry]})
 
-      assert {:ok, json} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(json)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{"extractions" => [entry]}
     end
@@ -155,8 +152,7 @@ defmodule LangExtract.FormatHandlerTest do
       json = Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "drug_attributes" => %{}}]})
       input = "#{think_content}\n#{json}"
 
-      assert {:ok, result} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(result)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{
                "extractions" => [
@@ -177,8 +173,7 @@ defmodule LangExtract.FormatHandlerTest do
 
       input = "<think>first reasoning</think>\n#{json}\n<think>second thought</think>"
 
-      assert {:ok, result} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(result)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{
                "extractions" => [
@@ -193,8 +188,7 @@ defmodule LangExtract.FormatHandlerTest do
 
       input = "```json\n#{inner}\n```"
 
-      assert {:ok, result} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(result)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{
                "extractions" => [
@@ -209,8 +203,7 @@ defmodule LangExtract.FormatHandlerTest do
 
       input = "```\n#{inner}\n```"
 
-      assert {:ok, result} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(result)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{
                "extractions" => [
@@ -231,8 +224,7 @@ defmodule LangExtract.FormatHandlerTest do
 
       input = "<think>Thinking...</think>\n```json\n#{inner}\n```"
 
-      assert {:ok, result} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(result)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{
                "extractions" => [
@@ -245,8 +237,7 @@ defmodule LangExtract.FormatHandlerTest do
       # "html_attributes" has no "html" key, so it's the effective class key itself
       input = Jason.encode!(%{"extractions" => [%{"html_attributes" => "<b>bold</b>"}]})
 
-      assert {:ok, result} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(result)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{
                "extractions" => [
@@ -259,8 +250,7 @@ defmodule LangExtract.FormatHandlerTest do
       entry = %{"drug" => "aspirin", "dosage" => "100mg"}
       input = Jason.encode!(%{"extractions" => [entry]})
 
-      assert {:ok, result} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(result)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{"extractions" => [entry]}
     end
@@ -268,8 +258,7 @@ defmodule LangExtract.FormatHandlerTest do
     test "entry with no keys is passed through" do
       input = Jason.encode!(%{"extractions" => [%{}]})
 
-      assert {:ok, result} = FormatHandler.normalize(input)
-      decoded = Jason.decode!(result)
+      assert {:ok, decoded} = FormatHandler.normalize(input)
 
       assert decoded == %{"extractions" => [%{}]}
     end

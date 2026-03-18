@@ -49,8 +49,8 @@ defmodule LangExtract do
   @spec extract(String.t(), String.t(), keyword()) ::
           {:ok, [Span.t()]} | {:error, :invalid_format | :invalid_json | :missing_extractions}
   def extract(source, raw_llm_output, opts \\ []) do
-    with {:ok, canonical} <- FormatHandler.normalize(raw_llm_output),
-         {:ok, extractions} <- Parser.parse(canonical) do
+    with {:ok, normalized} <- FormatHandler.normalize(raw_llm_output),
+         {:ok, extractions} <- Parser.parse(normalized) do
       texts = Enum.map(extractions, & &1.text)
       spans = Aligner.align(source, texts, opts)
 

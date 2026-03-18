@@ -22,14 +22,14 @@ defmodule LangExtract.FormatHandler do
     %{class => text, "#{class}#{@attribute_suffix}" => attributes}
   end
 
-  @spec normalize(String.t()) :: {:ok, String.t()} | {:error, :invalid_format}
+  @spec normalize(String.t()) :: {:ok, map()} | {:error, :invalid_format}
   def normalize(raw) when is_binary(raw) do
     cleaned = raw |> strip_think_tags() |> strip_fences()
 
     case Jason.decode(cleaned) do
       {:ok, %{"extractions" => entries} = decoded} when is_list(entries) ->
         normalized = Enum.map(entries, &normalize_entry/1)
-        {:ok, Jason.encode!(%{decoded | "extractions" => normalized})}
+        {:ok, %{decoded | "extractions" => normalized}}
 
       {:ok, _} ->
         {:error, :invalid_format}

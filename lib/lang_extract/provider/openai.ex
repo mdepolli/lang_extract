@@ -7,10 +7,14 @@ defmodule LangExtract.Provider.OpenAI do
 
   @behaviour LangExtract.Provider
 
-  @default_model "gpt-4o-mini"
-  @default_max_tokens 4096
-  @default_temperature 0
-  @default_base_url "https://api.openai.com"
+  alias LangExtract.Provider
+
+  @defaults [
+    model: "gpt-4o-mini",
+    max_tokens: 4096,
+    temperature: 0,
+    base_url: "https://api.openai.com"
+  ]
 
   @impl true
   @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
@@ -26,15 +30,10 @@ defmodule LangExtract.Provider.OpenAI do
   @spec build_request(String.t(), keyword()) ::
           {:ok, {HTTPower.client(), String.t(), keyword()}} | {:error, :missing_api_key}
   def build_request(prompt, opts) do
-    api_key = Keyword.get(opts, :api_key) || System.get_env("OPENAI_API_KEY")
+    with {:ok, api_key} <- Provider.fetch_api_key(opts, "OPENAI_API_KEY") do
+      %{model: model, max_tokens: max_tokens, temperature: temperature, base_url: base_url} =
+        Provider.common_opts(opts, @defaults)
 
-    if api_key in [nil, ""] do
-      {:error, :missing_api_key}
-    else
-      model = Keyword.get(opts, :model, @default_model)
-      max_tokens = Keyword.get(opts, :max_tokens, @default_max_tokens)
-      temperature = Keyword.get(opts, :temperature, @default_temperature)
-      base_url = Keyword.get(opts, :base_url, @default_base_url)
       json_mode = Keyword.get(opts, :json_mode, true)
 
       client =
@@ -57,42 +56,14 @@ defmodule LangExtract.Provider.OpenAI do
         }
         |> maybe_add_response_format(json_mode)
 
-      body = Jason.encode!(request_body)
-
-      {:ok, {client, "/v1/chat/completions", [body: body]}}
+      {:ok, {client, "/v1/chat/completions", [body: Jason.encode!(request_body)]}}
     end
   end
 
   @doc false
   @spec parse_response({:ok, HTTPower.Response.t()} | {:error, HTTPower.Error.t()}) ::
           {:ok, String.t()} | {:error, term()}
-  def parse_response({:ok, %HTTPower.Response{status: 200, body: body}}) do
-    extract_text(body)
-  end
-
-  def parse_response({:ok, %HTTPower.Response{status: 400, body: body}}) do
-    {:error, {:bad_request, body}}
-  end
-
-  def parse_response({:ok, %HTTPower.Response{status: 401}}) do
-    {:error, :unauthorized}
-  end
-
-  def parse_response({:ok, %HTTPower.Response{status: 429}}) do
-    {:error, :rate_limited}
-  end
-
-  def parse_response({:ok, %HTTPower.Response{status: status}}) when status >= 500 do
-    {:error, :server_error}
-  end
-
-  def parse_response({:ok, %HTTPower.Response{status: status, body: body}}) do
-    {:error, {:api_error, status, body}}
-  end
-
-  def parse_response({:error, %HTTPower.Error{reason: reason}}) do
-    {:error, {:request_error, reason}}
-  end
+  def parse_response(response), do: Provider.map_response(response, &extract_text/1)
 
   defp build_messages(prompt, true) do
     [

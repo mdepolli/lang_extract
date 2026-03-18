@@ -15,28 +15,30 @@ defmodule LangExtract.Aligner do
     fuzzy_threshold = Keyword.get(opts, :fuzzy_threshold, @default_fuzzy_threshold)
     source_tokens = Tokenizer.tokenize(source)
     source_words = reject_whitespace(source_tokens)
+    # Convert to tuple for O(1) lookups by index
+    source_words_tuple = List.to_tuple(source_words)
+    source_texts = Enum.map(source_words, &String.downcase(&1.text))
 
     Enum.map(extractions, fn extraction ->
-      align_one(extraction, source_words, fuzzy_threshold)
+      align_one(extraction, source_words_tuple, source_texts, fuzzy_threshold)
     end)
   end
 
-  defp align_one("", _source_words, _threshold) do
+  defp align_one("", _source_words, _source_texts, _threshold) do
     %Span{text: "", byte_start: nil, byte_end: nil, status: :not_found}
   end
 
-  defp align_one(extraction, source_words, threshold) do
+  defp align_one(extraction, source_words, source_texts, threshold) do
     ext_tokens = extraction |> Tokenizer.tokenize() |> reject_whitespace()
+    ext_texts = Enum.map(ext_tokens, &String.downcase(&1.text))
 
-    case exact_match(extraction, source_words, ext_tokens) do
+    case exact_match(extraction, source_words, source_texts, ext_texts) do
       {:ok, span} -> span
-      :no_match -> fuzzy_match(extraction, source_words, ext_tokens, threshold)
+      :no_match -> fuzzy_match(extraction, source_words, source_texts, ext_texts, threshold)
     end
   end
 
-  defp exact_match(extraction, source_words, ext_tokens) do
-    source_texts = Enum.map(source_words, &String.downcase(&1.text))
-    ext_texts = Enum.map(ext_tokens, &String.downcase(&1.text))
+  defp exact_match(extraction, source_words, source_texts, ext_texts) do
     ext_length = length(ext_texts)
 
     diff = List.myers_difference(source_texts, ext_texts)
@@ -64,8 +66,8 @@ defmodule LangExtract.Aligner do
 
     case match do
       {start_idx, end_idx} ->
-        first = Enum.at(source_words, start_idx)
-        last = Enum.at(source_words, end_idx)
+        first = elem(source_words, start_idx)
+        last = elem(source_words, end_idx)
 
         {:ok,
          %Span{
@@ -80,22 +82,20 @@ defmodule LangExtract.Aligner do
     end
   end
 
-  defp fuzzy_match(extraction, source_words, ext_tokens, threshold) do
-    ext_texts = Enum.map(ext_tokens, &String.downcase(&1.text))
+  defp fuzzy_match(extraction, source_words, source_texts, ext_texts, threshold) do
     ext_length = length(ext_texts)
 
     if ext_length == 0 do
       %Span{text: extraction, byte_start: nil, byte_end: nil, status: :not_found}
     else
       ext_freq = build_freq(ext_texts)
-      source_texts = Enum.map(source_words, &String.downcase(&1.text))
 
-      best = slide_window(source_texts, source_words, ext_freq, ext_length)
+      best = slide_window(source_texts, ext_freq, ext_length)
 
       case best do
         {ratio, start_idx, end_idx} when ratio >= threshold ->
-          first = Enum.at(source_words, start_idx)
-          last = Enum.at(source_words, end_idx)
+          first = elem(source_words, start_idx)
+          last = elem(source_words, end_idx)
 
           %Span{
             text: extraction,
@@ -110,14 +110,13 @@ defmodule LangExtract.Aligner do
     end
   end
 
-  # NOTE: Enum.at/2 in the reduce is O(n), making this O(n^2) overall.
-  # Acceptable for a spike. For production, use a zipper or convert to a tuple.
-  defp slide_window(source_texts, _source_words, ext_freq, window_size) do
+  defp slide_window(source_texts, ext_freq, window_size) do
     source_length = length(source_texts)
 
     if source_length < window_size do
       {0.0, 0, 0}
     else
+      source_texts_tuple = List.to_tuple(source_texts)
       # Build initial window frequency
       {init_window, rest} = Enum.split(source_texts, window_size)
       init_freq = build_freq(init_window)
@@ -127,14 +126,23 @@ defmodule LangExtract.Aligner do
       {best, _freq} =
         rest
         |> Enum.with_index(window_size)
-        |> Enum.reduce({init_best, init_freq}, &slide_step(&1, &2, source_texts, ext_freq, window_size))
+        |> Enum.reduce(
+          {init_best, init_freq},
+          &slide_step(&1, &2, source_texts_tuple, ext_freq, window_size)
+        )
 
       best
     end
   end
 
-  defp slide_step({incoming, idx}, {{best_ratio, _, _} = best, freq}, source_texts, ext_freq, window_size) do
-    outgoing = Enum.at(source_texts, idx - window_size)
+  defp slide_step(
+         {incoming, idx},
+         {{best_ratio, _, _} = best, freq},
+         source_texts_tuple,
+         ext_freq,
+         window_size
+       ) do
+    outgoing = elem(source_texts_tuple, idx - window_size)
     freq = freq |> add_token(incoming) |> remove_token(outgoing)
     overlap = compute_overlap(freq, ext_freq)
     ratio = overlap / window_size
