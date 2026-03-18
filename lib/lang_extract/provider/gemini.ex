@@ -91,7 +91,9 @@ defmodule LangExtract.Provider.Gemini do
     {:error, {:request_error, reason}}
   end
 
-  defp extract_text(%{"candidates" => [%{"content" => %{"parts" => [%{"text" => text} | _]}} | _]})
+  defp extract_text(%{
+         "candidates" => [%{"content" => %{"parts" => [%{"text" => text} | _]}} | _]
+       })
        when is_binary(text) do
     {:ok, text}
   end

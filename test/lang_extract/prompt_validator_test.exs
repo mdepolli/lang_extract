@@ -190,9 +190,10 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      error = assert_raise PromptValidator.ValidationError, fn ->
-        PromptValidator.validate!(template)
-      end
+      error =
+        assert_raise PromptValidator.ValidationError, fn ->
+          PromptValidator.validate!(template)
+        end
 
       assert length(error.issues) == 1
       assert Exception.message(error) =~ "1 alignment issue(s) found"

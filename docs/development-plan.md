@@ -29,8 +29,8 @@ extract(text, prompt, examples, model_id)
 | Tokenizer | 650 | Done | ~38 |
 | Span alignment | 900 | Done | ~170 |
 | Output parsing | 475 | Done | ~55 |
-| Format handling | — | Not started | — |
-| Prompt building | 275 | Not started | — |
+| Format handling | — | Done | ~99 |
+| Prompt building | 275 | Done | ~89 (PromptBuilder, PromptTemplate, ExampleData) |
 | Prompt validation | — | Not started | — |
 | LLM provider calls | 500 | Not started | — |
 | Chunking | 500 | Not started | — |
