@@ -100,16 +100,28 @@ defmodule LangExtract.FormatHandlerTest do
 
   describe "normalize/1" do
     test "converts dynamic-key JSON to canonical format" do
-      input = Jason.encode!(%{"extractions" => [%{"medical_condition" => "hypertension", "medical_condition_attributes" => %{"chronicity" => "chronic"}}]})
+      input =
+        Jason.encode!(%{
+          "extractions" => [
+            %{
+              "medical_condition" => "hypertension",
+              "medical_condition_attributes" => %{"chronicity" => "chronic"}
+            }
+          ]
+        })
 
       assert {:ok, json} = FormatHandler.normalize(input)
       decoded = Jason.decode!(json)
 
       assert decoded == %{
-        "extractions" => [
-          %{"class" => "medical_condition", "text" => "hypertension", "attributes" => %{"chronicity" => "chronic"}}
-        ]
-      }
+               "extractions" => [
+                 %{
+                   "class" => "medical_condition",
+                   "text" => "hypertension",
+                   "attributes" => %{"chronicity" => "chronic"}
+                 }
+               ]
+             }
     end
 
     test "passes through already-canonical JSON unchanged" do
@@ -147,10 +159,10 @@ defmodule LangExtract.FormatHandlerTest do
       decoded = Jason.decode!(result)
 
       assert decoded == %{
-        "extractions" => [
-          %{"class" => "drug", "text" => "aspirin", "attributes" => %{}}
-        ]
-      }
+               "extractions" => [
+                 %{"class" => "drug", "text" => "aspirin", "attributes" => %{}}
+               ]
+             }
     end
 
     test "strips unclosed <think> tag to end of string" do
@@ -160,45 +172,51 @@ defmodule LangExtract.FormatHandlerTest do
     end
 
     test "strips multiple <think> blocks" do
-      json = Jason.encode!(%{"extractions" => [%{"symptom" => "fever", "symptom_attributes" => %{}}]})
+      json =
+        Jason.encode!(%{"extractions" => [%{"symptom" => "fever", "symptom_attributes" => %{}}]})
+
       input = "<think>first reasoning</think>\n#{json}\n<think>second thought</think>"
 
       assert {:ok, result} = FormatHandler.normalize(input)
       decoded = Jason.decode!(result)
 
       assert decoded == %{
-        "extractions" => [
-          %{"class" => "symptom", "text" => "fever", "attributes" => %{}}
-        ]
-      }
+               "extractions" => [
+                 %{"class" => "symptom", "text" => "fever", "attributes" => %{}}
+               ]
+             }
     end
 
     test "strips markdown fences with json language tag" do
-      inner = Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
+      inner =
+        Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
+
       input = "```json\n#{inner}\n```"
 
       assert {:ok, result} = FormatHandler.normalize(input)
       decoded = Jason.decode!(result)
 
       assert decoded == %{
-        "extractions" => [
-          %{"class" => "drug", "text" => "ibuprofen", "attributes" => %{}}
-        ]
-      }
+               "extractions" => [
+                 %{"class" => "drug", "text" => "ibuprofen", "attributes" => %{}}
+               ]
+             }
     end
 
     test "strips markdown fences without language tag" do
-      inner = Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
+      inner =
+        Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
+
       input = "```\n#{inner}\n```"
 
       assert {:ok, result} = FormatHandler.normalize(input)
       decoded = Jason.decode!(result)
 
       assert decoded == %{
-        "extractions" => [
-          %{"class" => "drug", "text" => "ibuprofen", "attributes" => %{}}
-        ]
-      }
+               "extractions" => [
+                 %{"class" => "drug", "text" => "ibuprofen", "attributes" => %{}}
+               ]
+             }
     end
 
     test "returns error for invalid JSON" do
@@ -206,17 +224,21 @@ defmodule LangExtract.FormatHandlerTest do
     end
 
     test "handles combined think tags, fences, and dynamic keys" do
-      inner = Jason.encode!(%{"extractions" => [%{"finding" => "mass", "finding_attributes" => %{"size" => "2cm"}}]})
+      inner =
+        Jason.encode!(%{
+          "extractions" => [%{"finding" => "mass", "finding_attributes" => %{"size" => "2cm"}}]
+        })
+
       input = "<think>Thinking...</think>\n```json\n#{inner}\n```"
 
       assert {:ok, result} = FormatHandler.normalize(input)
       decoded = Jason.decode!(result)
 
       assert decoded == %{
-        "extractions" => [
-          %{"class" => "finding", "text" => "mass", "attributes" => %{"size" => "2cm"}}
-        ]
-      }
+               "extractions" => [
+                 %{"class" => "finding", "text" => "mass", "attributes" => %{"size" => "2cm"}}
+               ]
+             }
     end
 
     test "_attributes key without matching prefix is treated as a class key" do
@@ -227,10 +249,10 @@ defmodule LangExtract.FormatHandlerTest do
       decoded = Jason.decode!(result)
 
       assert decoded == %{
-        "extractions" => [
-          %{"class" => "html_attributes", "text" => "<b>bold</b>", "attributes" => %{}}
-        ]
-      }
+               "extractions" => [
+                 %{"class" => "html_attributes", "text" => "<b>bold</b>", "attributes" => %{}}
+               ]
+             }
     end
 
     test "entry with multiple non-attribute keys is passed through" do
@@ -258,7 +280,11 @@ defmodule LangExtract.FormatHandlerTest do
       alias LangExtract.Parser
 
       extractions = [
-        %Extraction{class: "medical_condition", text: "hypertension", attributes: %{"chronicity" => "chronic"}},
+        %Extraction{
+          class: "medical_condition",
+          text: "hypertension",
+          attributes: %{"chronicity" => "chronic"}
+        },
         %Extraction{class: "drug", text: "lisinopril", attributes: %{}}
       ]
 
@@ -267,7 +293,13 @@ defmodule LangExtract.FormatHandlerTest do
       assert {:ok, parsed} = Parser.parse(normalized)
 
       assert length(parsed) == 2
-      assert Enum.at(parsed, 0) == %Extraction{class: "medical_condition", text: "hypertension", attributes: %{"chronicity" => "chronic"}}
+
+      assert Enum.at(parsed, 0) == %Extraction{
+               class: "medical_condition",
+               text: "hypertension",
+               attributes: %{"chronicity" => "chronic"}
+             }
+
       assert Enum.at(parsed, 1) == %Extraction{class: "drug", text: "lisinopril", attributes: %{}}
     end
   end

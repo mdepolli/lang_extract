@@ -23,7 +23,11 @@ defmodule LangExtract.PromptBuilderTest do
           %ExampleData{
             text: "Patient has diabetes.",
             extractions: [
-              %Extraction{class: "condition", text: "diabetes", attributes: %{"type" => "chronic"}}
+              %Extraction{
+                class: "condition",
+                text: "diabetes",
+                attributes: %{"type" => "chronic"}
+              }
             ]
           }
         ]
@@ -42,7 +46,8 @@ defmodule LangExtract.PromptBuilderTest do
     test "includes previous chunk context" do
       template = %PromptTemplate{description: "Extract."}
 
-      result = PromptBuilder.build(template, "Current chunk.", previous_chunk: "Previous text here.")
+      result =
+        PromptBuilder.build(template, "Current chunk.", previous_chunk: "Previous text here.")
 
       assert result =~ "[Previous text]: ...Previous text here."
       assert result =~ "Current chunk."
@@ -51,10 +56,11 @@ defmodule LangExtract.PromptBuilderTest do
     test "truncates previous chunk to context_window_chars" do
       template = %PromptTemplate{description: "Extract."}
 
-      result = PromptBuilder.build(template, "Current.",
-        previous_chunk: "This is a long previous chunk of text.",
-        context_window_chars: 10
-      )
+      result =
+        PromptBuilder.build(template, "Current.",
+          previous_chunk: "This is a long previous chunk of text.",
+          context_window_chars: 10
+        )
 
       assert result =~ "[Previous text]: ...k of text."
       refute result =~ "This is a long"

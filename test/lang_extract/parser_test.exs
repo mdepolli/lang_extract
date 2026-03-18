@@ -179,14 +179,15 @@ defmodule LangExtract.ParserTest do
     test "handles dynamic-key format from LLM output" do
       source = "The patient was diagnosed with hypertension."
 
-      json = Jason.encode!(%{
-        "extractions" => [
-          %{
-            "medical_condition" => "hypertension",
-            "medical_condition_attributes" => %{"chronicity" => "chronic"}
-          }
-        ]
-      })
+      json =
+        Jason.encode!(%{
+          "extractions" => [
+            %{
+              "medical_condition" => "hypertension",
+              "medical_condition_attributes" => %{"chronicity" => "chronic"}
+            }
+          ]
+        })
 
       assert {:ok, [span]} = LangExtract.extract(source, json)
       assert span.class == "medical_condition"
