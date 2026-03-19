@@ -127,11 +127,12 @@ defmodule LangExtract.Chunker do
   defp consume_closing_punctuation(idx, _tokens_tuple, _count), do: idx
 
   defp sentence_end_by_newline?(%{type: :whitespace, text: ws_text}, idx, tokens_tuple, count) do
-    next_idx = idx + 1
-
-    String.contains?(ws_text, "\n") and next_idx < count and
-      (next = elem(tokens_tuple, next_idx)
-       next.type == :word and uppercase_start?(next.text))
+    if String.contains?(ws_text, "\n") and idx + 1 < count do
+      next = elem(tokens_tuple, idx + 1)
+      next.type == :word and uppercase_start?(next.text)
+    else
+      false
+    end
   end
 
   defp sentence_end_by_newline?(_token, _idx, _tokens_tuple, _count), do: false
