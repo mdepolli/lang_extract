@@ -31,22 +31,17 @@ defmodule LangExtract.FormatHandler do
         normalized = Enum.map(entries, &normalize_entry/1)
         {:ok, %{decoded | "extractions" => normalized}}
 
-      {:ok, _} ->
-        {:error, :invalid_format}
-
-      {:error, _} ->
+      _ ->
         {:error, :invalid_format}
     end
   end
 
-  @think_pattern ~r/<think>.*?<\/think>/s
-  @think_unclosed ~r/<think>.*/s
+  @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
   @fence_pattern ~r/```(?:json)?\s*(.*?)\s*```/s
 
   defp strip_think_tags(raw) do
     raw
     |> String.replace(@think_pattern, "")
-    |> String.replace(@think_unclosed, "")
     |> String.trim()
   end
 
@@ -65,20 +60,23 @@ defmodule LangExtract.FormatHandler do
     {attr_keys, class_keys} =
       Enum.split_with(all_keys, &String.ends_with?(&1, @attribute_suffix))
 
-    matched_attr_keys =
-      Enum.filter(attr_keys, fn attr_key ->
-        prefix = String.replace_suffix(attr_key, @attribute_suffix, "")
-        prefix in class_keys
+    class_set = MapSet.new(class_keys)
+
+    unmatched_attr_keys =
+      Enum.reject(attr_keys, fn ak ->
+        MapSet.member?(class_set, String.replace_suffix(ak, @attribute_suffix, ""))
       end)
 
-    unmatched_attr_keys = attr_keys -- matched_attr_keys
     effective_class_keys = class_keys ++ unmatched_attr_keys
 
     case effective_class_keys do
       [class_key] ->
-        attr_key = "#{class_key}#{@attribute_suffix}"
-
-        attributes = resolve_attributes(entry, attr_key, matched_attr_keys)
+        attr_key = class_key <> @attribute_suffix
+        attributes =
+          case entry do
+            %{^attr_key => attrs} when is_map(attrs) -> attrs
+            _ -> %{}
+          end
 
         %{"class" => class_key, "text" => Map.get(entry, class_key), "attributes" => attributes}
 
@@ -88,15 +86,4 @@ defmodule LangExtract.FormatHandler do
   end
 
   defp normalize_entry(entry), do: entry
-
-  defp resolve_attributes(entry, attr_key, matched_attr_keys) do
-    if attr_key in matched_attr_keys do
-      case Map.get(entry, attr_key) do
-        attrs when is_map(attrs) -> attrs
-        _ -> %{}
-      end
-    else
-      %{}
-    end
-  end
 end
