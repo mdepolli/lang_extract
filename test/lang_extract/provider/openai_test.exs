@@ -190,7 +190,10 @@ defmodule LangExtract.Provider.OpenAITest do
       end)
 
       assert {:ok, "hello"} =
-               OpenAI.infer("Say hello.", api_key: "sk-test", plug: {Req.Test, __MODULE__})
+               OpenAI.infer("Say hello.",
+                 api_key: "sk-test",
+                 req_options: [plug: {Req.Test, __MODULE__}]
+               )
     end
 
     test "returns error on missing api key" do

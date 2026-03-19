@@ -3,7 +3,7 @@ defmodule LangExtract.OrchestratorTest do
 
   alias LangExtract.Client
 
-  @plug {Req.Test, __MODULE__}
+  @req_options [plug: {Req.Test, __MODULE__}]
 
   describe "LangExtract.new/2" do
     test "creates client with :claude provider" do
@@ -46,7 +46,7 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     defp claude_client do
-      LangExtract.new(:claude, api_key: "sk-test", plug: @plug)
+      LangExtract.new(:claude, api_key: "sk-test", req_options: @req_options)
     end
 
     defp template(description \\ "Extract.") do

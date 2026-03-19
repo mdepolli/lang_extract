@@ -49,14 +49,16 @@ defmodule LangExtract.Provider do
   end
 
   @doc """
-  Builds Req options, including the `:plug` option for testing if present in opts.
-  For use by provider implementations.
+  Merges caller-supplied `:req_options` into the provider's Req options.
+
+  Allows passing through any Req configuration (timeouts, pool settings,
+  plug for testing, etc.) without the provider needing to know about them.
   """
   @spec req_options(keyword(), keyword()) :: keyword()
   def req_options(opts, req_opts) do
-    case Keyword.get(opts, :plug) do
+    case Keyword.get(opts, :req_options) do
       nil -> req_opts
-      plug -> Keyword.put(req_opts, :plug, plug)
+      extra -> Keyword.merge(req_opts, extra)
     end
   end
 

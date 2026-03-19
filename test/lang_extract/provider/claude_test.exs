@@ -185,7 +185,7 @@ defmodule LangExtract.Provider.ClaudeTest do
       assert {:ok, "extracted entities"} =
                Claude.infer("Extract entities.",
                  api_key: "sk-test",
-                 plug: {Req.Test, __MODULE__}
+                 req_options: [plug: {Req.Test, __MODULE__}]
                )
     end
 

@@ -204,7 +204,10 @@ defmodule LangExtract.Provider.GeminiTest do
       end)
 
       assert {:ok, "hello"} =
-               Gemini.infer("Say hello.", api_key: "gm-test", plug: {Req.Test, __MODULE__})
+               Gemini.infer("Say hello.",
+                 api_key: "gm-test",
+                 req_options: [plug: {Req.Test, __MODULE__}]
+               )
     end
 
     test "returns error on missing api key" do
