@@ -1,7 +1,7 @@
 [
   {"slug": "the-happy-prince", "url": "https://www.gutenberg.org/cache/epub/902/pg902.txt", "max_bytes": null},
   {"slug": "a-christmas-carol", "url": "https://www.gutenberg.org/cache/epub/46/pg46.txt", "max_bytes": 5000},
-  {"slug": "the-tell-tale-heart", "url": "https://www.gutenberg.org/cache/epub/2148/pg2148.txt", "max_bytes": null},
+  {"slug": "the-tell-tale-heart", "url": "https://www.gutenberg.org/cache/epub/2148/pg2148.txt", "max_bytes": 5000},
   {"slug": "the-yellow-wallpaper", "url": "https://www.gutenberg.org/cache/epub/1952/pg1952.txt", "max_bytes": null},
   {"slug": "romeo-and-juliet", "url": "https://www.gutenberg.org/cache/epub/1513/pg1513.txt", "max_bytes": 15000},
   {"slug": "the-importance-of-being-earnest", "url": "https://www.gutenberg.org/cache/epub/844/pg844.txt", "max_bytes": 20000},
