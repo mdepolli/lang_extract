@@ -1,5 +1,9 @@
 # LangExtract
 
+[![Hex.pm](https://img.shields.io/hexpm/v/lang_extract)](https://hex.pm/packages/lang_extract)
+[![Documentation](https://img.shields.io/badge/docs-hexdocs-blue)](https://hexdocs.pm/lang_extract)
+[![CI](https://github.com/mdepolli/lang_extract/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mdepolli/lang_extract/actions/workflows/ci.yml)
+
 Extract structured data from text using LLMs, with every extraction grounded to
 exact byte positions in the source. An Elixir port of
 [google/langextract](https://github.com/google/langextract).
