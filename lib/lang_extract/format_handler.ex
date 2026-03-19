@@ -72,6 +72,7 @@ defmodule LangExtract.FormatHandler do
     case effective_class_keys do
       [class_key] ->
         attr_key = class_key <> @attribute_suffix
+
         attributes =
           case entry do
             %{^attr_key => attrs} when is_map(attrs) -> attrs

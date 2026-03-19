@@ -2,7 +2,7 @@ defmodule LangExtract.Provider.OpenAI do
   @moduledoc """
   OpenAI provider for LLM inference.
 
-  Calls the OpenAI Chat Completions API via HTTPower + Finch.
+  Calls the OpenAI Chat Completions API via Req.
   """
 
   @behaviour LangExtract.Provider
@@ -19,16 +19,16 @@ defmodule LangExtract.Provider.OpenAI do
   @impl true
   @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def infer(prompt, opts \\ []) do
-    with {:ok, {client, path, request_opts}} <- build_request(prompt, opts) do
-      client
-      |> HTTPower.post(path, request_opts)
+    with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
+      req
+      |> Req.post(request_opts)
       |> parse_response()
     end
   end
 
   @doc false
   @spec build_request(String.t(), keyword()) ::
-          {:ok, {HTTPower.client(), String.t(), keyword()}} | {:error, :missing_api_key}
+          {:ok, {Req.Request.t(), keyword()}} | {:error, :missing_api_key}
   def build_request(prompt, opts) do
     with {:ok, api_key} <- Provider.fetch_api_key(opts, "OPENAI_API_KEY") do
       %{model: model, max_tokens: max_tokens, temperature: temperature, base_url: base_url} =
@@ -36,11 +36,13 @@ defmodule LangExtract.Provider.OpenAI do
 
       json_mode = Keyword.get(opts, :json_mode, true)
 
-      client =
-        HTTPower.new(
+      req_opts =
+        Provider.req_options(opts,
           base_url: base_url,
           headers: %{"authorization" => "Bearer #{api_key}"}
         )
+
+      req = Req.new(req_opts)
 
       messages = build_messages(prompt, json_mode)
 
@@ -53,12 +55,12 @@ defmodule LangExtract.Provider.OpenAI do
         }
         |> maybe_add_response_format(json_mode)
 
-      {:ok, {client, "/v1/chat/completions", [json: payload]}}
+      {:ok, {req, [url: "/v1/chat/completions", json: payload]}}
     end
   end
 
   @doc false
-  @spec parse_response({:ok, HTTPower.Response.t()} | {:error, HTTPower.Error.t()}) ::
+  @spec parse_response({:ok, Req.Response.t()} | {:error, Exception.t()}) ::
           {:ok, String.t()} | {:error, term()}
   def parse_response(response), do: Provider.map_response(response, &extract_text/1)
 

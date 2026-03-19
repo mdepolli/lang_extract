@@ -34,8 +34,18 @@ defmodule LangExtract.Alignment.Aligner do
     ext_length = length(ext_texts)
 
     case exact_match(extraction, source_words, source_texts, ext_texts, ext_length) do
-      {:ok, span} -> span
-      :no_match -> fuzzy_match(extraction, source_words, source_texts_tuple, ext_texts, ext_length, threshold)
+      {:ok, span} ->
+        span
+
+      :no_match ->
+        fuzzy_match(
+          extraction,
+          source_words,
+          source_texts_tuple,
+          ext_texts,
+          ext_length,
+          threshold
+        )
     end
   end
 

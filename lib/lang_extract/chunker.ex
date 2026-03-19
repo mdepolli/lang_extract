@@ -81,6 +81,7 @@ defmodule LangExtract.Chunker do
     boundaries =
       Enum.reduce(0..(count - 1)//1, [], fn idx, acc ->
         token = elem(tokens_tuple, idx)
+
         cond do
           sentence_end_by_punctuation?(token, idx, tokens_tuple) ->
             end_idx = consume_closing_punctuation(idx + 1, tokens_tuple, count)

@@ -2,7 +2,7 @@ defmodule LangExtract.Provider.Gemini do
   @moduledoc """
   Gemini (Google) provider for LLM inference.
 
-  Calls the Gemini generateContent API via HTTPower + Finch.
+  Calls the Gemini generateContent API via Req.
   """
 
   @behaviour LangExtract.Provider
@@ -19,23 +19,23 @@ defmodule LangExtract.Provider.Gemini do
   @impl true
   @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def infer(prompt, opts \\ []) do
-    with {:ok, {client, path, request_opts}} <- build_request(prompt, opts) do
-      client
-      |> HTTPower.post(path, request_opts)
+    with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
+      req
+      |> Req.post(request_opts)
       |> parse_response()
     end
   end
 
   @doc false
   @spec build_request(String.t(), keyword()) ::
-          {:ok, {HTTPower.client(), String.t(), keyword()}} | {:error, :missing_api_key}
+          {:ok, {Req.Request.t(), keyword()}} | {:error, :missing_api_key}
   def build_request(prompt, opts) do
     with {:ok, api_key} <- Provider.fetch_api_key(opts, "GEMINI_API_KEY") do
       %{model: model, max_tokens: max_tokens, temperature: temperature, base_url: base_url} =
         Provider.common_opts(opts, @defaults)
 
-      client =
-        HTTPower.new(base_url: base_url)
+      req_opts = Provider.req_options(opts, base_url: base_url)
+      req = Req.new(req_opts)
 
       path = "/v1beta/models/#{model}:generateContent?key=#{api_key}"
 
@@ -48,12 +48,12 @@ defmodule LangExtract.Provider.Gemini do
         }
       }
 
-      {:ok, {client, path, [json: payload]}}
+      {:ok, {req, [url: path, json: payload]}}
     end
   end
 
   @doc false
-  @spec parse_response({:ok, HTTPower.Response.t()} | {:error, HTTPower.Error.t()}) ::
+  @spec parse_response({:ok, Req.Response.t()} | {:error, Exception.t()}) ::
           {:ok, String.t()} | {:error, term()}
   def parse_response(response), do: Provider.map_response(response, &extract_text/1)
 

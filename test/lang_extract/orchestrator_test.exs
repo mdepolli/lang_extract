@@ -3,6 +3,8 @@ defmodule LangExtract.OrchestratorTest do
 
   alias LangExtract.Client
 
+  @plug {Req.Test, __MODULE__}
+
   describe "LangExtract.new/2" do
     test "creates client with :claude provider" do
       client = LangExtract.new(:claude, api_key: "sk-test")
@@ -33,34 +35,42 @@ defmodule LangExtract.OrchestratorTest do
   end
 
   describe "LangExtract.run/3,4" do
-    setup do
-      HTTPower.Test.setup()
+    defp stub_claude(response_body, opts \\ []) do
+      status = Keyword.get(opts, :status, 200)
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(status, Jason.encode!(response_body))
+      end)
+    end
+
+    defp claude_client do
+      LangExtract.new(:claude, api_key: "sk-test", plug: @plug)
+    end
+
+    defp template(description \\ "Extract.") do
+      %LangExtract.Prompt.Template{description: description}
+    end
+
+    defp claude_extraction_response(extractions) do
+      %{
+        "content" => [
+          %{"type" => "text", "text" => Jason.encode!(%{"extractions" => extractions})}
+        ]
+      }
     end
 
     test "full pipeline: prompt → LLM → parse → align → enriched spans" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
-          "content" => [
-            %{
-              "type" => "text",
-              "text" =>
-                Jason.encode!(%{
-                  "extractions" => [
-                    %{"word" => "fox", "word_attributes" => %{"type" => "noun"}}
-                  ]
-                })
-            }
-          ]
-        })
-      end)
+      stub_claude(
+        claude_extraction_response([
+          %{"word" => "fox", "word_attributes" => %{"type" => "noun"}}
+        ])
+      )
 
-      client = LangExtract.new(:claude, api_key: "sk-test")
+      assert {:ok, [span]} =
+               LangExtract.run(claude_client(), "the quick brown fox", template("Extract words."))
 
-      template = %LangExtract.Prompt.Template{
-        description: "Extract words from the text."
-      }
-
-      assert {:ok, [span]} = LangExtract.run(client, "the quick brown fox", template)
       assert span.class == "word"
       assert span.text == "fox"
       assert span.status == :exact
@@ -70,112 +80,63 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "propagates provider error" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{"error" => "unauthorized"}, status: 401)
-      end)
+      stub_claude(%{"error" => "unauthorized"}, status: 401)
 
-      client = LangExtract.new(:claude, api_key: "bad-key")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
-
-      assert {:error, :unauthorized} = LangExtract.run(client, "some text", template)
+      assert {:error, :unauthorized} = LangExtract.run(claude_client(), "some text", template())
     end
 
     test "propagates error for LLM output missing extractions key" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
+      Req.Test.stub(__MODULE__, fn conn ->
+        Req.Test.json(conn, %{
           "content" => [
             %{"type" => "text", "text" => Jason.encode!(%{"wrong_key" => []})}
           ]
         })
       end)
 
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
-
-      # FormatHandler.normalize/1 catches missing "extractions" key before the parser
-      assert {:error, :invalid_format} = LangExtract.run(client, "some text", template)
+      assert {:error, :invalid_format} = LangExtract.run(claude_client(), "some text", template())
     end
 
     test "propagates format handler error for invalid LLM output" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
+      Req.Test.stub(__MODULE__, fn conn ->
+        Req.Test.json(conn, %{
           "content" => [%{"type" => "text", "text" => "not valid json at all"}]
         })
       end)
 
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
-
-      assert {:error, :invalid_format} = LangExtract.run(client, "some text", template)
+      assert {:error, :invalid_format} = LangExtract.run(claude_client(), "some text", template())
     end
 
     test "returns ok with empty list when LLM returns no extractions" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
-          "content" => [
-            %{"type" => "text", "text" => Jason.encode!(%{"extractions" => []})}
-          ]
-        })
-      end)
+      stub_claude(claude_extraction_response([]))
 
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
-
-      assert {:ok, []} = LangExtract.run(client, "some text", template)
+      assert {:ok, []} = LangExtract.run(claude_client(), "some text", template())
     end
 
     test "extraction not found in source returns span with :not_found status" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
-          "content" => [
-            %{
-              "type" => "text",
-              "text" =>
-                Jason.encode!(%{
-                  "extractions" => [%{"thing" => "nonexistent", "thing_attributes" => %{}}]
-                })
-            }
-          ]
-        })
-      end)
+      stub_claude(
+        claude_extraction_response([%{"thing" => "nonexistent", "thing_attributes" => %{}}])
+      )
 
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
-
-      assert {:ok, [span]} = LangExtract.run(client, "hello world", template)
+      assert {:ok, [span]} = LangExtract.run(claude_client(), "hello world", template())
       assert span.status == :not_found
       assert span.class == "thing"
     end
 
     test "fuzzy_threshold option is passed through to aligner" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
-          "content" => [
-            %{
-              "type" => "text",
-              "text" =>
-                Jason.encode!(%{
-                  "extractions" => [
-                    %{"phrase" => "quick brown dog", "phrase_attributes" => %{}}
-                  ]
-                })
-            }
-          ]
-        })
-      end)
-
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
+      stub_claude(
+        claude_extraction_response([%{"phrase" => "quick brown dog", "phrase_attributes" => %{}}])
+      )
 
       # Default threshold (0.75) — not_found (2/3 = 0.67 < 0.75)
       assert {:ok, [span]} =
-               LangExtract.run(client, "the quick brown fox jumps", template)
+               LangExtract.run(claude_client(), "the quick brown fox jumps", template())
 
       assert span.status == :not_found
 
       # Low threshold — fuzzy match
       assert {:ok, [span]} =
-               LangExtract.run(client, "the quick brown fox jumps", template,
+               LangExtract.run(claude_client(), "the quick brown fox jumps", template(),
                  fuzzy_threshold: 0.6
                )
 
@@ -185,7 +146,7 @@ defmodule LangExtract.OrchestratorTest do
     test "max_chunk_size triggers chunking with correct byte offsets" do
       source = "First sentence here. Second sentence there."
 
-      HTTPower.Test.stub(fn conn ->
+      Req.Test.stub(__MODULE__, fn conn ->
         {:ok, body, _conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
         prompt = hd(decoded["messages"])["content"]
@@ -197,18 +158,17 @@ defmodule LangExtract.OrchestratorTest do
             [%{"word" => "Second", "word_attributes" => %{}}]
           end
 
-        HTTPower.Test.json(conn, %{
+        Req.Test.json(conn, %{
           "content" => [
             %{"type" => "text", "text" => Jason.encode!(%{"extractions" => extractions})}
           ]
         })
       end)
 
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract words."}
-
       assert {:ok, spans} =
-               LangExtract.run(client, source, template, max_chunk_size: 25)
+               LangExtract.run(claude_client(), source, template("Extract words."),
+                 max_chunk_size: 25
+               )
 
       exact_spans = Enum.filter(spans, &(&1.status == :exact))
 
@@ -219,45 +179,19 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "no max_chunk_size behaves as before (regression)" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
-          "content" => [
-            %{
-              "type" => "text",
-              "text" =>
-                Jason.encode!(%{"extractions" => [%{"word" => "fox", "word_attributes" => %{}}]})
-            }
-          ]
-        })
-      end)
+      stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
 
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
+      assert {:ok, [span]} =
+               LangExtract.run(claude_client(), "the quick brown fox", template())
 
-      assert {:ok, [span]} = LangExtract.run(client, "the quick brown fox", template)
       assert span.status == :exact
     end
 
     test "not_found span byte offsets are not adjusted in chunked mode" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
-          "content" => [
-            %{
-              "type" => "text",
-              "text" =>
-                Jason.encode!(%{
-                  "extractions" => [%{"thing" => "absent", "thing_attributes" => %{}}]
-                })
-            }
-          ]
-        })
-      end)
-
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
+      stub_claude(claude_extraction_response([%{"thing" => "absent", "thing_attributes" => %{}}]))
 
       assert {:ok, spans} =
-               LangExtract.run(client, "Hello world. Goodbye world.", template,
+               LangExtract.run(claude_client(), "Hello world. Goodbye world.", template(),
                  max_chunk_size: 15
                )
 
@@ -268,45 +202,27 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "provider error in chunked mode fails entire run" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{"error" => "unauthorized"}, status: 401)
-      end)
-
-      client = LangExtract.new(:claude, api_key: "bad")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
+      stub_claude(%{"error" => "unauthorized"}, status: 401)
 
       assert {:error, :unauthorized} =
-               LangExtract.run(client, "First sentence. Second sentence.", template,
+               LangExtract.run(claude_client(), "First sentence. Second sentence.", template(),
                  max_chunk_size: 20
                )
     end
 
     test "multiple extractions aligned independently" do
-      HTTPower.Test.stub(fn conn ->
-        HTTPower.Test.json(conn, %{
-          "content" => [
-            %{
-              "type" => "text",
-              "text" =>
-                Jason.encode!(%{
-                  "extractions" => [
-                    %{"animal" => "fox", "animal_attributes" => %{}},
-                    %{"animal" => "dog", "animal_attributes" => %{}}
-                  ]
-                })
-            }
-          ]
-        })
-      end)
-
-      client = LangExtract.new(:claude, api_key: "sk-test")
-      template = %LangExtract.Prompt.Template{description: "Extract."}
+      stub_claude(
+        claude_extraction_response([
+          %{"animal" => "fox", "animal_attributes" => %{}},
+          %{"animal" => "dog", "animal_attributes" => %{}}
+        ])
+      )
 
       assert {:ok, [fox, dog]} =
                LangExtract.run(
-                 client,
+                 claude_client(),
                  "the quick brown fox jumps over the lazy dog",
-                 template
+                 template()
                )
 
       assert fox.text == "fox"

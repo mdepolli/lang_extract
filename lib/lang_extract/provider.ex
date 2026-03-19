@@ -49,40 +49,52 @@ defmodule LangExtract.Provider do
   end
 
   @doc """
-  Maps an HTTPower response to a provider result tuple.
+  Builds Req options, including the `:plug` option for testing if present in opts.
+  For use by provider implementations.
+  """
+  @spec req_options(keyword(), keyword()) :: keyword()
+  def req_options(opts, req_opts) do
+    case Keyword.get(opts, :plug) do
+      nil -> req_opts
+      plug -> Keyword.put(req_opts, :plug, plug)
+    end
+  end
+
+  @doc """
+  Maps a Req response to a provider result tuple.
 
   Delegates to `extract_text` for HTTP 200; maps error status codes and
   network failures to standard error tuples. For use by provider implementations.
   """
   @spec map_response(
-          {:ok, HTTPower.Response.t()} | {:error, HTTPower.Error.t()},
+          {:ok, Req.Response.t()} | {:error, Exception.t()},
           (term() -> {:ok, String.t()} | {:error, :empty_response})
         ) :: {:ok, String.t()} | {:error, term()}
-  def map_response({:ok, %HTTPower.Response{status: 200, body: body}}, extract_text) do
+  def map_response({:ok, %Req.Response{status: 200, body: body}}, extract_text) do
     extract_text.(body)
   end
 
-  def map_response({:ok, %HTTPower.Response{status: 400, body: body}}, _) do
+  def map_response({:ok, %Req.Response{status: 400, body: body}}, _) do
     {:error, {:bad_request, body}}
   end
 
-  def map_response({:ok, %HTTPower.Response{status: 401}}, _) do
+  def map_response({:ok, %Req.Response{status: 401}}, _) do
     {:error, :unauthorized}
   end
 
-  def map_response({:ok, %HTTPower.Response{status: 429}}, _) do
+  def map_response({:ok, %Req.Response{status: 429}}, _) do
     {:error, :rate_limited}
   end
 
-  def map_response({:ok, %HTTPower.Response{status: status}}, _) when status >= 500 do
+  def map_response({:ok, %Req.Response{status: status}}, _) when status >= 500 do
     {:error, :server_error}
   end
 
-  def map_response({:ok, %HTTPower.Response{status: status, body: body}}, _) do
+  def map_response({:ok, %Req.Response{status: status, body: body}}, _) do
     {:error, {:api_error, status, body}}
   end
 
-  def map_response({:error, %HTTPower.Error{reason: reason}}, _) do
-    {:error, {:request_error, reason}}
+  def map_response({:error, exception}, _) do
+    {:error, {:request_error, exception}}
   end
 end
