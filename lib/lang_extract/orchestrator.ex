@@ -48,26 +48,32 @@ defmodule LangExtract.Orchestrator do
       max_concurrency = Keyword.get(opts, :max_concurrency, 3)
 
       chunks
-      |> Enum.with_index()
+      |> with_previous_text()
       |> Task.async_stream(
-        fn {chunk, idx} ->
-          prev_text = if idx > 0, do: Enum.at(chunks, idx - 1).text
-          process_chunk(client, chunk, template, prev_text, opts)
-        end,
+        fn {chunk, prev_text} -> process_chunk(client, chunk, template, prev_text, opts) end,
         ordered: true,
         max_concurrency: max_concurrency
       )
-      |> Enum.reduce_while({:ok, []}, fn
-        {:ok, {:ok, spans}}, {:ok, acc} ->
-          {:cont, {:ok, acc ++ spans}}
-
-        {:ok, {:error, _} = error}, _acc ->
-          {:halt, error}
-
-        {:exit, reason}, _acc ->
-          {:halt, {:error, {:task_error, reason}}}
-      end)
+      |> collect_results()
     end
+  end
+
+  defp with_previous_text(chunks) do
+    prev_texts = [nil | Enum.map(chunks, & &1.text) |> Enum.drop(-1)]
+    Enum.zip(chunks, prev_texts)
+  end
+
+  defp collect_results(stream) do
+    Enum.reduce_while(stream, {:ok, []}, fn
+      {:ok, {:ok, spans}}, {:ok, acc} ->
+        {:cont, {:ok, acc ++ spans}}
+
+      {:ok, {:error, _} = error}, _acc ->
+        {:halt, error}
+
+      {:exit, reason}, _acc ->
+        {:halt, {:error, {:task_error, reason}}}
+    end)
   end
 
   defp process_chunk(client, chunk, template, prev_text, opts) do

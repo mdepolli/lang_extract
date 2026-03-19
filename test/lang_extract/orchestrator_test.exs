@@ -224,7 +224,8 @@ defmodule LangExtract.OrchestratorTest do
           "content" => [
             %{
               "type" => "text",
-              "text" => Jason.encode!(%{"extractions" => [%{"word" => "fox", "word_attributes" => %{}}]})
+              "text" =>
+                Jason.encode!(%{"extractions" => [%{"word" => "fox", "word_attributes" => %{}}]})
             }
           ]
         })
@@ -243,7 +244,10 @@ defmodule LangExtract.OrchestratorTest do
           "content" => [
             %{
               "type" => "text",
-              "text" => Jason.encode!(%{"extractions" => [%{"thing" => "absent", "thing_attributes" => %{}}]})
+              "text" =>
+                Jason.encode!(%{
+                  "extractions" => [%{"thing" => "absent", "thing_attributes" => %{}}]
+                })
             }
           ]
         })

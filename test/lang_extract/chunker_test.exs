@@ -26,6 +26,7 @@ defmodule LangExtract.ChunkerTest do
     test "byte_start offsets are correct for each chunk" do
       text = "Short. Also short. Third one here."
       chunks = Chunker.chunk(text, max_chunk_size: 20)
+
       for chunk <- chunks do
         assert binary_part(text, chunk.byte_start, byte_size(chunk.text)) == chunk.text
       end
