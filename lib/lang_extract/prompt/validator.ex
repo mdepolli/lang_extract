@@ -26,7 +26,7 @@ defmodule LangExtract.Prompt.Validator do
             status: :fuzzy | :not_found
           }
 
-    @enforce_keys [
+    @fields [
       :example_index,
       :extraction_index,
       :example_text,
@@ -34,14 +34,8 @@ defmodule LangExtract.Prompt.Validator do
       :extraction_class,
       :status
     ]
-    defstruct [
-      :example_index,
-      :extraction_index,
-      :example_text,
-      :extraction_text,
-      :extraction_class,
-      :status
-    ]
+    @enforce_keys @fields
+    defstruct @fields
   end
 
   defmodule ValidationError do
@@ -85,26 +79,17 @@ defmodule LangExtract.Prompt.Validator do
     texts = Enum.map(example.extractions, & &1.text)
     spans = Aligner.align(example.text, texts, opts)
 
-    example.extractions
-    |> Enum.zip(spans)
-    |> Enum.with_index()
-    |> Enum.flat_map(fn {{%Extraction{} = extraction, span}, extraction_index} ->
-      case span.status do
-        :exact ->
-          []
-
-        status ->
-          [
-            %Issue{
-              example_index: example_index,
-              extraction_index: extraction_index,
-              example_text: example.text,
-              extraction_text: extraction.text,
-              extraction_class: extraction.class,
-              status: status
-            }
-          ]
-      end
-    end)
+    for {%Extraction{} = extraction, span, extraction_index} <-
+          Enum.zip([example.extractions, spans, 0..(length(spans) - 1)//1]),
+        span.status != :exact do
+      %Issue{
+        example_index: example_index,
+        extraction_index: extraction_index,
+        example_text: example.text,
+        extraction_text: extraction.text,
+        extraction_class: extraction.class,
+        status: span.status
+      }
+    end
   end
 end

@@ -56,8 +56,7 @@ defmodule LangExtract do
       spans = Aligner.align(source, texts, opts)
 
       enriched =
-        Enum.zip(extractions, spans)
-        |> Enum.map(fn {extraction, %Span{} = span} ->
+        Enum.zip_with(extractions, spans, fn extraction, %Span{} = span ->
           %Span{span | class: extraction.class, attributes: extraction.attributes}
         end)
 
