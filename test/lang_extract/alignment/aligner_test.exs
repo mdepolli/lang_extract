@@ -89,13 +89,9 @@ defmodule LangExtract.Alignment.AlignerTest do
 
       [span] = Aligner.align(source, ["en\u2013dashes"])
       assert span.status == :exact
-<<<<<<< HEAD
-      assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) == "en\u2013dashes"
-=======
 
       assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) ==
                "en\u2013dashes"
->>>>>>> 92e7ee3 (Add aligner edge-case tests inspired by Python langextract)
     end
 
     test "matches numerical extraction" do
