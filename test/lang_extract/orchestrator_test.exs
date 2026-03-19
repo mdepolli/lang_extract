@@ -80,6 +80,22 @@ defmodule LangExtract.OrchestratorTest do
       assert {:error, :unauthorized} = LangExtract.run(client, "some text", template)
     end
 
+    test "propagates error for LLM output missing extractions key" do
+      HTTPower.Test.stub(fn conn ->
+        HTTPower.Test.json(conn, %{
+          "content" => [
+            %{"type" => "text", "text" => Jason.encode!(%{"wrong_key" => []})}
+          ]
+        })
+      end)
+
+      client = LangExtract.new(:claude, api_key: "sk-test")
+      template = %LangExtract.Prompt.Template{description: "Extract."}
+
+      # FormatHandler.normalize/1 catches missing "extractions" key before the parser
+      assert {:error, :invalid_format} = LangExtract.run(client, "some text", template)
+    end
+
     test "propagates format handler error for invalid LLM output" do
       HTTPower.Test.stub(fn conn ->
         HTTPower.Test.json(conn, %{
