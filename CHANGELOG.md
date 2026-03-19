@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **ROADMAP.md** — Documents future improvements and unported features from
+  the original Python library.
+- **Aligner edge-case tests** — Additional test coverage inspired by the
+  Python langextract test suite.
+
+### Changed
+
+- **README.md** — Moved future improvements to ROADMAP.md. Cleaned up
+  comparison section.
+
+### Removed
+
+- **`docs/` directory** — Removed historical design specs and implementation
+  plans (17 files, ~7,000 lines). These served their purpose during
+  development; the project is now documented via README, CHANGELOG, and ROADMAP.
+
 ## [0.2.1] - 2026-03-19
 
 ### Fixed
