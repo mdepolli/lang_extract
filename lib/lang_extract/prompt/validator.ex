@@ -79,17 +79,26 @@ defmodule LangExtract.Prompt.Validator do
     texts = Enum.map(example.extractions, & &1.text)
     spans = Aligner.align(example.text, texts, opts)
 
-    for {%Extraction{} = extraction, span, extraction_index} <-
-          Enum.zip([example.extractions, spans, 0..(length(spans) - 1)//1]),
-        span.status != :exact do
-      %Issue{
-        example_index: example_index,
-        extraction_index: extraction_index,
-        example_text: example.text,
-        extraction_text: extraction.text,
-        extraction_class: extraction.class,
-        status: span.status
-      }
-    end
+    example.extractions
+    |> Enum.zip(spans)
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {{%Extraction{} = extraction, span}, extraction_index} ->
+      case span.status do
+        :exact ->
+          []
+
+        status ->
+          [
+            %Issue{
+              example_index: example_index,
+              extraction_index: extraction_index,
+              example_text: example.text,
+              extraction_text: extraction.text,
+              extraction_class: extraction.class,
+              status: status
+            }
+          ]
+      end
+    end)
   end
 end
