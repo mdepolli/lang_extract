@@ -5,7 +5,7 @@ defmodule LangExtract do
   """
 
   alias LangExtract.Alignment.{Aligner, Span}
-  alias LangExtract.{FormatHandler, Parser}
+  alias LangExtract.{Client, FormatHandler, Parser, Provider}
 
   @doc """
   Aligns extraction strings to byte spans in source text.
@@ -63,5 +63,30 @@ defmodule LangExtract do
 
       {:ok, enriched}
     end
+  end
+
+  @doc """
+  Creates a configured LLM client for extraction.
+
+  ## Examples
+
+      client = LangExtract.new(:claude, api_key: "sk-...")
+      client = LangExtract.new(:openai, api_key: "sk-...", model: "gpt-4o")
+      client = LangExtract.new(:gemini, api_key: "gm-...")
+
+  """
+  @spec new(atom(), keyword()) :: Client.t()
+  def new(provider, opts \\ []) do
+    module = resolve_provider(provider)
+    %Client{provider: module, options: opts}
+  end
+
+  defp resolve_provider(:claude), do: Provider.Claude
+  defp resolve_provider(:openai), do: Provider.OpenAI
+  defp resolve_provider(:gemini), do: Provider.Gemini
+
+  defp resolve_provider(other) do
+    raise ArgumentError,
+          "unknown provider: #{inspect(other)}. Expected :claude, :openai, or :gemini"
   end
 end
