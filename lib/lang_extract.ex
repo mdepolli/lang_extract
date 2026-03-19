@@ -5,7 +5,7 @@ defmodule LangExtract do
   """
 
   alias LangExtract.Alignment.{Aligner, Span}
-  alias LangExtract.{Client, FormatHandler, Parser, Provider}
+  alias LangExtract.{Client, FormatHandler, Orchestrator, Parser, Prompt, Provider}
 
   @doc """
   Aligns extraction strings to byte spans in source text.
@@ -63,6 +63,26 @@ defmodule LangExtract do
 
       {:ok, enriched}
     end
+  end
+
+  @doc """
+  Runs the full extraction pipeline: prompt → LLM → parse → align.
+
+  ## Options
+
+    * `:fuzzy_threshold` - minimum overlap ratio for fuzzy match (default `0.75`)
+
+  ## Examples
+
+      client = LangExtract.new(:claude, api_key: "sk-...")
+      template = %LangExtract.Prompt.Template{description: "Extract entities."}
+      {:ok, spans} = LangExtract.run(client, "the quick brown fox", template)
+
+  """
+  @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
+          {:ok, [Span.t()]} | {:error, term()}
+  def run(%Client{} = client, source, template, opts \\ []) do
+    Orchestrator.run(client, source, template, opts)
   end
 
   @doc """
