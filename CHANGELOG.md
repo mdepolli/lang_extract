@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-19
+
+### Changed
+
+- **Replaced HTTPower with Req** as the HTTP client. Req is a mature,
+  batteries-included HTTP client with wide ecosystem adoption. This removes
+  the `httpower` and direct `finch` dependencies.
+- **Gemini API key** now passed via Req's `params:` option instead of being
+  embedded in the URL path string.
+- **Req retries disabled by default** in all providers. Callers can opt in
+  via `req_options: [retry: :transient]`.
+- **Generic `:req_options` passthrough** replaces the test-specific `:plug`
+  option. Any Req configuration (timeouts, retry, pool settings, plug for
+  testing) can be forwarded to the underlying Req request.
+
+### Added
+
+- **Orchestrator with chunking** — `LangExtract.run/3,4` wires the full
+  pipeline end-to-end. Sentence-aware chunking via `:max_chunk_size` option
+  with `Task.async_stream` for parallel inference.
+- **`LangExtract.new/2`** — Req-inspired two-step API: create a client, then
+  run extractions.
+- **`LangExtract.Chunker`** — Sentence-aware text splitting with
+  abbreviation awareness and three-tier strategy.
+- **`LangExtract.IO`** — Serialize extraction results to plain maps and JSONL.
+- **Module reorganization** — Alignment and Prompt subdomains for cleaner
+  namespace organization.
+
 ## [0.1.0] - 2026-03-18
 
 Initial release. A complete Elixir port of the core pipeline from
