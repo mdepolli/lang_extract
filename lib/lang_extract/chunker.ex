@@ -16,7 +16,7 @@ defmodule LangExtract.Chunker do
   1. A `:punctuation` token of `.`, `!`, or `?` ends a sentence, unless it
      forms a known abbreviation with the preceding word token.
   2. After sentence-ending punctuation, trailing closing punctuation
-     (`"`, `'`, `)`, `]`, `}`, `»`, `"`, `'`) is consumed into the same sentence.
+     (`"`, `'`, `)`, `]`, `}`, `»`, `\u201D`, `\u2019`) is consumed into the same sentence.
   3. A `:whitespace` token containing `\\n` followed by an uppercase-starting
      `:word` token starts a new sentence.
   """
@@ -25,11 +25,7 @@ defmodule LangExtract.Chunker do
   alias LangExtract.Chunker.Chunk
 
   @abbreviations ~w(Mr Mrs Ms Dr Prof St)
-
-  @closing_punctuation [~s("), "'", ")", "]", "}", "»"]
-  # Unicode right double quotation mark and right single quotation mark
-  @closing_punctuation_unicode ["\u201D", "\u2019"]
-
+  @closing_punctuation [~s("), "'", ")", "]", "}", "»", "\u201D", "\u2019"]
   @sentence_ending ~w(. ! ?)
 
   @doc """
@@ -57,17 +53,14 @@ defmodule LangExtract.Chunker do
         candidate = current_text <> sentence
 
         if byte_size(candidate) <= max_size or current_text == "" do
-          # Fits, or this is the first sentence in the chunk (allow oversized)
           {chunks, candidate, current_start}
         else
-          # Doesn't fit — emit current chunk, start new one
           chunk = %Chunk{text: current_text, byte_start: current_start}
           new_start = current_start + byte_size(current_text)
           {[chunk | chunks], sentence, new_start}
         end
       end)
 
-    # Emit final chunk
     if current_text != "" do
       Enum.reverse([%Chunk{text: current_text, byte_start: current_start} | chunks])
     else
@@ -80,25 +73,22 @@ defmodule LangExtract.Chunker do
 
   def find_sentences(text) when is_binary(text) do
     tokens = Tokenizer.tokenize(text)
+    tokens_tuple = List.to_tuple(tokens)
+    count = tuple_size(tokens_tuple)
     indexed = Enum.with_index(tokens)
-    boundaries = find_boundaries(indexed, tokens)
-    tokens_to_sentences(tokens, boundaries, text)
+    boundaries = find_boundaries(indexed, tokens_tuple, count)
+    tokens_to_sentences(tokens_tuple, boundaries, text)
   end
 
-  # Returns a list of boundary indices (exclusive end indices into the token list).
-  # Each boundary marks the end of a sentence.
-  defp find_boundaries(indexed, tokens) do
-    tokens_array = List.to_tuple(tokens)
-    count = tuple_size(tokens_array)
-
+  defp find_boundaries(indexed, tokens_tuple, count) do
     boundaries =
       Enum.reduce(indexed, [], fn {token, idx}, acc ->
         cond do
-          sentence_end_by_punctuation?(token, idx, tokens_array) ->
-            end_idx = consume_closing_punctuation(idx + 1, tokens_array, count)
+          sentence_end_by_punctuation?(token, idx, tokens_tuple) ->
+            end_idx = consume_closing_punctuation(idx + 1, tokens_tuple, count)
             [end_idx | acc]
 
-          sentence_end_by_newline?(token, idx, tokens_array, count) ->
+          sentence_end_by_newline?(token, idx, tokens_tuple, count) ->
             [idx | acc]
 
           true ->
@@ -112,45 +102,38 @@ defmodule LangExtract.Chunker do
     |> ensure_final_boundary(count)
   end
 
-  defp sentence_end_by_punctuation?(%{type: :punctuation, text: text}, idx, tokens_array)
+  defp sentence_end_by_punctuation?(%{type: :punctuation, text: text}, idx, tokens_tuple)
        when text in @sentence_ending do
-    not abbreviation_before?(idx, tokens_array)
+    not abbreviation_before?(idx, tokens_tuple)
   end
 
-  defp sentence_end_by_punctuation?(_token, _idx, _tokens_array), do: false
+  defp sentence_end_by_punctuation?(_token, _idx, _tokens_tuple), do: false
 
-  defp abbreviation_before?(punct_idx, tokens_array) when punct_idx > 0 do
-    prev = elem(tokens_array, punct_idx - 1)
-
+  defp abbreviation_before?(punct_idx, tokens_tuple) when punct_idx > 0 do
+    prev = elem(tokens_tuple, punct_idx - 1)
     prev.type == :word and prev.text in @abbreviations
   end
 
-  defp abbreviation_before?(_punct_idx, _tokens_array), do: false
+  defp abbreviation_before?(_punct_idx, _tokens_tuple), do: false
 
-  # Consumes any trailing closing punctuation tokens starting at `idx`,
-  # returning the index after the last consumed token.
-  defp consume_closing_punctuation(idx, tokens_array, count)
-       when idx < count do
-    token = elem(tokens_array, idx)
+  defp consume_closing_punctuation(idx, tokens_tuple, count) when idx < count do
+    token = elem(tokens_tuple, idx)
 
-    if token.type == :punctuation and
-         (token.text in @closing_punctuation or token.text in @closing_punctuation_unicode) do
-      consume_closing_punctuation(idx + 1, tokens_array, count)
+    if token.type == :punctuation and token.text in @closing_punctuation do
+      consume_closing_punctuation(idx + 1, tokens_tuple, count)
     else
       idx
     end
   end
 
-  defp consume_closing_punctuation(idx, _tokens_array, _count), do: idx
+  defp consume_closing_punctuation(idx, _tokens_tuple, _count), do: idx
 
-  # A whitespace token containing "\n" followed by an uppercase word starts a new sentence.
-  # The boundary index is the index of the whitespace token itself (exclusive end of current sentence).
-  defp sentence_end_by_newline?(%{type: :whitespace, text: ws_text}, idx, tokens_array, count) do
+  defp sentence_end_by_newline?(%{type: :whitespace, text: ws_text}, idx, tokens_tuple, count) do
     if String.contains?(ws_text, "\n") do
       next_idx = idx + 1
 
       if next_idx < count do
-        next = elem(tokens_array, next_idx)
+        next = elem(tokens_tuple, next_idx)
         next.type == :word and uppercase_start?(next.text)
       else
         false
@@ -160,7 +143,7 @@ defmodule LangExtract.Chunker do
     end
   end
 
-  defp sentence_end_by_newline?(_token, _idx, _tokens_array, _count), do: false
+  defp sentence_end_by_newline?(_token, _idx, _tokens_tuple, _count), do: false
 
   defp uppercase_start?(<<first::utf8, _rest::binary>>) do
     char = <<first::utf8>>
@@ -169,7 +152,6 @@ defmodule LangExtract.Chunker do
 
   defp uppercase_start?(_), do: false
 
-  # Ensures there is always a final boundary at `count` (end of all tokens).
   defp ensure_final_boundary(boundaries, count) do
     if List.last(boundaries) == count do
       boundaries
@@ -178,31 +160,21 @@ defmodule LangExtract.Chunker do
     end
   end
 
-  # Converts the token list and boundary indices into sentence strings,
-  # extracting text from the original binary via byte offsets.
-  defp tokens_to_sentences(tokens, boundaries, text) do
+  # Extracts sentence strings using byte offsets from the token tuple.
+  # Uses boundary pairs to look up first/last token directly — O(1) per sentence.
+  defp tokens_to_sentences(tokens_tuple, boundaries, text) do
     {sentences, _} =
-      Enum.reduce(boundaries, {[], 0}, fn boundary, {acc, start_token_idx} ->
-        sentence_tokens = Enum.slice(tokens, start_token_idx, boundary - start_token_idx)
-
-        sentence =
-          case sentence_tokens do
-            [] ->
-              nil
-
-            [first | _] = toks ->
-              last = List.last(toks)
-              byte_len = last.byte_end - first.byte_start
-              binary_part(text, first.byte_start, byte_len)
-          end
-
-        if sentence do
-          {acc ++ [sentence], boundary}
+      Enum.reduce(boundaries, {[], 0}, fn boundary, {acc, start_idx} ->
+        if boundary > start_idx do
+          first = elem(tokens_tuple, start_idx)
+          last = elem(tokens_tuple, boundary - 1)
+          sentence = binary_part(text, first.byte_start, last.byte_end - first.byte_start)
+          {[sentence | acc], boundary}
         else
           {acc, boundary}
         end
       end)
 
-    sentences
+    Enum.reverse(sentences)
   end
 end

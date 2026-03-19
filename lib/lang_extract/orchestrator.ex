@@ -9,16 +9,7 @@ defmodule LangExtract.Orchestrator do
   them in parallel via `Task.async_stream`.
   """
 
-  alias LangExtract.{
-    Alignment.Aligner,
-    Alignment.Span,
-    Chunker,
-    Client,
-    Extraction,
-    FormatHandler,
-    Parser,
-    Prompt
-  }
+  alias LangExtract.{Alignment.Span, Chunker, Client, Prompt}
 
   @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
           {:ok, [Span.t()]} | {:error, term()}
@@ -32,10 +23,8 @@ defmodule LangExtract.Orchestrator do
   defp run_single(client, source, template, opts) do
     prompt = Prompt.Builder.build(template, source)
 
-    with {:ok, raw_output} <- client.provider.infer(prompt, client.options),
-         {:ok, normalized} <- FormatHandler.normalize(raw_output),
-         {:ok, extractions} <- Parser.parse(normalized) do
-      {:ok, enrich(extractions, source, opts)}
+    with {:ok, raw_output} <- client.provider.infer(prompt, client.options) do
+      LangExtract.extract(source, raw_output, opts)
     end
   end
 
@@ -59,14 +48,17 @@ defmodule LangExtract.Orchestrator do
   end
 
   defp with_previous_text(chunks) do
-    prev_texts = [nil | Enum.map(chunks, & &1.text) |> Enum.drop(-1)]
-    Enum.zip(chunks, prev_texts)
+    chunks
+    |> Enum.reduce({[], nil}, fn chunk, {acc, prev} ->
+      {[{chunk, prev} | acc], chunk.text}
+    end)
+    |> then(fn {pairs, _} -> Enum.reverse(pairs) end)
   end
 
   defp collect_results(stream) do
     Enum.reduce_while(stream, {:ok, []}, fn
       {:ok, {:ok, spans}}, {:ok, acc} ->
-        {:cont, {:ok, acc ++ spans}}
+        {:cont, {:ok, [spans | acc]}}
 
       {:ok, {:error, _} = error}, _acc ->
         {:halt, error}
@@ -74,6 +66,10 @@ defmodule LangExtract.Orchestrator do
       {:exit, reason}, _acc ->
         {:halt, {:error, {:task_error, reason}}}
     end)
+    |> case do
+      {:ok, chunks} -> {:ok, chunks |> Enum.reverse() |> List.flatten()}
+      error -> error
+    end
   end
 
   defp process_chunk(client, chunk, template, prev_text, opts) do
@@ -81,22 +77,9 @@ defmodule LangExtract.Orchestrator do
     prompt = Prompt.Builder.build(template, chunk.text, builder_opts)
 
     with {:ok, raw_output} <- client.provider.infer(prompt, client.options),
-         {:ok, normalized} <- FormatHandler.normalize(raw_output),
-         {:ok, extractions} <- Parser.parse(normalized) do
-      spans = enrich(extractions, chunk.text, opts)
-      adjusted = adjust_offsets(spans, chunk.byte_start)
-      {:ok, adjusted}
+         {:ok, spans} <- LangExtract.extract(chunk.text, raw_output, opts) do
+      {:ok, adjust_offsets(spans, chunk.byte_start)}
     end
-  end
-
-  defp enrich(extractions, source, opts) do
-    texts = Enum.map(extractions, & &1.text)
-    spans = Aligner.align(source, texts, opts)
-
-    Enum.zip(extractions, spans)
-    |> Enum.map(fn {%Extraction{} = extraction, %Span{} = span} ->
-      %Span{span | class: extraction.class, attributes: extraction.attributes}
-    end)
   end
 
   defp adjust_offsets(spans, byte_offset) do
