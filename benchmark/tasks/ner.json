@@ -1,0 +1,23 @@
+{
+  "name": "ner",
+  "description": "Extract all named entities from the text. For each entity, identify whether it is a person, place, or organization. Use the exact text from the source — do not paraphrase.",
+  "examples": [
+    {
+      "text": "Shakespeare was born in Stratford-upon-Avon in 1564. He later joined the Lord Chamberlain's Men, a theatre company based in London.",
+      "extractions": [
+        {"class": "entity", "text": "Shakespeare", "attributes": {"type": "person"}},
+        {"class": "entity", "text": "Stratford-upon-Avon", "attributes": {"type": "place"}},
+        {"class": "entity", "text": "Lord Chamberlain's Men", "attributes": {"type": "organization"}},
+        {"class": "entity", "text": "London", "attributes": {"type": "place"}}
+      ]
+    },
+    {
+      "text": "In 1851, Herman Melville published Moby-Dick through Harper & Brothers in New York.",
+      "extractions": [
+        {"class": "entity", "text": "Herman Melville", "attributes": {"type": "person"}},
+        {"class": "entity", "text": "Harper & Brothers", "attributes": {"type": "organization"}},
+        {"class": "entity", "text": "New York", "attributes": {"type": "place"}}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "dialogue",
+  "description": "Extract all spoken dialogue from the text. For each piece of dialogue, identify the speaker and the exact spoken text. Use the exact text from the source — do not paraphrase.",
+  "examples": [
+    {
+      "text": "\"To be, or not to be,\" Hamlet said, staring into the void. Horatio replied, \"My lord, I came to see your father's funeral.\"",
+      "extractions": [
+        {"class": "dialogue", "text": "To be, or not to be,", "attributes": {"speaker": "Hamlet"}},
+        {"class": "dialogue", "text": "My lord, I came to see your father's funeral.", "attributes": {"speaker": "Horatio"}}
+      ]
+    }
+  ]
+}

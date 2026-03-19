@@ -1,0 +1,15 @@
+{
+  "name": "literary_devices",
+  "description": "Extract literary devices from the text: metaphors, similes, personification, and allusions. Identify the type of device. Use the exact text from the source — do not paraphrase.",
+  "examples": [
+    {
+      "text": "The wind whispered through the trees like a lullaby. Her eyes were diamonds, sparkling in the dim light. It was a scene worthy of Eden itself.",
+      "extractions": [
+        {"class": "device", "text": "The wind whispered through the trees", "attributes": {"type": "personification"}},
+        {"class": "device", "text": "like a lullaby", "attributes": {"type": "simile"}},
+        {"class": "device", "text": "Her eyes were diamonds", "attributes": {"type": "metaphor"}},
+        {"class": "device", "text": "worthy of Eden itself", "attributes": {"type": "allusion"}}
+      ]
+    }
+  ]
+}
