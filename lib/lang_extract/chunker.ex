@@ -50,10 +50,8 @@ defmodule LangExtract.Chunker do
   defp pack_sentences(sentences, max_size) do
     {chunks, current_text, current_start} =
       Enum.reduce(sentences, {[], "", 0}, fn sentence, {chunks, current_text, current_start} ->
-        candidate = current_text <> sentence
-
-        if byte_size(candidate) <= max_size or current_text == "" do
-          {chunks, candidate, current_start}
+        if byte_size(current_text) + byte_size(sentence) <= max_size or current_text == "" do
+          {chunks, current_text <> sentence, current_start}
         else
           chunk = %Chunk{text: current_text, byte_start: current_start}
           new_start = current_start + byte_size(current_text)
@@ -75,14 +73,14 @@ defmodule LangExtract.Chunker do
     tokens = Tokenizer.tokenize(text)
     tokens_tuple = List.to_tuple(tokens)
     count = tuple_size(tokens_tuple)
-    indexed = Enum.with_index(tokens)
-    boundaries = find_boundaries(indexed, tokens_tuple, count)
+    boundaries = find_boundaries(tokens_tuple, count)
     tokens_to_sentences(tokens_tuple, boundaries, text)
   end
 
-  defp find_boundaries(indexed, tokens_tuple, count) do
+  defp find_boundaries(tokens_tuple, count) do
     boundaries =
-      Enum.reduce(indexed, [], fn {token, idx}, acc ->
+      Enum.reduce(0..(count - 1)//1, [], fn idx, acc ->
+        token = elem(tokens_tuple, idx)
         cond do
           sentence_end_by_punctuation?(token, idx, tokens_tuple) ->
             end_idx = consume_closing_punctuation(idx + 1, tokens_tuple, count)
@@ -98,7 +96,7 @@ defmodule LangExtract.Chunker do
 
     boundaries
     |> Enum.sort()
-    |> Enum.dedup()
+    |> Enum.uniq()
     |> ensure_final_boundary(count)
   end
 
@@ -129,18 +127,11 @@ defmodule LangExtract.Chunker do
   defp consume_closing_punctuation(idx, _tokens_tuple, _count), do: idx
 
   defp sentence_end_by_newline?(%{type: :whitespace, text: ws_text}, idx, tokens_tuple, count) do
-    if String.contains?(ws_text, "\n") do
-      next_idx = idx + 1
+    next_idx = idx + 1
 
-      if next_idx < count do
-        next = elem(tokens_tuple, next_idx)
-        next.type == :word and uppercase_start?(next.text)
-      else
-        false
-      end
-    else
-      false
-    end
+    String.contains?(ws_text, "\n") and next_idx < count and
+      (next = elem(tokens_tuple, next_idx)
+       next.type == :word and uppercase_start?(next.text))
   end
 
   defp sentence_end_by_newline?(_token, _idx, _tokens_tuple, _count), do: false
