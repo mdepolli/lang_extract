@@ -60,6 +60,89 @@ defmodule LangExtract.Alignment.AlignerTest do
     end
   end
 
+  describe "exact matching — edge cases" do
+    test "substring of a source word does not match" do
+      source = "Patient is prescribed Naprosyn and prednisone for treatment."
+
+      assert [%Span{status: :not_found}] = Aligner.align(source, ["Napro"])
+    end
+
+    test "similar word does not steal match from exact one" do
+      source = "Patient is prescribed Naprosyn and prednisone for treatment."
+
+      assert [
+               %Span{text: "Naprosyn", byte_start: 22, byte_end: 30, status: :exact},
+               %Span{text: "Napro", status: :not_found}
+             ] = Aligner.align(source, ["Naprosyn", "Napro"])
+    end
+
+    test "matches extraction spanning a hyphen" do
+      source = "Patient is prescribed Napro-syn."
+
+      [span] = Aligner.align(source, ["Napro-syn"])
+      assert span.status == :exact
+      assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) == "Napro-syn"
+    end
+
+    test "matches extraction with en-dash separator" do
+      source = "Separated\u2013by\u2013en\u2013dashes."
+
+      [span] = Aligner.align(source, ["en\u2013dashes"])
+      assert span.status == :exact
+      assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) == "en\u2013dashes"
+    end
+
+    test "matches numerical extraction" do
+      source = "Patient was given Ibuprofen 600mg twice daily."
+
+      [span] = Aligner.align(source, ["Ibuprofen 600mg"])
+      assert span.status == :exact
+      assert span.byte_start == 18
+      assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) == "Ibuprofen 600mg"
+    end
+
+    test "matches extractions across sentence boundaries" do
+      source = "Take Ibuprofen. Consult your doctor with concerns."
+
+      assert [
+               %Span{text: "Ibuprofen", status: :exact},
+               %Span{text: "your doctor", status: :exact}
+             ] = Aligner.align(source, ["Ibuprofen", "your doctor"])
+    end
+
+    test "matches multiple multi-word extractions" do
+      source = "Pt was prescribed Naprosyn as needed and prednisone daily."
+
+      spans = Aligner.align(source, ["Naprosyn", "as needed", "prednisone"])
+
+      assert Enum.all?(spans, &(&1.status == :exact))
+
+      Enum.each(spans, fn span ->
+        extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
+        assert String.downcase(extracted) == String.downcase(span.text)
+      end)
+    end
+
+    test "repeated token in source falls back to fuzzy for multi-word phrase" do
+      # "for" appears twice — Myers diff can't find contiguous exact match
+      source = "Pt was prescribed Naprosyn for pain and prednisone for one month."
+
+      [span] = Aligner.align(source, ["for one month"], fuzzy_threshold: 0.6)
+      assert span.status == :fuzzy
+      extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
+      assert extracted == "for one month"
+    end
+
+    test "extractions out of source order still match independently" do
+      source = "Patient with arthritis is prescribed Naprosyn."
+
+      assert [
+               %Span{text: "Naprosyn", status: :exact},
+               %Span{text: "arthritis", status: :exact}
+             ] = Aligner.align(source, ["Naprosyn", "arthritis"])
+    end
+  end
+
   describe "edge cases" do
     test "empty source returns not_found" do
       assert [%Span{status: :not_found}] = Aligner.align("", ["hello"])
@@ -93,6 +176,30 @@ defmodule LangExtract.Alignment.AlignerTest do
       extraction = "completely different words here"
 
       assert [%Span{status: :not_found}] = Aligner.align(source, [extraction])
+    end
+
+    test "matches with reordered words" do
+      source = "Patient has severe heart problems today."
+
+      [span] = Aligner.align(source, ["problems heart"], fuzzy_threshold: 0.6)
+      assert span.status == :fuzzy
+    end
+
+    test "matches partial overlap at 75% threshold" do
+      source = "Findings consistent with degenerative disc disease at L5-S1."
+
+      [span] = Aligner.align(source, ["mild degenerative disc disease"], fuzzy_threshold: 0.75)
+      assert span.status == :fuzzy
+
+      extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
+      assert extracted =~ "degenerative disc disease"
+    end
+
+    test "fails fuzzy match with low token overlap" do
+      source = "Patient reports back pain and a fever."
+
+      assert [%Span{status: :not_found}] =
+               Aligner.align(source, ["headache and fever"], fuzzy_threshold: 0.75)
     end
 
     test "respects custom fuzzy threshold" do
