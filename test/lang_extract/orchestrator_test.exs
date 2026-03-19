@@ -182,6 +182,101 @@ defmodule LangExtract.OrchestratorTest do
       assert span.status == :fuzzy
     end
 
+    test "max_chunk_size triggers chunking with correct byte offsets" do
+      source = "First sentence here. Second sentence there."
+
+      HTTPower.Test.stub(fn conn ->
+        {:ok, body, _conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        prompt = hd(decoded["messages"])["content"]
+
+        extractions =
+          if prompt =~ "First" do
+            [%{"word" => "First", "word_attributes" => %{}}]
+          else
+            [%{"word" => "Second", "word_attributes" => %{}}]
+          end
+
+        HTTPower.Test.json(conn, %{
+          "content" => [
+            %{"type" => "text", "text" => Jason.encode!(%{"extractions" => extractions})}
+          ]
+        })
+      end)
+
+      client = LangExtract.new(:claude, api_key: "sk-test")
+      template = %LangExtract.Prompt.Template{description: "Extract words."}
+
+      assert {:ok, spans} =
+               LangExtract.run(client, source, template, max_chunk_size: 25)
+
+      exact_spans = Enum.filter(spans, &(&1.status == :exact))
+
+      for span <- exact_spans do
+        length = span.byte_end - span.byte_start
+        assert binary_part(source, span.byte_start, length) =~ span.text
+      end
+    end
+
+    test "no max_chunk_size behaves as before (regression)" do
+      HTTPower.Test.stub(fn conn ->
+        HTTPower.Test.json(conn, %{
+          "content" => [
+            %{
+              "type" => "text",
+              "text" => Jason.encode!(%{"extractions" => [%{"word" => "fox", "word_attributes" => %{}}]})
+            }
+          ]
+        })
+      end)
+
+      client = LangExtract.new(:claude, api_key: "sk-test")
+      template = %LangExtract.Prompt.Template{description: "Extract."}
+
+      assert {:ok, [span]} = LangExtract.run(client, "the quick brown fox", template)
+      assert span.status == :exact
+    end
+
+    test "not_found span byte offsets are not adjusted in chunked mode" do
+      HTTPower.Test.stub(fn conn ->
+        HTTPower.Test.json(conn, %{
+          "content" => [
+            %{
+              "type" => "text",
+              "text" => Jason.encode!(%{"extractions" => [%{"thing" => "absent", "thing_attributes" => %{}}]})
+            }
+          ]
+        })
+      end)
+
+      client = LangExtract.new(:claude, api_key: "sk-test")
+      template = %LangExtract.Prompt.Template{description: "Extract."}
+
+      assert {:ok, spans} =
+               LangExtract.run(client, "Hello world. Goodbye world.", template,
+                 max_chunk_size: 15
+               )
+
+      not_found = Enum.find(spans, &(&1.status == :not_found))
+      assert not_found != nil
+      assert not_found.byte_start == nil
+      assert not_found.byte_end == nil
+    end
+
+    test "provider error in chunked mode fails entire run" do
+      HTTPower.Test.stub(fn conn ->
+        HTTPower.Test.json(conn, %{"error" => "unauthorized"}, status: 401)
+      end)
+
+      client = LangExtract.new(:claude, api_key: "bad")
+      template = %LangExtract.Prompt.Template{description: "Extract."}
+
+      assert {:error, :unauthorized} =
+               LangExtract.run(client, "First sentence. Second sentence.", template,
+                 max_chunk_size: 20
+               )
+    end
+
     test "multiple extractions aligned independently" do
       HTTPower.Test.stub(fn conn ->
         HTTPower.Test.json(conn, %{
