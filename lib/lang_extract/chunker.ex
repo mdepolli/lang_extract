@@ -22,6 +22,7 @@ defmodule LangExtract.Chunker do
   """
 
   alias LangExtract.Alignment.Tokenizer
+  alias LangExtract.Chunker.Chunk
 
   @abbreviations ~w(Mr Mrs Ms Dr Prof St)
 
@@ -30,6 +31,49 @@ defmodule LangExtract.Chunker do
   @closing_punctuation_unicode ["\u201D", "\u2019"]
 
   @sentence_ending ~w(. ! ?)
+
+  @doc """
+  Splits text into chunks respecting sentence boundaries.
+
+  ## Options
+
+    * `:max_chunk_size` — maximum byte size per chunk (required)
+
+  """
+  @spec chunk(String.t(), keyword()) :: [Chunk.t()]
+  def chunk("", _opts), do: []
+
+  def chunk(text, opts) when is_binary(text) do
+    max_size = Keyword.fetch!(opts, :max_chunk_size)
+
+    text
+    |> find_sentences()
+    |> pack_sentences(max_size)
+  end
+
+  defp pack_sentences(sentences, max_size) do
+    {chunks, current_text, current_start} =
+      Enum.reduce(sentences, {[], "", 0}, fn sentence, {chunks, current_text, current_start} ->
+        candidate = current_text <> sentence
+
+        if byte_size(candidate) <= max_size or current_text == "" do
+          # Fits, or this is the first sentence in the chunk (allow oversized)
+          {chunks, candidate, current_start}
+        else
+          # Doesn't fit — emit current chunk, start new one
+          chunk = %Chunk{text: current_text, byte_start: current_start}
+          new_start = current_start + byte_size(current_text)
+          {[chunk | chunks], sentence, new_start}
+        end
+      end)
+
+    # Emit final chunk
+    if current_text != "" do
+      Enum.reverse([%Chunk{text: current_text, byte_start: current_start} | chunks])
+    else
+      Enum.reverse(chunks)
+    end
+  end
 
   @spec find_sentences(String.t()) :: [String.t()]
   def find_sentences(""), do: []

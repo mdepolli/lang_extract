@@ -3,6 +3,49 @@ defmodule LangExtract.ChunkerTest do
 
   alias LangExtract.Chunker
 
+  describe "chunk/2" do
+    test "text within max_chunk_size returns single chunk" do
+      chunks = Chunker.chunk("Hello world.", max_chunk_size: 100)
+      assert length(chunks) == 1
+      assert hd(chunks).text == "Hello world."
+      assert hd(chunks).byte_start == 0
+    end
+
+    test "packs multiple sentences into chunks" do
+      text = "First sentence. Second sentence. Third sentence. Fourth sentence."
+      chunks = Chunker.chunk(text, max_chunk_size: 35)
+      assert length(chunks) >= 2
+      reconstructed = Enum.map_join(chunks, "", & &1.text)
+      assert reconstructed == text
+    end
+
+    test "empty text returns empty list" do
+      assert Chunker.chunk("", max_chunk_size: 100) == []
+    end
+
+    test "byte_start offsets are correct for each chunk" do
+      text = "Short. Also short. Third one here."
+      chunks = Chunker.chunk(text, max_chunk_size: 20)
+      for chunk <- chunks do
+        assert binary_part(text, chunk.byte_start, byte_size(chunk.text)) == chunk.text
+      end
+    end
+
+    test "single sentence no newlines emitted as oversized chunk" do
+      text = "this is a long run on sentence without any punctuation at all"
+      chunks = Chunker.chunk(text, max_chunk_size: 20)
+      assert length(chunks) == 1
+      assert hd(chunks).text == text
+    end
+
+    test "chunks cover entire source text" do
+      text = "Hello world. How are you? I am fine. Thanks for asking!"
+      chunks = Chunker.chunk(text, max_chunk_size: 25)
+      reconstructed = Enum.map_join(chunks, "", & &1.text)
+      assert reconstructed == text
+    end
+  end
+
   describe "find_sentences/1" do
     test "splits on period" do
       sentences = Chunker.find_sentences("Hello world. Goodbye world.")
