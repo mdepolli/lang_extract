@@ -44,6 +44,26 @@ defmodule LangExtract.ChunkerTest do
       reconstructed = Enum.map_join(chunks, "", & &1.text)
       assert reconstructed == text
     end
+
+    test "handles multibyte UTF-8 text with correct byte offsets" do
+      # café = 5 bytes (é is 2 bytes), señor = 6 bytes (ñ is 2 bytes)
+      text = "Café is great. Señor drinks café."
+      chunks = Chunker.chunk(text, max_chunk_size: 20)
+
+      for chunk <- chunks do
+        assert binary_part(text, chunk.byte_start, byte_size(chunk.text)) == chunk.text
+      end
+
+      reconstructed = Enum.map_join(chunks, "", & &1.text)
+      assert reconstructed == text
+    end
+
+    test "text exactly at max_chunk_size boundary" do
+      text = "Hello. World."
+      chunks = Chunker.chunk(text, max_chunk_size: byte_size(text))
+      assert length(chunks) == 1
+      assert hd(chunks).text == text
+    end
   end
 
   describe "find_sentences/1" do
@@ -83,6 +103,12 @@ defmodule LangExtract.ChunkerTest do
 
     test "empty text returns empty list" do
       assert Chunker.find_sentences("") == []
+    end
+
+    test "multiple abbreviations in sequence" do
+      sentences = Chunker.find_sentences("Mr. Dr. Smith arrived. Then left.")
+      assert length(sentences) == 2
+      assert hd(sentences) =~ "Mr. Dr. Smith arrived."
     end
 
     test "no sentence-ending punctuation returns one sentence" do
