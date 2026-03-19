@@ -34,6 +34,7 @@ defmodule LangExtract.MixProject do
       {:req, "~> 0.5"},
 
       # Dev/Test
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:plug, "~> 1.15", only: :test}
     ]

@@ -20,9 +20,10 @@ defmodule LangExtract.Provider.GeminiTest do
       assert {:ok, {req, request_opts}} =
                Gemini.build_request("Extract entities.", api_key: "test-key")
 
-      assert request_opts[:url] == "/v1beta/models/gemini-2.0-flash:generateContent?key=test-key"
+      assert request_opts[:url] == "/v1beta/models/gemini-2.0-flash:generateContent"
+      assert request_opts[:params] == [key: "test-key"]
       assert req.options.base_url == "https://generativelanguage.googleapis.com"
-      # No auth header — key is in query param
+      # No auth header — key is in query params
       refute Map.has_key?(req.headers, "authorization")
       refute Map.has_key?(req.headers, "x-api-key")
 
@@ -59,7 +60,7 @@ defmodule LangExtract.Provider.GeminiTest do
       assert {:ok, {_req, request_opts}} =
                Gemini.build_request("prompt", api_key: "opts-key")
 
-      assert request_opts[:url] =~ "key=opts-key"
+      assert request_opts[:params] == [key: "opts-key"]
     end
 
     test "falls back to GEMINI_API_KEY env var" do
@@ -67,7 +68,7 @@ defmodule LangExtract.Provider.GeminiTest do
 
       assert {:ok, {_req, request_opts}} = Gemini.build_request("prompt", [])
 
-      assert request_opts[:url] =~ "key=env-key"
+      assert request_opts[:params] == [key: "env-key"]
     end
 
     test "returns error when api key is missing" do

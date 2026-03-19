@@ -44,12 +44,8 @@ def deps do
 end
 ```
 
-LangExtract uses [HTTPower](https://hex.pm/packages/httpower) for HTTP calls,
-which requires at least one adapter. Add Finch (recommended):
-
-```elixir
-{:finch, "~> 0.19"}
-```
+LangExtract uses [Req](https://hex.pm/packages/req) for HTTP calls. No
+additional adapter configuration is needed.
 
 ## Quick Start
 
@@ -234,7 +230,7 @@ The pipeline has five stages:
 
 ```
 1. Prompt Builder    — Renders few-shot Q&A prompt with dynamic-key examples
-2. LLM Provider      — Calls Claude/OpenAI/Gemini via HTTPower
+2. LLM Provider      — Calls Claude/OpenAI/Gemini via Req
 3. Format Handler    — Strips fences/<think> tags, normalizes dynamic keys to canonical form
 4. Parser            — Validates and constructs Extraction structs
 5. Aligner           — Maps extraction text to byte positions via Myers diff + fuzzy fallback

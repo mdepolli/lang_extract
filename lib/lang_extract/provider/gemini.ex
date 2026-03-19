@@ -34,10 +34,10 @@ defmodule LangExtract.Provider.Gemini do
       %{model: model, max_tokens: max_tokens, temperature: temperature, base_url: base_url} =
         Provider.common_opts(opts, @defaults)
 
-      req_opts = Provider.req_options(opts, base_url: base_url)
+      req_opts = Provider.req_options(opts, base_url: base_url, retry: false)
       req = Req.new(req_opts)
 
-      path = "/v1beta/models/#{model}:generateContent?key=#{api_key}"
+      path = "/v1beta/models/#{model}:generateContent"
 
       payload = %{
         "contents" => [%{"parts" => [%{"text" => prompt}]}],
@@ -48,7 +48,7 @@ defmodule LangExtract.Provider.Gemini do
         }
       }
 
-      {:ok, {req, [url: path, json: payload]}}
+      {:ok, {req, [url: path, params: [key: api_key], json: payload]}}
     end
   end
 

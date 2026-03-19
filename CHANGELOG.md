@@ -64,11 +64,11 @@ byte positions in the source.
   resolution (`fetch_api_key/2`), common options (`common_opts/2`), and HTTP
   error mapping (`map_response/2`).
 - **Claude** (`LangExtract.Provider.Claude`) — Anthropic Messages API via
-  HTTPower. `x-api-key` header auth.
+  Req. `x-api-key` header auth.
 - **OpenAI** (`LangExtract.Provider.OpenAI`) — Chat Completions API via
-  HTTPower. Bearer auth. Optional JSON mode (`:json_mode` option, default
+  Req. Bearer auth. Optional JSON mode (`:json_mode` option, default
   `true`). Works with any OpenAI-compatible endpoint.
-- **Gemini** (`LangExtract.Provider.Gemini`) — REST API via HTTPower. Query
+- **Gemini** (`LangExtract.Provider.Gemini`) — REST API via Req. Query
   parameter auth. JSON output via `responseMimeType`.
 
 #### Chunking
@@ -92,9 +92,9 @@ byte positions in the source.
 
 - **Client struct** — Holds provider module and options. Created via
   `LangExtract.new/2`.
-- **HTTPower + Finch** — HTTP client with circuit breaker, rate limiting, and
-  smart retries. Uses `json:` option for automatic request body encoding.
-- **HTTPower.Test** — All provider integration tests use stubs, not network
+- **Req** — Batteries-included HTTP client. Uses `json:` option for automatic
+  request body encoding. Retries disabled by default; opt in via `:req_options`.
+- **Req.Test** — All provider integration tests use stubs, not network
   calls.
 - **Credo** — Strict mode passes with zero issues.
 - **187 tests** — Full coverage across all modules.
