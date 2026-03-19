@@ -1,7 +1,7 @@
-defmodule LangExtract.TokenizerTest do
+defmodule LangExtract.Alignment.TokenizerTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.{Token, Tokenizer}
+  alias LangExtract.Alignment.{Token, Tokenizer}
 
   describe "tokenize/1" do
     test "splits words and punctuation with correct byte offsets" do

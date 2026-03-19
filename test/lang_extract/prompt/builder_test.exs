@@ -1,15 +1,16 @@
-defmodule LangExtract.PromptBuilderTest do
+defmodule LangExtract.Prompt.BuilderTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.{ExampleData, Extraction, PromptBuilder, PromptTemplate}
+  alias LangExtract.Extraction
+  alias LangExtract.Prompt.{Builder, ExampleData, Template}
 
   describe "build/3" do
     test "renders description and chunk text with no examples" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract entities from the text."
       }
 
-      result = PromptBuilder.build(template, "The quick brown fox.")
+      result = Builder.build(template, "The quick brown fox.")
 
       assert result =~ "Extract entities from the text."
       assert result =~ "The quick brown fox."
@@ -17,7 +18,7 @@ defmodule LangExtract.PromptBuilderTest do
     end
 
     test "renders few-shot examples in dynamic-key format" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract conditions.",
         examples: [
           %ExampleData{
@@ -33,7 +34,7 @@ defmodule LangExtract.PromptBuilderTest do
         ]
       }
 
-      result = PromptBuilder.build(template, "Patient has asthma.")
+      result = Builder.build(template, "Patient has asthma.")
 
       assert result =~ "Extract conditions."
       assert result =~ "Patient has diabetes."
@@ -44,20 +45,20 @@ defmodule LangExtract.PromptBuilderTest do
     end
 
     test "includes previous chunk context" do
-      template = %PromptTemplate{description: "Extract."}
+      template = %Template{description: "Extract."}
 
       result =
-        PromptBuilder.build(template, "Current chunk.", previous_chunk: "Previous text here.")
+        Builder.build(template, "Current chunk.", previous_chunk: "Previous text here.")
 
       assert result =~ "[Previous text]: ...Previous text here."
       assert result =~ "Current chunk."
     end
 
     test "truncates previous chunk to context_window_chars" do
-      template = %PromptTemplate{description: "Extract."}
+      template = %Template{description: "Extract."}
 
       result =
-        PromptBuilder.build(template, "Current.",
+        Builder.build(template, "Current.",
           previous_chunk: "This is a long previous chunk of text.",
           context_window_chars: 10
         )
@@ -67,15 +68,15 @@ defmodule LangExtract.PromptBuilderTest do
     end
 
     test "omits context section when no previous chunk" do
-      template = %PromptTemplate{description: "Extract."}
+      template = %Template{description: "Extract."}
 
-      result = PromptBuilder.build(template, "Current chunk.")
+      result = Builder.build(template, "Current chunk.")
 
       refute result =~ "[Previous text]"
     end
 
     test "empty description is valid" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "",
         examples: [
           %ExampleData{
@@ -85,7 +86,7 @@ defmodule LangExtract.PromptBuilderTest do
         ]
       }
 
-      result = PromptBuilder.build(template, "Target text.")
+      result = Builder.build(template, "Target text.")
 
       assert result =~ "Example text."
       assert result =~ "Target text."

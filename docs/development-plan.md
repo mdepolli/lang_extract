@@ -30,9 +30,9 @@ extract(text, prompt, examples, model_id)
 | Span alignment | 900 | Done | ~170 |
 | Output parsing | 475 | Done | ~55 |
 | Format handling | — | Done | ~99 |
-| Prompt building | 275 | Done | ~89 (PromptBuilder, PromptTemplate, ExampleData) |
-| Prompt validation | — | Not started | — |
-| LLM provider calls | 500 | Not started | — |
+| Prompt building | 275 | Done | ~89 (Prompt.Builder, Prompt.Template, Prompt.ExampleData) |
+| Prompt validation | — | Done | ~109 |
+| LLM provider calls | 500 | Done | ~315 (Provider behaviour + Claude, OpenAI, Gemini) |
 | Chunking | 500 | Not started | — |
 | Orchestration | 620 | Not started | — |
 | I/O (serialization) | — | Not started | — |
@@ -105,6 +105,6 @@ LOC estimates are from the original Python reference where available. Elixir imp
 
 ## Known Limitations / Tech Debt
 
-- **O(n²) sliding window**: The fuzzy matcher's `slide_window` uses `Enum.at/2` (O(n)) inside a reduce, making it O(n²) overall. Acceptable for the current spike but will matter when chunking large documents. Fix: convert source words to a tuple or use a zipper.
+- ~~**O(n²) sliding window**~~ Fixed: source words and texts converted to tuples for O(1) index access.
 - **No `LangExtract.align/3` test**: The public API delegate has no direct test — the underlying `Aligner.align/3` is tested, but a smoke test for the top-level function would catch delegation bugs.
 - **Fixed fuzzy window size**: The original tests multiple window sizes for better recall. We use a fixed window equal to extraction token count. Variable sizes can be added if recall is insufficient.

@@ -1,7 +1,7 @@
-defmodule LangExtract.AlignerTest do
+defmodule LangExtract.Alignment.AlignerTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.{Aligner, Span}
+  alias LangExtract.Alignment.{Aligner, Span}
 
   describe "exact matching" do
     test "aligns a single word" do

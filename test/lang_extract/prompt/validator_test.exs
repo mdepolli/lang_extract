@@ -1,11 +1,12 @@
-defmodule LangExtract.PromptValidatorTest do
+defmodule LangExtract.Prompt.ValidatorTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.{ExampleData, Extraction, PromptTemplate, PromptValidator}
+  alias LangExtract.Extraction
+  alias LangExtract.Prompt.{ExampleData, Template, Validator}
 
   describe "validate/1" do
     test "returns :ok when all examples align exactly" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract conditions.",
         examples: [
           %ExampleData{
@@ -18,11 +19,11 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      assert :ok = PromptValidator.validate(template)
+      assert :ok = Validator.validate(template)
     end
 
     test "returns error with :not_found when extraction text is not in source" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [
           %ExampleData{
@@ -34,7 +35,7 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      assert {:error, [issue]} = PromptValidator.validate(template)
+      assert {:error, [issue]} = Validator.validate(template)
       assert issue.example_index == 0
       assert issue.extraction_index == 0
       assert issue.extraction_text == "tylenol"
@@ -44,7 +45,7 @@ defmodule LangExtract.PromptValidatorTest do
     end
 
     test "respects fuzzy_threshold — same extraction is :not_found at high threshold" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [
           %ExampleData{
@@ -56,12 +57,12 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      assert {:error, [issue]} = PromptValidator.validate(template, fuzzy_threshold: 0.99)
+      assert {:error, [issue]} = Validator.validate(template, fuzzy_threshold: 0.99)
       assert issue.status == :not_found
     end
 
     test "returns error with :fuzzy when extraction partially matches" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [
           %ExampleData{
@@ -74,12 +75,12 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      assert {:error, [issue]} = PromptValidator.validate(template, fuzzy_threshold: 0.6)
+      assert {:error, [issue]} = Validator.validate(template, fuzzy_threshold: 0.6)
       assert issue.status == :fuzzy
     end
 
     test "collects multiple issues across multiple examples" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [
           %ExampleData{
@@ -98,7 +99,7 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      assert {:error, issues} = PromptValidator.validate(template)
+      assert {:error, issues} = Validator.validate(template)
       assert length(issues) == 2
 
       [first, second] = issues
@@ -111,21 +112,21 @@ defmodule LangExtract.PromptValidatorTest do
     end
 
     test "returns :ok for template with no examples" do
-      template = %PromptTemplate{description: "Extract."}
-      assert :ok = PromptValidator.validate(template)
+      template = %Template{description: "Extract."}
+      assert :ok = Validator.validate(template)
     end
 
     test "returns :ok for example with no extractions" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [%ExampleData{text: "Some text."}]
       }
 
-      assert :ok = PromptValidator.validate(template)
+      assert :ok = Validator.validate(template)
     end
 
     test "extraction with empty text produces :not_found issue" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [
           %ExampleData{
@@ -137,13 +138,13 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      assert {:error, [issue]} = PromptValidator.validate(template)
+      assert {:error, [issue]} = Validator.validate(template)
       assert issue.status == :not_found
       assert issue.extraction_text == ""
     end
 
     test "duplicate extraction texts within one example both align" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [
           %ExampleData{
@@ -156,13 +157,13 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      assert :ok = PromptValidator.validate(template)
+      assert :ok = Validator.validate(template)
     end
   end
 
   describe "validate!/1" do
     test "returns :ok when all examples align" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [
           %ExampleData{
@@ -174,11 +175,11 @@ defmodule LangExtract.PromptValidatorTest do
         ]
       }
 
-      assert :ok = PromptValidator.validate!(template)
+      assert :ok = Validator.validate!(template)
     end
 
     test "raises ValidationError with issues when alignment fails" do
-      template = %PromptTemplate{
+      template = %Template{
         description: "Extract.",
         examples: [
           %ExampleData{
@@ -191,8 +192,8 @@ defmodule LangExtract.PromptValidatorTest do
       }
 
       error =
-        assert_raise PromptValidator.ValidationError, fn ->
-          PromptValidator.validate!(template)
+        assert_raise Validator.ValidationError, fn ->
+          Validator.validate!(template)
         end
 
       assert length(error.issues) == 1

@@ -1,4 +1,4 @@
-defmodule LangExtract.Tokenizer do
+defmodule LangExtract.Alignment.Tokenizer do
   @moduledoc """
   Regex-based tokenizer that splits text into tokens with byte offsets.
 
@@ -6,7 +6,7 @@ defmodule LangExtract.Tokenizer do
   No text normalization is applied.
   """
 
-  alias LangExtract.Token
+  alias LangExtract.Alignment.Token
 
   @token_pattern ~r/\p{L}[\p{L}\p{M}\x{2019}'\-]*|\d[\d.,]*|[^\s]|\s+/u
 

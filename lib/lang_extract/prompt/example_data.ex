@@ -1,4 +1,4 @@
-defmodule LangExtract.ExampleData do
+defmodule LangExtract.Prompt.ExampleData do
   @moduledoc """
   A single few-shot example: source text and expected extractions.
   """

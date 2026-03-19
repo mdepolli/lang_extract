@@ -1,4 +1,4 @@
-defmodule LangExtract.Aligner do
+defmodule LangExtract.Alignment.Aligner do
   @moduledoc """
   Maps extraction strings to byte spans in source text.
 
@@ -6,7 +6,7 @@ defmodule LangExtract.Aligner do
   Phase 2: Fuzzy sliding-window fallback.
   """
 
-  alias LangExtract.{Span, Tokenizer}
+  alias LangExtract.Alignment.{Span, Tokenizer}
 
   @default_fuzzy_threshold 0.75
 

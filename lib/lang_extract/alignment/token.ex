@@ -1,4 +1,4 @@
-defmodule LangExtract.Token do
+defmodule LangExtract.Alignment.Token do
   @moduledoc """
   A token with its byte position in the source text.
 

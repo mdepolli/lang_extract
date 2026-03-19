@@ -1,4 +1,4 @@
-defmodule LangExtract.PromptBuilder do
+defmodule LangExtract.Prompt.Builder do
   @moduledoc """
   Renders Q&A-formatted prompts from a template for LLM extraction.
 
@@ -6,7 +6,7 @@ defmodule LangExtract.PromptBuilder do
   for cross-chunk coreference resolution.
   """
 
-  alias LangExtract.{FormatHandler, PromptTemplate}
+  alias LangExtract.{FormatHandler, Prompt.Template}
 
   @doc """
   Builds a Q&A-formatted prompt from a template and chunk text.
@@ -18,8 +18,8 @@ defmodule LangExtract.PromptBuilder do
       (default: `nil`, meaning use full previous chunk). Operates on graphemes, not bytes.
 
   """
-  @spec build(PromptTemplate.t(), String.t(), keyword()) :: String.t()
-  def build(%PromptTemplate{} = template, chunk_text, opts \\ []) do
+  @spec build(Template.t(), String.t(), keyword()) :: String.t()
+  def build(%Template{} = template, chunk_text, opts \\ []) do
     [
       non_empty(template.description),
       format_examples(template.examples),

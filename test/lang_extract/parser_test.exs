@@ -136,7 +136,7 @@ defmodule LangExtract.ParserTest do
 
       [soft, window] = spans
 
-      assert %LangExtract.Span{
+      assert %LangExtract.Alignment.Span{
                text: "soft",
                status: :exact,
                class: "quote",
@@ -145,7 +145,7 @@ defmodule LangExtract.ParserTest do
 
       assert soft.byte_start != nil
 
-      assert %LangExtract.Span{
+      assert %LangExtract.Alignment.Span{
                text: "window",
                status: :exact,
                class: "object",

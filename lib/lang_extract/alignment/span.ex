@@ -1,4 +1,4 @@
-defmodule LangExtract.Span do
+defmodule LangExtract.Alignment.Span do
   @moduledoc """
   An aligned extraction with its byte position in the source text.
   """

@@ -3,7 +3,7 @@ defmodule LangExtract.Extraction do
   A single extraction from LLM output.
 
   Contains the entity class, verbatim source text, and arbitrary attributes.
-  Positional information is added later by the aligner on `%LangExtract.Span{}`.
+  Positional information is added later by the aligner on `%LangExtract.Alignment.Span{}`.
   """
 
   @type t :: %__MODULE__{

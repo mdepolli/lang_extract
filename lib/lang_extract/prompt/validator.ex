@@ -1,6 +1,6 @@
-defmodule LangExtract.PromptValidator do
+defmodule LangExtract.Prompt.Validator do
   @moduledoc """
-  Validates that few-shot examples in a `PromptTemplate` are self-consistent.
+  Validates that few-shot examples in a `LangExtract.Prompt.Template` are self-consistent.
 
   Each extraction text should align exactly against its own example's source text.
   Catches typos, hallucinated spans, and copy-paste errors before they reach the LLM.
@@ -9,7 +9,8 @@ defmodule LangExtract.PromptValidator do
   what to do with the results (log, raise, ignore).
   """
 
-  alias LangExtract.{Aligner, ExampleData, Extraction, PromptTemplate}
+  alias LangExtract.Alignment.Aligner
+  alias LangExtract.{Extraction, Prompt.ExampleData, Prompt.Template}
 
   defmodule Issue do
     @moduledoc """
@@ -45,7 +46,7 @@ defmodule LangExtract.PromptValidator do
 
   defmodule ValidationError do
     @moduledoc """
-    Raised by `PromptValidator.validate!/1` when alignment issues are found.
+    Raised by `LangExtract.Prompt.Validator.validate!/1` when alignment issues are found.
     """
 
     defexception [:issues]
@@ -57,8 +58,8 @@ defmodule LangExtract.PromptValidator do
     end
   end
 
-  @spec validate(PromptTemplate.t(), keyword()) :: :ok | {:error, [Issue.t()]}
-  def validate(%PromptTemplate{} = template, opts \\ []) do
+  @spec validate(Template.t(), keyword()) :: :ok | {:error, [Issue.t()]}
+  def validate(%Template{} = template, opts \\ []) do
     issues =
       template.examples
       |> Enum.with_index()
@@ -72,8 +73,8 @@ defmodule LangExtract.PromptValidator do
     end
   end
 
-  @spec validate!(PromptTemplate.t(), keyword()) :: :ok
-  def validate!(%PromptTemplate{} = template, opts \\ []) do
+  @spec validate!(Template.t(), keyword()) :: :ok
+  def validate!(%Template{} = template, opts \\ []) do
     case validate(template, opts) do
       :ok -> :ok
       {:error, issues} -> raise ValidationError, issues: issues
