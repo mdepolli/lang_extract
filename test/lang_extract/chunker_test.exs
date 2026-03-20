@@ -61,7 +61,7 @@ defmodule LangExtract.ChunkerTest do
 
     test "text exactly at max_chunk_chars boundary" do
       text = "Hello. World."
-      chunks = Chunker.chunk(text, max_chunk_chars: byte_size(text))
+      chunks = Chunker.chunk(text, max_chunk_chars: String.length(text))
       assert length(chunks) == 1
       assert hd(chunks).text == text
     end

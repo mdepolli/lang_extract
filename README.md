@@ -274,7 +274,7 @@ Key differences:
 | Providers | Gemini, OpenAI, Ollama | Claude, OpenAI, Gemini |
 | Offsets | Character positions | Byte positions |
 | Parallelism | ThreadPoolExecutor | Task.async_stream |
-| Chunking | Always-on | Opt-in via `:max_chunk_chars` |
+| Chunking | Always-on (1000 chars) | Always-on (1000 chars, configurable) |
 | Alignment statuses | 4 (exact, lesser, greater, fuzzy) | 3 (exact, fuzzy, not_found) |
 | Prompt validation | Built-in severity levels | Caller decides |
 
