@@ -142,6 +142,7 @@ def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path):
                 prompt_description=task_def["description"],
                 examples=examples,
                 model=model,
+                max_workers=1,
                 show_progress=False,
             )
             elapsed_ms = int((time.perf_counter() - start) * 1000)

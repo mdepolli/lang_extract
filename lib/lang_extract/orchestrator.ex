@@ -38,12 +38,15 @@ defmodule LangExtract.Orchestrator do
     else
       max_concurrency = Keyword.get(opts, :max_concurrency, 3)
 
+      timeout = Keyword.get(opts, :task_timeout, :infinity)
+
       chunks
       |> with_previous_text()
       |> Task.async_stream(
         fn {chunk, prev_text} -> process_chunk(client, chunk, template, prev_text, opts) end,
         ordered: true,
-        max_concurrency: max_concurrency
+        max_concurrency: max_concurrency,
+        timeout: timeout
       )
       |> collect_results()
     end

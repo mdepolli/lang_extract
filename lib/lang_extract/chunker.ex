@@ -48,7 +48,7 @@ defmodule LangExtract.Chunker do
   end
 
   defp pack_sentences(sentences, max_chars) do
-    {chunks, current_text, current_start, current_len} =
+    {chunks, current_text, current_start, _current_len} =
       Enum.reduce(sentences, {[], "", 0, 0}, fn sentence, {chunks, current_text, current_start, current_len} ->
         sentence_len = String.length(sentence)
 
