@@ -175,6 +175,18 @@ defmodule LangExtract.Provider.ClaudeTest do
   end
 
   describe "infer/2" do
+    setup do
+      original = System.get_env("ANTHROPIC_API_KEY")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("ANTHROPIC_API_KEY", original),
+          else: System.delete_env("ANTHROPIC_API_KEY")
+      end)
+
+      :ok
+    end
+
     test "full pipeline returns extracted text" do
       Req.Test.stub(__MODULE__, fn conn ->
         Req.Test.json(conn, %{
@@ -190,6 +202,7 @@ defmodule LangExtract.Provider.ClaudeTest do
     end
 
     test "returns error on missing api key" do
+      System.delete_env("ANTHROPIC_API_KEY")
       assert {:error, :missing_api_key} = Claude.infer("prompt")
     end
   end

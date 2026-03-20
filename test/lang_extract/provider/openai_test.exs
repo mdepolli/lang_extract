@@ -182,6 +182,18 @@ defmodule LangExtract.Provider.OpenAITest do
   end
 
   describe "infer/2" do
+    setup do
+      original = System.get_env("OPENAI_API_KEY")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("OPENAI_API_KEY", original),
+          else: System.delete_env("OPENAI_API_KEY")
+      end)
+
+      :ok
+    end
+
     test "full pipeline returns extracted text" do
       Req.Test.stub(__MODULE__, fn conn ->
         Req.Test.json(conn, %{
@@ -197,6 +209,7 @@ defmodule LangExtract.Provider.OpenAITest do
     end
 
     test "returns error on missing api key" do
+      System.delete_env("OPENAI_API_KEY")
       assert {:error, :missing_api_key} = OpenAI.infer("prompt")
     end
   end
