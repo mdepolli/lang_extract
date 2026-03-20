@@ -143,7 +143,7 @@ defmodule LangExtract.OrchestratorTest do
       assert span.status == :fuzzy
     end
 
-    test "max_chunk_size triggers chunking with correct byte offsets" do
+    test "max_chunk_chars triggers chunking with correct byte offsets" do
       source = "First sentence here. Second sentence there."
 
       Req.Test.stub(__MODULE__, fn conn ->
@@ -167,7 +167,7 @@ defmodule LangExtract.OrchestratorTest do
 
       assert {:ok, spans} =
                LangExtract.run(claude_client(), source, template("Extract words."),
-                 max_chunk_size: 25
+                 max_chunk_chars: 25
                )
 
       exact_spans = Enum.filter(spans, &(&1.status == :exact))
@@ -178,7 +178,7 @@ defmodule LangExtract.OrchestratorTest do
       end
     end
 
-    test "no max_chunk_size behaves as before (regression)" do
+    test "no max_chunk_chars behaves as before (regression)" do
       stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
 
       assert {:ok, [span]} =
@@ -192,7 +192,7 @@ defmodule LangExtract.OrchestratorTest do
 
       assert {:ok, spans} =
                LangExtract.run(claude_client(), "Hello world. Goodbye world.", template(),
-                 max_chunk_size: 15
+                 max_chunk_chars: 15
                )
 
       not_found = Enum.find(spans, &(&1.status == :not_found))
@@ -206,7 +206,7 @@ defmodule LangExtract.OrchestratorTest do
 
       assert {:error, :unauthorized} =
                LangExtract.run(claude_client(), "First sentence. Second sentence.", template(),
-                 max_chunk_size: 20
+                 max_chunk_chars: 20
                )
     end
 

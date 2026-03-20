@@ -137,12 +137,12 @@ end
 
 ## Chunking
 
-For documents that exceed LLM token limits, pass `:max_chunk_size` to split the
+For documents that exceed LLM token limits, pass `:max_chunk_chars` to split the
 source into sentence-aware chunks and process them in parallel:
 
 ```elixir
 {:ok, spans} = LangExtract.run(client, long_document, template,
-  max_chunk_size: 4000,
+  max_chunk_chars: 4000,
   max_concurrency: 5
 )
 ```
@@ -274,7 +274,7 @@ Key differences:
 | Providers | Gemini, OpenAI, Ollama | Claude, OpenAI, Gemini |
 | Offsets | Character positions | Byte positions |
 | Parallelism | ThreadPoolExecutor | Task.async_stream |
-| Chunking | Always-on | Opt-in via `:max_chunk_size` |
+| Chunking | Always-on | Opt-in via `:max_chunk_chars` |
 | Alignment statuses | 4 (exact, lesser, greater, fuzzy) | 3 (exact, fuzzy, not_found) |
 | Prompt validation | Built-in severity levels | Caller decides |
 

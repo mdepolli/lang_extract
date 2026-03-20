@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Orchestrator with chunking** — `LangExtract.run/3,4` wires the full
-  pipeline end-to-end. Sentence-aware chunking via `:max_chunk_size` option
+  pipeline end-to-end. Sentence-aware chunking via `:max_chunk_chars` option
   with `Task.async_stream` for parallel inference.
 - **`LangExtract.new/2`** — Req-inspired two-step API: create a client, then
   run extractions.
@@ -131,7 +131,7 @@ byte positions in the source.
   strategy: sentence packing → newline splitting → token fallback.
   Abbreviation-aware sentence detection (`Mr.`, `Dr.`, etc.).
   Newline + uppercase heuristic for paragraph breaks.
-- **Orchestrator chunking** — When `:max_chunk_size` is set, the orchestrator
+- **Orchestrator chunking** — When `:max_chunk_chars` is set, the orchestrator
   splits the source, processes chunks in parallel via `Task.async_stream`,
   adjusts byte offsets, and concatenates results. Previous chunk text is passed
   as prompt context for cross-chunk coreference resolution.

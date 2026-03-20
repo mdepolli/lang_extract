@@ -5,7 +5,7 @@ defmodule LangExtract.Orchestrator do
   Builds a prompt, calls the LLM provider, normalizes and parses the response,
   aligns extractions to source text, and returns enriched spans.
 
-  When `:max_chunk_size` is set, splits the source into chunks and processes
+  When `:max_chunk_chars` is set, splits the source into chunks and processes
   them in parallel via `Task.async_stream`.
   """
 
@@ -14,9 +14,9 @@ defmodule LangExtract.Orchestrator do
   @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
           {:ok, [Span.t()]} | {:error, term()}
   def run(%Client{} = client, source, %Prompt.Template{} = template, opts \\ []) do
-    case Keyword.get(opts, :max_chunk_size) do
+    case Keyword.get(opts, :max_chunk_chars) do
       nil -> run_single(client, source, template, opts)
-      max_size -> run_chunked(client, source, template, max_size, opts)
+      max_chars -> run_chunked(client, source, template, max_chars, opts)
     end
   end
 
@@ -28,8 +28,8 @@ defmodule LangExtract.Orchestrator do
     end
   end
 
-  defp run_chunked(client, source, template, max_size, opts) do
-    chunks = Chunker.chunk(source, max_chunk_size: max_size)
+  defp run_chunked(client, source, template, max_chars, opts) do
+    chunks = Chunker.chunk(source, max_chunk_chars: max_chars)
 
     if chunks == [] do
       {:ok, []}

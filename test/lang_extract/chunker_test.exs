@@ -4,8 +4,8 @@ defmodule LangExtract.ChunkerTest do
   alias LangExtract.Chunker
 
   describe "chunk/2" do
-    test "text within max_chunk_size returns single chunk" do
-      chunks = Chunker.chunk("Hello world.", max_chunk_size: 100)
+    test "text within max_chunk_chars returns single chunk" do
+      chunks = Chunker.chunk("Hello world.", max_chunk_chars: 100)
       assert length(chunks) == 1
       assert hd(chunks).text == "Hello world."
       assert hd(chunks).byte_start == 0
@@ -13,19 +13,19 @@ defmodule LangExtract.ChunkerTest do
 
     test "packs multiple sentences into chunks" do
       text = "First sentence. Second sentence. Third sentence. Fourth sentence."
-      chunks = Chunker.chunk(text, max_chunk_size: 35)
+      chunks = Chunker.chunk(text, max_chunk_chars: 35)
       assert length(chunks) >= 2
       reconstructed = Enum.map_join(chunks, "", & &1.text)
       assert reconstructed == text
     end
 
     test "empty text returns empty list" do
-      assert Chunker.chunk("", max_chunk_size: 100) == []
+      assert Chunker.chunk("", max_chunk_chars: 100) == []
     end
 
     test "byte_start offsets are correct for each chunk" do
       text = "Short. Also short. Third one here."
-      chunks = Chunker.chunk(text, max_chunk_size: 20)
+      chunks = Chunker.chunk(text, max_chunk_chars: 20)
 
       for chunk <- chunks do
         assert binary_part(text, chunk.byte_start, byte_size(chunk.text)) == chunk.text
@@ -34,14 +34,14 @@ defmodule LangExtract.ChunkerTest do
 
     test "single sentence no newlines emitted as oversized chunk" do
       text = "this is a long run on sentence without any punctuation at all"
-      chunks = Chunker.chunk(text, max_chunk_size: 20)
+      chunks = Chunker.chunk(text, max_chunk_chars: 20)
       assert length(chunks) == 1
       assert hd(chunks).text == text
     end
 
     test "chunks cover entire source text" do
       text = "Hello world. How are you? I am fine. Thanks for asking!"
-      chunks = Chunker.chunk(text, max_chunk_size: 25)
+      chunks = Chunker.chunk(text, max_chunk_chars: 25)
       reconstructed = Enum.map_join(chunks, "", & &1.text)
       assert reconstructed == text
     end
@@ -49,7 +49,7 @@ defmodule LangExtract.ChunkerTest do
     test "handles multibyte UTF-8 text with correct byte offsets" do
       # café = 5 bytes (é is 2 bytes), señor = 6 bytes (ñ is 2 bytes)
       text = "Café is great. Señor drinks café."
-      chunks = Chunker.chunk(text, max_chunk_size: 20)
+      chunks = Chunker.chunk(text, max_chunk_chars: 20)
 
       for chunk <- chunks do
         assert binary_part(text, chunk.byte_start, byte_size(chunk.text)) == chunk.text
@@ -59,9 +59,9 @@ defmodule LangExtract.ChunkerTest do
       assert reconstructed == text
     end
 
-    test "text exactly at max_chunk_size boundary" do
+    test "text exactly at max_chunk_chars boundary" do
       text = "Hello. World."
-      chunks = Chunker.chunk(text, max_chunk_size: byte_size(text))
+      chunks = Chunker.chunk(text, max_chunk_chars: byte_size(text))
       assert length(chunks) == 1
       assert hd(chunks).text == text
     end

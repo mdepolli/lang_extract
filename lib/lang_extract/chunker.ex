@@ -33,24 +33,24 @@ defmodule LangExtract.Chunker do
 
   ## Options
 
-    * `:max_chunk_size` — maximum byte size per chunk (required)
+    * `:max_chunk_chars` — maximum characters per chunk (required)
 
   """
   @spec chunk(String.t(), keyword()) :: [Chunk.t()]
   def chunk("", _opts), do: []
 
   def chunk(text, opts) when is_binary(text) do
-    max_size = Keyword.fetch!(opts, :max_chunk_size)
+    max_chars = Keyword.fetch!(opts, :max_chunk_chars)
 
     text
     |> find_sentences()
-    |> pack_sentences(max_size)
+    |> pack_sentences(max_chars)
   end
 
-  defp pack_sentences(sentences, max_size) do
+  defp pack_sentences(sentences, max_chars) do
     {chunks, current_text, current_start} =
       Enum.reduce(sentences, {[], "", 0}, fn sentence, {chunks, current_text, current_start} ->
-        if byte_size(current_text) + byte_size(sentence) <= max_size or current_text == "" do
+        if String.length(current_text) + String.length(sentence) <= max_chars or current_text == "" do
           {chunks, current_text <> sentence, current_start}
         else
           chunk = %Chunk{text: current_text, byte_start: current_start}
