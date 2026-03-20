@@ -13,8 +13,48 @@ BENCHMARK_DIR = Path(__file__).resolve().parent.parent
 # Add langextract to path if installed locally
 sys.path.insert(0, str(Path.home() / "code" / "langextract"))
 
+import requests
+
 import langextract as lx
+from langextract.core import base_model, types as core_types
 from langextract.core.data import ExampleData, Extraction
+
+
+class ClaudeProvider(base_model.BaseLanguageModel):
+    """Minimal Anthropic Claude provider for langextract."""
+
+    def __init__(self, api_key: str, model_id: str = "claude-sonnet-4-20250514",
+                 temperature: float = 0, max_tokens: int = 4096, **kwargs):
+        super().__init__(**kwargs)
+        self.api_key = api_key
+        self.model_id = model_id
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+
+    def infer(self, batch_prompts, **kwargs):
+        for prompt in batch_prompts:
+            resp = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": self.model_id,
+                    "max_tokens": self.max_tokens,
+                    "temperature": self.temperature,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=120,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            text = next(
+                (b["text"] for b in data.get("content", []) if b.get("type") == "text"),
+                "",
+            )
+            yield [core_types.ScoredOutput(score=1.0, output=text)]
 
 
 STATUS_MAP = {
@@ -81,6 +121,8 @@ def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path):
         print("ERROR: ANTHROPIC_API_KEY not set", file=sys.stderr)
         sys.exit(1)
 
+    model = ClaudeProvider(api_key=api_key, temperature=0)
+
     corpus_files = sorted(corpus_dir.glob("*.txt"))
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{task_name}.jsonl"
@@ -99,9 +141,7 @@ def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path):
                 text_or_documents=source_text,
                 prompt_description=task_def["description"],
                 examples=examples,
-                model_id="claude-sonnet-4-20250514",
-                api_key=api_key,
-                temperature=0,
+                model=model,
                 show_progress=False,
             )
             elapsed_ms = int((time.perf_counter() - start) * 1000)

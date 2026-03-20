@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Benchmark.Run do
         source = File.read!(file)
         Mix.shell().info("  #{slug} (#{byte_size(source)} bytes)...")
 
-        {result, elapsed_us} =
+        {elapsed_us, result} =
           :timer.tc(fn ->
             LangExtract.run(client, source, template)
           end)
@@ -78,7 +78,12 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   defp build_client do
     api_key = System.get_env("ANTHROPIC_API_KEY") || raise "ANTHROPIC_API_KEY not set"
-    LangExtract.new(:claude, api_key: api_key, model: "claude-sonnet-4-20250514", temperature: 0)
+    LangExtract.new(:claude,
+      api_key: api_key,
+      model: "claude-sonnet-4-20250514",
+      temperature: 0,
+      req_options: [receive_timeout: 120_000]
+    )
   end
 
   defp build_template(task_def) do
