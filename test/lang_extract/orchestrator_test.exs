@@ -178,11 +178,22 @@ defmodule LangExtract.OrchestratorTest do
       end
     end
 
-    test "no max_chunk_chars behaves as before (regression)" do
+    test "auto-chunks by default (short text fits in one chunk)" do
       stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
 
       assert {:ok, [span]} =
                LangExtract.run(claude_client(), "the quick brown fox", template())
+
+      assert span.status == :exact
+    end
+
+    test "max_chunk_chars: :disabled skips chunking" do
+      stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
+
+      assert {:ok, [span]} =
+               LangExtract.run(claude_client(), "the quick brown fox", template(),
+                 max_chunk_chars: :disabled
+               )
 
       assert span.status == :exact
     end

@@ -5,17 +5,19 @@ defmodule LangExtract.Orchestrator do
   Builds a prompt, calls the LLM provider, normalizes and parses the response,
   aligns extractions to source text, and returns enriched spans.
 
-  When `:max_chunk_chars` is set, splits the source into chunks and processes
-  them in parallel via `Task.async_stream`.
+  Auto-chunks source text by default (1000 characters). Customize with
+  `:max_chunk_chars` or disable with `max_chunk_chars: :disabled`.
   """
+
+  @default_max_chunk_chars 1000
 
   alias LangExtract.{Alignment.Span, Chunker, Client, Prompt}
 
   @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
           {:ok, [Span.t()]} | {:error, term()}
   def run(%Client{} = client, source, %Prompt.Template{} = template, opts \\ []) do
-    case Keyword.get(opts, :max_chunk_chars) do
-      nil -> run_single(client, source, template, opts)
+    case Keyword.get(opts, :max_chunk_chars, @default_max_chunk_chars) do
+      :disabled -> run_single(client, source, template, opts)
       max_chars -> run_chunked(client, source, template, max_chars, opts)
     end
   end
