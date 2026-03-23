@@ -24,3 +24,6 @@ lang_extract-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Dev specs and plans
+/docs/
