@@ -36,7 +36,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
         {elapsed_us, result} =
           :timer.tc(fn ->
-            LangExtract.run(client, source, template, max_concurrency: 1)
+            LangExtract.run(client, source, template, max_concurrency: 2)
           end)
 
         case result do
