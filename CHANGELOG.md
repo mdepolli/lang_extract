@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`FormatHandler.normalize/1`** now returns `{:error, {:invalid_format, raw}}`
+  instead of `{:error, :invalid_format}`, including the raw LLM output in the
+  error for debugging.
+
+### Added
+
+- **`:on_chunk_error` callback** — The orchestrator accepts an optional
+  `on_chunk_error: fn chunk, raw_output -> ... end` callback, fired when a
+  chunk's LLM response fails to parse. Enables callers to inspect or log the
+  raw response without modifying library internals.
+- **`mix benchmark.run --debug-raw-responses`** — Writes raw LLM responses to
+  disk when extraction fails, for diagnosing format errors.
+
 ## [0.2.2] - 2026-03-19
 
 ### Added
