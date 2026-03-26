@@ -170,10 +170,10 @@ defmodule LangExtract.ParserTest do
     end
 
     test "propagates parser errors" do
-      assert {:error, :invalid_format} = LangExtract.extract("source", "bad json")
+      assert {:error, {:invalid_format, "bad json"}} = LangExtract.extract("source", "bad json")
 
-      assert {:error, :invalid_format} =
-               LangExtract.extract("source", Jason.encode!(%{"wrong" => []}))
+      raw = Jason.encode!(%{"wrong" => []})
+      assert {:error, {:invalid_format, ^raw}} = LangExtract.extract("source", raw)
     end
 
     test "handles dynamic-key format from LLM output" do

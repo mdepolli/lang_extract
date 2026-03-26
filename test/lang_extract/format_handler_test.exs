@@ -164,7 +164,7 @@ defmodule LangExtract.FormatHandlerTest do
     test "strips unclosed <think> tag to end of string" do
       input = "<think>This is an unclosed think block that eats the JSON"
 
-      assert {:error, :invalid_format} = FormatHandler.normalize(input)
+      assert {:error, {:invalid_format, ^input}} = FormatHandler.normalize(input)
     end
 
     test "strips multiple <think> blocks" do
@@ -213,7 +213,8 @@ defmodule LangExtract.FormatHandlerTest do
     end
 
     test "returns error for invalid JSON" do
-      assert {:error, :invalid_format} = FormatHandler.normalize("not valid json at all")
+      assert {:error, {:invalid_format, "not valid json at all"}} =
+               FormatHandler.normalize("not valid json at all")
     end
 
     test "handles combined think tags, fences, and dynamic keys" do

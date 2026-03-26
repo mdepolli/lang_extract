@@ -22,7 +22,7 @@ defmodule LangExtract.FormatHandler do
     %{class => text, "#{class}#{@attribute_suffix}" => attributes}
   end
 
-  @spec normalize(String.t()) :: {:ok, map()} | {:error, :invalid_format}
+  @spec normalize(String.t()) :: {:ok, map()} | {:error, {:invalid_format, String.t()}}
   def normalize(raw) when is_binary(raw) do
     cleaned = raw |> strip_think_tags() |> strip_fences()
 
@@ -32,7 +32,7 @@ defmodule LangExtract.FormatHandler do
         {:ok, %{decoded | "extractions" => normalized}}
 
       _ ->
-        {:error, :invalid_format}
+        {:error, {:invalid_format, raw}}
     end
   end
 

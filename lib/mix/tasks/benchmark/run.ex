@@ -12,11 +12,16 @@ defmodule Mix.Tasks.Benchmark.Run do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    {opts, _, _} = OptionParser.parse(args, strict: [task: :string, corpus: :string, out: :string])
+
+    {opts, _, _} =
+      OptionParser.parse(args,
+        strict: [task: :string, corpus: :string, out: :string, debug_raw_responses: :boolean]
+      )
 
     task_name = opts[:task] || raise "Missing --task argument"
     corpus_dir = opts[:corpus] || @default_corpus
     out_dir = opts[:out] || @default_out
+    debug_raw? = opts[:debug_raw_responses] || false
 
     task_def = load_task(task_name)
     client = build_client()
@@ -26,6 +31,13 @@ defmodule Mix.Tasks.Benchmark.Run do
     File.mkdir_p!(out_dir)
     out_path = Path.join(out_dir, "#{task_name}.jsonl")
 
+    debug_dir =
+      if debug_raw? do
+        dir = Path.join([out_dir, "debug", task_name])
+        File.mkdir_p!(dir)
+        dir
+      end
+
     Mix.shell().info("Running task '#{task_name}' on #{length(corpus_files)} documents...")
 
     lines =
@@ -34,9 +46,11 @@ defmodule Mix.Tasks.Benchmark.Run do
         source = File.read!(file)
         Mix.shell().info("  #{slug} (#{byte_size(source)} bytes)...")
 
+        run_opts = build_run_opts(debug_dir, slug)
+
         {elapsed_us, result} =
           :timer.tc(fn ->
-            LangExtract.run(client, source, template, max_concurrency: 2)
+            LangExtract.run(client, source, template, run_opts)
           end)
 
         case result do
@@ -78,6 +92,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   defp build_client do
     api_key = System.get_env("ANTHROPIC_API_KEY") || raise "ANTHROPIC_API_KEY not set"
+
     LangExtract.new(:claude,
       api_key: api_key,
       model: "claude-sonnet-4-20250514",
@@ -102,6 +117,24 @@ defmodule Mix.Tasks.Benchmark.Run do
       end)
 
     %Prompt.Template{description: task_def["description"], examples: examples}
+  end
+
+  defp build_run_opts(nil, _slug), do: [max_concurrency: 2]
+
+  defp build_run_opts(debug_dir, slug) do
+    counter = :atomics.new(1, [])
+
+    on_chunk_error = fn chunk, raw_output ->
+      n = :atomics.add_get(counter, 1, 1)
+      path = Path.join(debug_dir, "#{slug}_chunk_#{n}.txt")
+      File.write!(path, raw_output)
+
+      Mix.shell().info(
+        "    [debug] wrote raw response for chunk at byte #{chunk.byte_start} to #{path}"
+      )
+    end
+
+    [max_concurrency: 2, on_chunk_error: on_chunk_error]
   end
 
   defp span_to_normalized(span) do

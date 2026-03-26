@@ -80,10 +80,18 @@ defmodule LangExtract.Orchestrator do
   defp process_chunk(client, chunk, template, prev_text, opts) do
     builder_opts = if prev_text, do: [previous_chunk: prev_text], else: []
     prompt = Prompt.Builder.build(template, chunk.text, builder_opts)
+    on_chunk_error = Keyword.get(opts, :on_chunk_error)
 
     with {:ok, raw_output} <- client.provider.infer(prompt, client.options),
          {:ok, spans} <- LangExtract.extract(chunk.text, raw_output, opts) do
       {:ok, adjust_offsets(spans, chunk.byte_start)}
+    else
+      {:error, {:invalid_format, raw_output}} ->
+        if on_chunk_error, do: on_chunk_error.(chunk, raw_output)
+        {:error, :invalid_format}
+
+      {:error, _} = error ->
+        error
     end
   end
 
