@@ -27,3 +27,9 @@ lang_extract-*.tar
 
 # Dev specs and plans
 /docs/
+
+# Claude Code
+.claude/
+
+# Elixir LS
+/.expert/
