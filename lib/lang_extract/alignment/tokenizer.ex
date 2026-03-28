@@ -9,6 +9,7 @@ defmodule LangExtract.Alignment.Tokenizer do
   alias LangExtract.Alignment.Token
 
   @token_pattern ~r/\p{L}[\p{L}\p{M}\x{2019}'\-]*|\d[\d.,]*|[^\s]|\s+/u
+  @unicode_letter ~r/^\p{L}/u
 
   @spec tokenize(String.t()) :: [Token.t()]
   def tokenize(text) when is_binary(text) do
@@ -27,12 +28,14 @@ defmodule LangExtract.Alignment.Tokenizer do
     end)
   end
 
+  # ASCII fast path — first byte < 128 is fully classified without regex.
+  # Non-ASCII first byte (>= 128) falls through to Unicode regex for \p{L}.
+  defp classify(<<c, _::binary>>) when c in ?A..?Z or c in ?a..?z, do: :word
+  defp classify(<<c, _::binary>>) when c in ?0..?9, do: :number
+  defp classify(<<c, _::binary>>) when c in [?\s, ?\t, ?\n, ?\r], do: :whitespace
+  defp classify(<<c, _::binary>>) when c < 128, do: :punctuation
+
   defp classify(text) do
-    cond do
-      Regex.match?(~r/^\p{L}/u, text) -> :word
-      Regex.match?(~r/^\d/, text) -> :number
-      Regex.match?(~r/^\s/, text) -> :whitespace
-      true -> :punctuation
-    end
+    if Regex.match?(@unicode_letter, text), do: :word, else: :punctuation
   end
 end
