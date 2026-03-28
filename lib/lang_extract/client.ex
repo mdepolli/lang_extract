@@ -7,9 +7,10 @@ defmodule LangExtract.Client do
 
   @type t :: %__MODULE__{
           provider: module(),
-          options: keyword()
+          options: keyword(),
+          http_client: Req.Request.t() | nil
         }
 
   @enforce_keys [:provider]
-  defstruct [:provider, options: []]
+  defstruct [:provider, :http_client, options: []]
 end

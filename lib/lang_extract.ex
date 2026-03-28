@@ -5,7 +5,7 @@ defmodule LangExtract do
   """
 
   alias LangExtract.Alignment.{Aligner, Span}
-  alias LangExtract.{Client, FormatHandler, Orchestrator, Parser, Prompt, Provider}
+  alias LangExtract.{Client, Orchestrator, Pipeline, Prompt, Provider}
 
   @doc """
   Aligns extraction strings to byte spans in source text.
@@ -50,20 +50,7 @@ defmodule LangExtract do
   @spec extract(String.t(), String.t(), keyword()) ::
           {:ok, [Span.t()]}
           | {:error, {:invalid_format, String.t()} | :invalid_json | :missing_extractions}
-  def extract(source, raw_llm_output, opts \\ []) do
-    with {:ok, normalized} <- FormatHandler.normalize(raw_llm_output),
-         {:ok, extractions} <- Parser.parse(normalized) do
-      texts = Enum.map(extractions, & &1.text)
-      spans = Aligner.align(source, texts, opts)
-
-      enriched =
-        Enum.zip_with(extractions, spans, fn extraction, %Span{} = span ->
-          %Span{span | class: extraction.class, attributes: extraction.attributes}
-        end)
-
-      {:ok, enriched}
-    end
-  end
+  defdelegate extract(source, raw_llm_output, opts \\ []), to: Pipeline
 
   @doc """
   Runs the full extraction pipeline: prompt → LLM → parse → align.
@@ -98,7 +85,11 @@ defmodule LangExtract do
   @spec new(atom(), keyword()) :: Client.t()
   def new(provider, opts \\ []) do
     module = resolve_provider(provider)
-    %Client{provider: module, options: opts}
+
+    case module.build_http_client(opts) do
+      {:ok, req} -> %Client{provider: module, options: opts, http_client: req}
+      {:error, reason} -> raise ArgumentError, "failed to build HTTP client: #{inspect(reason)}"
+    end
   end
 
   defp resolve_provider(:claude), do: Provider.Claude

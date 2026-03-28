@@ -11,7 +11,7 @@ defmodule LangExtract.Orchestrator do
 
   @default_max_chunk_chars 1000
 
-  alias LangExtract.{Alignment.Span, Chunker, Client, Prompt}
+  alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt}
 
   @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
           {:ok, [Span.t()]} | {:error, term()}
@@ -25,8 +25,8 @@ defmodule LangExtract.Orchestrator do
   defp run_single(client, source, template, opts) do
     prompt = Prompt.Builder.build(template, source)
 
-    with {:ok, raw_output} <- client.provider.infer(prompt, client.options) do
-      LangExtract.extract(source, raw_output, opts)
+    with {:ok, raw_output} <- client.provider.infer(prompt, infer_opts(client)) do
+      Pipeline.extract(source, raw_output, opts)
     end
   end
 
@@ -82,8 +82,8 @@ defmodule LangExtract.Orchestrator do
     prompt = Prompt.Builder.build(template, chunk.text, builder_opts)
     on_chunk_error = Keyword.get(opts, :on_chunk_error)
 
-    with {:ok, raw_output} <- client.provider.infer(prompt, client.options),
-         {:ok, spans} <- LangExtract.extract(chunk.text, raw_output, opts) do
+    with {:ok, raw_output} <- client.provider.infer(prompt, infer_opts(client)),
+         {:ok, spans} <- Pipeline.extract(chunk.text, raw_output, opts) do
       {:ok, adjust_offsets(spans, chunk.byte_start)}
     else
       {:error, {:invalid_format, raw_output}} ->
@@ -93,6 +93,10 @@ defmodule LangExtract.Orchestrator do
       {:error, _} = error ->
         error
     end
+  end
+
+  defp infer_opts(%Client{} = client) do
+    Keyword.put(client.options, :http_client, client.http_client)
   end
 
   defp adjust_offsets(spans, byte_offset) do

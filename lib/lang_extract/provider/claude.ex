@@ -18,6 +18,26 @@ defmodule LangExtract.Provider.Claude do
   @api_version "2023-06-01"
 
   @impl true
+  @spec build_http_client(keyword()) :: {:ok, Req.Request.t()} | {:error, :missing_api_key}
+  def build_http_client(opts) do
+    with {:ok, api_key} <- Provider.fetch_api_key(opts, "ANTHROPIC_API_KEY") do
+      %{base_url: base_url} = Provider.common_opts(opts, @defaults)
+
+      req_opts =
+        Provider.req_options(opts,
+          base_url: base_url,
+          retry: false,
+          headers: %{
+            "x-api-key" => api_key,
+            "anthropic-version" => @api_version
+          }
+        )
+
+      {:ok, Req.new(req_opts)}
+    end
+  end
+
+  @impl true
   @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def infer(prompt, opts \\ []) do
     with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
@@ -31,21 +51,9 @@ defmodule LangExtract.Provider.Claude do
   @spec build_request(String.t(), keyword()) ::
           {:ok, {Req.Request.t(), keyword()}} | {:error, :missing_api_key}
   def build_request(prompt, opts) do
-    with {:ok, api_key} <- Provider.fetch_api_key(opts, "ANTHROPIC_API_KEY") do
-      %{model: model, max_tokens: max_tokens, temperature: temperature, base_url: base_url} =
+    with {:ok, req} <- Provider.resolve_http_client(opts, &build_http_client/1) do
+      %{model: model, max_tokens: max_tokens, temperature: temperature} =
         Provider.common_opts(opts, @defaults)
-
-      req_opts =
-        Provider.req_options(opts,
-          base_url: base_url,
-          retry: false,
-          headers: %{
-            "x-api-key" => api_key,
-            "anthropic-version" => @api_version
-          }
-        )
-
-      req = Req.new(req_opts)
 
       payload = %{
         "model" => model,

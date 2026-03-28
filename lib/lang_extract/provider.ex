@@ -9,6 +9,8 @@ defmodule LangExtract.Provider do
   for use by provider implementations.
   """
 
+  @callback build_http_client(opts :: keyword()) :: {:ok, Req.Request.t()} | {:error, term()}
+
   @callback infer(prompt :: String.t(), opts :: keyword()) ::
               {:ok, String.t()} | {:error, term()}
 
@@ -46,6 +48,18 @@ defmodule LangExtract.Provider do
       temperature: Keyword.get(opts, :temperature, defaults[:temperature]),
       base_url: Keyword.get(opts, :base_url, defaults[:base_url])
     }
+  end
+
+  @doc """
+  Returns a pre-built HTTP client from opts, or builds one via the given function.
+  """
+  @spec resolve_http_client(keyword(), (keyword() -> {:ok, Req.Request.t()} | {:error, term()})) ::
+          {:ok, Req.Request.t()} | {:error, term()}
+  def resolve_http_client(opts, build_fn) do
+    case Keyword.get(opts, :http_client) do
+      %Req.Request{} = req -> {:ok, req}
+      _ -> build_fn.(opts)
+    end
   end
 
   @doc """
