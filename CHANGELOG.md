@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`FormatHandler.normalize/1`** now returns `{:error, {:invalid_format, raw}}`
   instead of `{:error, :invalid_format}`, including the raw LLM output in the
   error for debugging.
+- **Broke dependency cycle** between `LangExtract` and `Orchestrator`. Shared
+  pipeline logic (normalize → parse → align) extracted into `LangExtract.Pipeline`.
+- **Reuse Req HTTP client** across requests. New `build_http_client/1` callback
+  on `Provider` behaviour builds the `Req` struct once at `new/2` time, stored
+  on `Client.http_client` and reused for all subsequent requests.
+- **Tokenizer `classify/1`** uses binary pattern matching for ASCII bytes,
+  falling back to Unicode regex only for non-ASCII. Avoids up to 3 regex calls
+  per token.
+- **`Client` struct** now redacts `:options` and `:http_client` from `inspect`
+  output to prevent accidental API key exposure in logs.
 
 ### Added
 
