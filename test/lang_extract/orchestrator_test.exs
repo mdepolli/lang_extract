@@ -29,8 +29,8 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "defaults options to empty list" do
-      client = LangExtract.new(:claude)
-      assert client.options == []
+      client = LangExtract.new(:claude, api_key: "test-key")
+      assert client.options == [api_key: "test-key"]
     end
   end
 
