@@ -2,7 +2,7 @@ defmodule LangExtract.FormatHandler do
   @moduledoc """
   Port between external LLM format and internal domain.
 
-  Serializes `%Extraction{}` structs to dynamic-key JSON for prompts,
+  Serializes `%Extraction{}` structs to dynamic-key YAML for prompts,
   and normalizes raw LLM output back to canonical format for the parser.
   """
 
@@ -14,8 +14,8 @@ defmodule LangExtract.FormatHandler do
   def format_extractions(extractions) do
     items = Enum.map(extractions, &serialize_extraction/1)
     payload = %{"extractions" => items}
-    json = Jason.encode!(payload, pretty: true)
-    "```json\n#{json}\n```"
+    yaml = Ymlr.document!(payload)
+    "```yaml\n#{yaml}```"
   end
 
   defp serialize_extraction(%Extraction{class: class, text: text, attributes: attributes}) do
@@ -26,7 +26,7 @@ defmodule LangExtract.FormatHandler do
   def normalize(raw) when is_binary(raw) do
     cleaned = raw |> strip_think_tags() |> strip_fences()
 
-    case Jason.decode(cleaned) do
+    case YamlElixir.read_from_string(cleaned) do
       {:ok, %{"extractions" => entries} = decoded} when is_list(entries) ->
         normalized = Enum.map(entries, &normalize_entry/1)
         {:ok, %{decoded | "extractions" => normalized}}
@@ -37,7 +37,7 @@ defmodule LangExtract.FormatHandler do
   end
 
   @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
-  @fence_pattern ~r/```(?:json)?\s*(.*?)\s*```/s
+  @fence_pattern ~r/```(?:json|yaml)?\s*(.*?)\s*```/s
 
   defp strip_think_tags(raw) do
     raw

@@ -14,7 +14,7 @@ defmodule LangExtract.Prompt.BuilderTest do
 
       assert result =~ "Extract entities from the text."
       assert result =~ "The quick brown fox."
-      refute result =~ "```json"
+      refute result =~ "```yaml"
     end
 
     test "renders few-shot examples in dynamic-key format" do
@@ -38,8 +38,7 @@ defmodule LangExtract.Prompt.BuilderTest do
 
       assert result =~ "Extract conditions."
       assert result =~ "Patient has diabetes."
-      assert result =~ "\"condition\""
-      assert result =~ "\"diabetes\""
+      assert result =~ "condition: diabetes"
       assert result =~ "condition_attributes"
       assert String.ends_with?(String.trim(result), "Patient has asthma.")
     end
