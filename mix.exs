@@ -10,6 +10,12 @@ defmodule LangExtract.MixProject do
       version: @version,
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
+      test_coverage: [
+        ignore_modules: [
+          Inspect.LangExtract.Client,
+          Mix.Tasks.Benchmark.Run
+        ]
+      ],
       deps: deps(),
       description: description(),
       package: package(),
