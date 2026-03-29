@@ -99,16 +99,13 @@ defmodule LangExtract.FormatHandlerTest do
   end
 
   describe "normalize/1" do
-    test "converts dynamic-key JSON to canonical format" do
-      input =
-        Jason.encode!(%{
-          "extractions" => [
-            %{
-              "medical_condition" => "hypertension",
-              "medical_condition_attributes" => %{"chronicity" => "chronic"}
-            }
-          ]
-        })
+    test "converts dynamic-key YAML to canonical format" do
+      input = """
+      extractions:
+      - medical_condition: hypertension
+        medical_condition_attributes:
+          chronicity: chronic
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -123,34 +120,53 @@ defmodule LangExtract.FormatHandlerTest do
              }
     end
 
-    test "passes through already-canonical JSON unchanged" do
-      entry = %{"class" => "drug", "text" => "aspirin", "attributes" => %{}}
-      input = Jason.encode!(%{"extractions" => [entry]})
+    test "passes through already-canonical YAML unchanged" do
+      input = """
+      extractions:
+      - class: drug
+        text: aspirin
+        attributes: {}
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
-      assert decoded == %{"extractions" => [entry]}
+      assert decoded == %{
+               "extractions" => [
+                 %{"class" => "drug", "text" => "aspirin", "attributes" => %{}}
+               ]
+             }
     end
 
     test "passes through canonical entry with extra keys untouched" do
-      entry = %{
-        "class" => "drug",
-        "text" => "aspirin",
-        "attributes" => %{},
-        "html_attributes" => "data-id='5'"
-      }
-
-      input = Jason.encode!(%{"extractions" => [entry]})
+      input = """
+      extractions:
+      - class: drug
+        text: aspirin
+        attributes: {}
+        html_attributes: "data-id='5'"
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
-      assert decoded == %{"extractions" => [entry]}
+      assert decoded == %{
+               "extractions" => [
+                 %{
+                   "class" => "drug",
+                   "text" => "aspirin",
+                   "attributes" => %{},
+                   "html_attributes" => "data-id='5'"
+                 }
+               ]
+             }
     end
 
     test "strips <think> tags before parsing" do
-      think_content = "<think>Let me reason about this carefully.</think>"
-      json = Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "drug_attributes" => %{}}]})
-      input = "#{think_content}\n#{json}"
+      input = """
+      <think>Let me reason about this carefully.</think>
+      extractions:
+      - drug: aspirin
+        drug_attributes: {}
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -162,16 +178,19 @@ defmodule LangExtract.FormatHandlerTest do
     end
 
     test "strips unclosed <think> tag to end of string" do
-      input = "<think>This is an unclosed think block that eats the JSON"
+      input = "<think>This is an unclosed think block that eats everything"
 
       assert {:error, {:invalid_format, ^input}} = FormatHandler.normalize(input)
     end
 
     test "strips multiple <think> blocks" do
-      json =
-        Jason.encode!(%{"extractions" => [%{"symptom" => "fever", "symptom_attributes" => %{}}]})
-
-      input = "<think>first reasoning</think>\n#{json}\n<think>second thought</think>"
+      input = """
+      <think>first reasoning</think>
+      extractions:
+      - symptom: fever
+        symptom_attributes: {}
+      <think>second thought</think>
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -182,11 +201,29 @@ defmodule LangExtract.FormatHandlerTest do
              }
     end
 
+    test "strips markdown fences with yaml language tag" do
+      input = """
+      ```yaml
+      extractions:
+      - drug: ibuprofen
+        drug_attributes: {}
+      ```
+      """
+
+      assert {:ok, decoded} = FormatHandler.normalize(input)
+
+      assert decoded == %{
+               "extractions" => [
+                 %{"class" => "drug", "text" => "ibuprofen", "attributes" => %{}}
+               ]
+             }
+    end
+
     test "strips markdown fences with json language tag" do
       inner =
         Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
 
-      input = "```yaml\n#{inner}\n```"
+      input = "```json\n#{inner}\n```"
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -198,10 +235,13 @@ defmodule LangExtract.FormatHandlerTest do
     end
 
     test "strips markdown fences without language tag" do
-      inner =
-        Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
-
-      input = "```\n#{inner}\n```"
+      input = """
+      ```
+      extractions:
+      - drug: ibuprofen
+        drug_attributes: {}
+      ```
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -212,18 +252,21 @@ defmodule LangExtract.FormatHandlerTest do
              }
     end
 
-    test "returns error for invalid JSON" do
-      assert {:error, {:invalid_format, "not valid json at all"}} =
-               FormatHandler.normalize("not valid json at all")
+    test "returns error for content without extractions key" do
+      assert {:error, {:invalid_format, "just plain text"}} =
+               FormatHandler.normalize("just plain text")
     end
 
     test "handles combined think tags, fences, and dynamic keys" do
-      inner =
-        Jason.encode!(%{
-          "extractions" => [%{"finding" => "mass", "finding_attributes" => %{"size" => "2cm"}}]
-        })
-
-      input = "<think>Thinking...</think>\n```yaml\n#{inner}\n```"
+      input = """
+      <think>Thinking...</think>
+      ```yaml
+      extractions:
+      - finding: mass
+        finding_attributes:
+          size: 2cm
+      ```
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -235,8 +278,10 @@ defmodule LangExtract.FormatHandlerTest do
     end
 
     test "_attributes key without matching prefix is treated as a class key" do
-      # "html_attributes" has no "html" key, so it's the effective class key itself
-      input = Jason.encode!(%{"extractions" => [%{"html_attributes" => "<b>bold</b>"}]})
+      input = """
+      extractions:
+      - html_attributes: "<b>bold</b>"
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -248,16 +293,26 @@ defmodule LangExtract.FormatHandlerTest do
     end
 
     test "entry with multiple non-attribute keys is passed through" do
-      entry = %{"drug" => "aspirin", "dosage" => "100mg"}
-      input = Jason.encode!(%{"extractions" => [entry]})
+      input = """
+      extractions:
+      - drug: aspirin
+        dosage: 100mg
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
-      assert decoded == %{"extractions" => [entry]}
+      assert decoded == %{
+               "extractions" => [
+                 %{"drug" => "aspirin", "dosage" => "100mg"}
+               ]
+             }
     end
 
     test "entry with no keys is passed through" do
-      input = Jason.encode!(%{"extractions" => [%{}]})
+      input = """
+      extractions:
+      - {}
+      """
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -294,7 +349,7 @@ defmodule LangExtract.FormatHandlerTest do
     end
   end
 
-  # Strips the ```json ... ``` fences and decodes the JSON body.
+  # Strips the ```yaml ... ``` fences and decodes the YAML body.
   defp decode_fenced_yaml(fenced) do
     fenced
     |> String.replace_prefix("```yaml\n", "")
