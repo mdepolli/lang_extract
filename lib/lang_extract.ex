@@ -31,9 +31,9 @@ defmodule LangExtract do
   Parses LLM output, aligns extractions against source text, and returns
   enriched spans with class and attributes.
 
-  Accepts both canonical (`{"extractions": [...]}`) and dynamic-key format
-  (where each entry uses the class name as the key). Strips markdown fences
-  and think tags before parsing.
+  Accepts both canonical and dynamic-key format (where each entry uses
+  the class name as the key). Strips markdown fences and think tags
+  before parsing YAML.
 
   ## Options
 
@@ -41,15 +41,15 @@ defmodule LangExtract do
 
   ## Examples
 
-      iex> json = ~s({"extractions": [{"class": "word", "text": "fox"}]})
-      iex> {:ok, [span]} = LangExtract.extract("the quick brown fox", json)
+      iex> yaml = "extractions:\\n- class: word\\n  text: fox"
+      iex> {:ok, [span]} = LangExtract.extract("the quick brown fox", yaml)
       iex> span.status
       :exact
 
   """
   @spec extract(String.t(), String.t(), keyword()) ::
           {:ok, [Span.t()]}
-          | {:error, {:invalid_format, String.t()} | :invalid_json | :missing_extractions}
+          | {:error, {:invalid_format, String.t()} | :missing_extractions}
   defdelegate extract(source, raw_llm_output, opts \\ []), to: Pipeline
 
   @doc """

@@ -6,7 +6,7 @@ defmodule LangExtract.Pipeline do
 
   @spec extract(String.t(), String.t(), keyword()) ::
           {:ok, [Span.t()]}
-          | {:error, {:invalid_format, String.t()} | :invalid_json | :missing_extractions}
+          | {:error, {:invalid_format, String.t()} | :missing_extractions}
   def extract(source, raw_llm_output, opts) do
     with {:ok, normalized} <- FormatHandler.normalize(raw_llm_output),
          {:ok, extractions} <- Parser.parse(normalized) do
