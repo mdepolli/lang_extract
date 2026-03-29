@@ -2,7 +2,7 @@ defmodule LangExtract.FormatHandler do
   @moduledoc """
   Port between external LLM format and internal domain.
 
-  Serializes `%Extraction{}` structs to dynamic-key JSON for prompts,
+  Serializes `%Extraction{}` structs to dynamic-key YAML for prompts,
   and normalizes raw LLM output back to canonical format for the parser.
   """
 
