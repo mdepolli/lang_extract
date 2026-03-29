@@ -82,7 +82,9 @@ defmodule LangExtract do
       client = LangExtract.new(:gemini, api_key: "gm-...")
 
   """
-  @spec new(atom(), keyword()) :: Client.t()
+  @type provider :: :claude | :openai | :gemini
+
+  @spec new(provider(), keyword()) :: Client.t()
   def new(provider, opts \\ []) do
     module = resolve_provider(provider)
 
