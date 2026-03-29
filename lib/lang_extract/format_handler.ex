@@ -14,8 +14,8 @@ defmodule LangExtract.FormatHandler do
   def format_extractions(extractions) do
     items = Enum.map(extractions, &serialize_extraction/1)
     payload = %{"extractions" => items}
-    json = Jason.encode!(payload, pretty: true)
-    "```json\n#{json}\n```"
+    yaml = Ymlr.document!(payload)
+    "```yaml\n#{yaml}```"
   end
 
   defp serialize_extraction(%Extraction{class: class, text: text, attributes: attributes}) do

@@ -5,7 +5,7 @@ defmodule LangExtract.FormatHandlerTest do
   alias LangExtract.FormatHandler
 
   describe "format_extractions/1" do
-    test "serializes a single extraction to dynamic-key JSON with fences" do
+    test "serializes a single extraction to dynamic-key YAML with fences" do
       extraction = %Extraction{
         class: "medical_condition",
         text: "hypertension",
@@ -14,10 +14,10 @@ defmodule LangExtract.FormatHandlerTest do
 
       result = FormatHandler.format_extractions([extraction])
 
-      assert String.starts_with?(result, "```json\n")
+      assert String.starts_with?(result, "```yaml\n")
       assert String.ends_with?(result, "\n```")
 
-      decoded = decode_fenced_json(result)
+      decoded = decode_fenced_yaml(result)
       [item] = decoded["extractions"]
 
       assert item["medical_condition"] == "hypertension"
@@ -34,7 +34,7 @@ defmodule LangExtract.FormatHandlerTest do
       ]
 
       result = FormatHandler.format_extractions(extractions)
-      decoded = decode_fenced_json(result)
+      decoded = decode_fenced_yaml(result)
 
       assert length(decoded["extractions"]) == 2
 
@@ -48,7 +48,7 @@ defmodule LangExtract.FormatHandlerTest do
       extraction = %Extraction{class: "symptom", text: "headache", attributes: %{}}
 
       result = FormatHandler.format_extractions([extraction])
-      decoded = decode_fenced_json(result)
+      decoded = decode_fenced_yaml(result)
 
       [item] = decoded["extractions"]
       assert item["symptom"] == "headache"
@@ -57,7 +57,7 @@ defmodule LangExtract.FormatHandlerTest do
 
     test "serializes empty extraction list" do
       result = FormatHandler.format_extractions([])
-      decoded = decode_fenced_json(result)
+      decoded = decode_fenced_yaml(result)
 
       assert decoded == %{"extractions" => []}
     end
@@ -66,7 +66,7 @@ defmodule LangExtract.FormatHandlerTest do
       extraction = %Extraction{class: "thing", text: "stuff", attributes: nil}
 
       result = FormatHandler.format_extractions([extraction])
-      decoded = decode_fenced_json(result)
+      decoded = decode_fenced_yaml(result)
 
       [item] = decoded["extractions"]
       assert item["thing"] == "stuff"
@@ -87,7 +87,7 @@ defmodule LangExtract.FormatHandlerTest do
       }
 
       result = FormatHandler.format_extractions([extraction])
-      decoded = decode_fenced_json(result)
+      decoded = decode_fenced_yaml(result)
 
       [item] = decoded["extractions"]
       location = item["finding_attributes"]["location"]
@@ -186,7 +186,7 @@ defmodule LangExtract.FormatHandlerTest do
       inner =
         Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
 
-      input = "```json\n#{inner}\n```"
+      input = "```yaml\n#{inner}\n```"
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -223,7 +223,7 @@ defmodule LangExtract.FormatHandlerTest do
           "extractions" => [%{"finding" => "mass", "finding_attributes" => %{"size" => "2cm"}}]
         })
 
-      input = "<think>Thinking...</think>\n```json\n#{inner}\n```"
+      input = "<think>Thinking...</think>\n```yaml\n#{inner}\n```"
 
       assert {:ok, decoded} = FormatHandler.normalize(input)
 
@@ -295,10 +295,10 @@ defmodule LangExtract.FormatHandlerTest do
   end
 
   # Strips the ```json ... ``` fences and decodes the JSON body.
-  defp decode_fenced_json(fenced) do
+  defp decode_fenced_yaml(fenced) do
     fenced
-    |> String.replace_prefix("```json\n", "")
+    |> String.replace_prefix("```yaml\n", "")
     |> String.replace_suffix("\n```", "")
-    |> Jason.decode!()
+    |> YamlElixir.read_from_string!()
   end
 end
