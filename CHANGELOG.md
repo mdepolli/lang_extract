@@ -9,9 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`FormatHandler.normalize/1`** now returns `{:error, {:invalid_format, raw}}`
-  instead of `{:error, :invalid_format}`, including the raw LLM output in the
-  error for debugging.
+- **`LangExtract.run/4` returns `{:ok, {spans, chunk_errors}} | {:error, reason}`** —
+  Always returns partial results alongside chunk errors instead of halting on
+  the first failure. Infrastructure failures (task exits, timeouts) return
+  `{:error, reason}`.
+- **Pipeline namespace** — `FormatHandler`, `Parser`, `Extraction` moved under
+  `LangExtract.Pipeline.*`. `Pipeline` is the public API for the extraction context.
+- **YAML format with quoting** — LLM wire format switched from JSON to YAML,
+  matching the upstream Python library. Unquoted values containing colons are
+  automatically quoted before parsing.
+- **Removed `run_single`** — All text goes through chunking, matching Python's
+  behavior. The `max_chunk_chars: :disabled` option is removed.
+- **Removed `:on_chunk_error` callback** — Errors are now visible in the return
+  value. The callback was redundant.
+- **Removed previous chunk context** — Was causing cross-chunk `not_found`
+  alignments. Python disables this by default.
+- **`Chunk` struct** now includes `byte_end`, computed once in `pack_sentences`.
+- **`FormatHandler.normalize/1`** passes through valid YAML without an
+  `extractions` key, letting `Parser` return `:missing_extractions`.
 - **Broke dependency cycle** between `LangExtract` and `Orchestrator`. Shared
   pipeline logic (normalize → parse → align) extracted into `LangExtract.Pipeline`.
 - **Reuse Req HTTP client** across requests. New `build_http_client/1` callback
@@ -25,12 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`:on_chunk_error` callback** — The orchestrator accepts an optional
-  `on_chunk_error: fn chunk, raw_output -> ... end` callback, fired when a
-  chunk's LLM response fails to parse. Enables callers to inspect or log the
-  raw response without modifying library internals.
-- **`mix benchmark.run --debug-raw-responses`** — Writes raw LLM responses to
-  disk when extraction fails, for diagnosing format errors.
+- **`LangExtract.Pipeline.ChunkError`** — Struct with `byte_start`, `byte_end`,
+  and `reason` for failed chunk regions.
+- **Benchmark improvements** — Per-document JSON files in timestamped
+  directories, `--document` flag for single-document runs, `_latest` symlink.
 
 ## [0.2.2] - 2026-03-19
 

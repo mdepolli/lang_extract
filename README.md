@@ -24,7 +24,7 @@ template = %LangExtract.Prompt.Template{
   ]
 }
 
-{:ok, spans} = LangExtract.run(client, "Romeo and Juliet was written by William Shakespeare.", template)
+{:ok, {spans, _errors}} = LangExtract.run(client, "Romeo and Juliet was written by William Shakespeare.", template)
 
 for span <- spans do
   IO.puts("#{span.class}: \"#{span.text}\" [bytes #{span.byte_start}..#{span.byte_end}] (#{span.status})")
@@ -81,7 +81,7 @@ client = LangExtract.new(:openai,
 ### 2. Define a prompt template
 
 The template tells the LLM what to extract. Few-shot examples teach it the
-output format using dynamic keys — the extraction class name becomes the JSON
+output format using dynamic keys — the extraction class name becomes the YAML
 key, which reads naturally in context:
 
 ```elixir
@@ -112,8 +112,12 @@ template = %LangExtract.Prompt.Template{
 ```elixir
 source = "The patient presents with hypertension and is taking lisinopril daily."
 
-{:ok, spans} = LangExtract.run(client, source, template)
+{:ok, {spans, errors}} = LangExtract.run(client, source, template)
 ```
+
+When some chunks fail to parse, the successful spans are still returned alongside
+the errors. Check `errors` to detect failures. Infrastructure failures (task exits,
+timeouts) return `{:error, reason}` instead.
 
 Each span contains:
 
@@ -141,15 +145,14 @@ For documents that exceed LLM token limits, pass `:max_chunk_chars` to split the
 source into sentence-aware chunks and process them in parallel:
 
 ```elixir
-{:ok, spans} = LangExtract.run(client, long_document, template,
+{:ok, {spans, errors}} = LangExtract.run(client, long_document, template,
   max_chunk_chars: 4000,
   max_concurrency: 5
 )
 ```
 
 Byte offsets in the returned spans are adjusted to reference the original source,
-not individual chunks. Previous chunk text is passed as context to help the LLM
-resolve cross-chunk references.
+not individual chunks.
 
 ## Prompt Validation
 
@@ -181,8 +184,8 @@ spans = LangExtract.align("the quick brown fox", ["quick brown", "fox"])
 Or parse raw LLM output and align in one step:
 
 ```elixir
-json = ~s({"extractions": [{"class": "animal", "text": "fox"}]})
-{:ok, spans} = LangExtract.extract("the quick brown fox", json)
+yaml = "extractions:\n- class: animal\n  text: fox"
+{:ok, spans} = LangExtract.extract("the quick brown fox", yaml)
 ```
 
 Both canonical format (`class`/`text`/`attributes` keys) and dynamic-key format
@@ -252,14 +255,13 @@ The aligner uses two phases:
 ```
 lib/lang_extract/
 ├── alignment/              # Tokenizer, Token, Aligner, Span
+├── pipeline/               # FormatHandler, Parser, Extraction, ChunkError
 ├── prompt/                 # Template, ExampleData, Builder, Validator
 ├── provider/               # Claude, OpenAI, Gemini implementations
 ├── client.ex               # Configured LLM client struct
 ├── orchestrator.ex         # Pipeline wiring + chunking
 ├── chunker.ex              # Sentence-aware text splitting
-├── format_handler.ex       # External ↔ internal format port
-├── parser.ex               # JSON → Extraction structs
-├── extraction.ex           # Extraction struct
+├── pipeline.ex             # Extraction pipeline public API
 └── io.ex                   # Serialization + JSONL
 ```
 
@@ -278,7 +280,7 @@ Key differences:
 | Alignment statuses | 4 (exact, lesser, greater, fuzzy) | 3 (exact, fuzzy, not_found) |
 | Prompt validation | Built-in severity levels | Caller decides |
 
-Not ported: visualization (HTML output), multi-pass extraction, YAML support,
+Not ported: visualization (HTML output), multi-pass extraction,
 batch Vertex AI, plugin system. See [ROADMAP.md](ROADMAP.md) for planned
 improvements.
 
