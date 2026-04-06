@@ -16,9 +16,9 @@ and natural extensions that haven't been implemented yet.
 - **`MATCH_LESSER` status** — Partial contiguous Myers matches that preempt the
   fuzzy phase. Currently our aligner falls through to fuzzy for any non-exact
   match.
-- **Cross-chunk overlap resolution** — When chunking, the same entity might be
-  extracted from overlapping chunk context. The original merges non-overlapping
-  extractions with a first-pass-wins strategy.
+- **Cross-chunk deduplication** — When chunking, the same entity might be
+  extracted from adjacent chunks at sentence boundaries. The original merges
+  non-overlapping extractions with a first-pass-wins strategy.
 
 ## Multi-Document & Batch Processing
 
@@ -41,7 +41,6 @@ and natural extensions that haven't been implemented yet.
 
 ## Format & I/O
 
-- **YAML support** — The original supports both JSON and YAML output formats.
 - **URL text fetching** — Download and extract text from URLs.
 - **CSV dataset loading** — Batch-load documents from CSV files.
 - **Template loading from files** — Load `PromptTemplate` from YAML/JSON files
@@ -60,8 +59,19 @@ and natural extensions that haven't been implemented yet.
 - **Interactive HTML output** — The original generates self-contained HTML with
   color-coded highlights, animated playback, tooltips, and Jupyter integration.
 
+## Benchmark
+
+- **Update `compare.py`** — The comparison script still reads the old JSONL format.
+  Needs updating to read per-document JSON files from timestamped run directories.
+- **Alignment quality comparison tooling** — Python produces more `exact` matches
+  than Elixir for the same extractions. Tooling to quantify the gap per-document
+  would help prioritize aligner improvements.
+
 ## Tech Debt
 
 - **`LangExtract.align/3` smoke test** — The public API delegate has no direct
   test. The underlying `Aligner.align/3` is tested, but a smoke test for the
   top-level function would catch delegation bugs.
+- **Smart quote normalization in aligner** — LLMs output smart quotes (`'`) where
+  sources have ASCII apostrophes (`'`). The fuzzy aligner handles this but a
+  normalization pass before exact matching would improve `exact` vs `fuzzy` ratios.
