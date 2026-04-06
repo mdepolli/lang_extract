@@ -30,54 +30,12 @@ defmodule Mix.Tasks.Benchmark.Run do
     timestamp = Calendar.strftime(DateTime.utc_now(), "%Y%m%d_%H%M%S")
     run_dir = Path.join(out_dir, "#{task_name}_#{timestamp}")
     File.mkdir_p!(run_dir)
-    out_path = Path.join(run_dir, "results.jsonl")
 
     Mix.shell().info("Running task '#{task_name}' on #{length(corpus_files)} documents...")
 
-    lines =
-      Enum.map(corpus_files, fn file ->
-        slug = Path.basename(file, ".txt")
-        source = File.read!(file)
-        Mix.shell().info("  #{slug} (#{byte_size(source)} bytes)...")
-
-        {elapsed_us, {:ok, spans, errors}} =
-          :timer.tc(fn ->
-            LangExtract.run(client, source, template, max_concurrency: 2)
-          end)
-
-        extractions = Enum.map(spans, &span_to_normalized/1)
-        elapsed_ms = div(elapsed_us, 1000)
-
-        case errors do
-          [] ->
-            Mix.shell().info("    #{length(spans)} extractions in #{elapsed_ms}ms")
-
-          _ ->
-            Mix.shell().error(
-              "    #{length(errors)} chunk error(s), #{length(spans)} partial extractions in #{elapsed_ms}ms"
-            )
-        end
-
-        error_fields =
-          case errors do
-            [] -> %{}
-            _ -> %{"errors" => Enum.map(errors, &chunk_error_to_map/1)}
-          end
-
-        Map.merge(
-          %{
-            "source" => slug,
-            "task" => task_name,
-            "library" => "elixir",
-            "extractions" => extractions,
-            "timing" => %{"total_ms" => elapsed_ms}
-          },
-          error_fields
-        )
-        |> Jason.encode!()
-      end)
-
-    File.write!(out_path, Enum.join(lines, "\n") <> "\n")
+    Enum.each(corpus_files, fn file ->
+      run_document(file, client, template, task_name, run_dir)
+    end)
 
     latest_link = Path.join(out_dir, "#{task_name}_latest")
 
@@ -94,8 +52,53 @@ defmodule Mix.Tasks.Benchmark.Run do
 
     File.ln_s!(Path.basename(run_dir), latest_link)
 
-    Mix.shell().info("\nResults written to #{out_path}")
+    Mix.shell().info("\nResults written to #{run_dir}/")
     Mix.shell().info("Symlink updated: #{latest_link} -> #{Path.basename(run_dir)}")
+  end
+
+  defp run_document(file, client, template, task_name, run_dir) do
+    slug = Path.basename(file, ".txt")
+    source = File.read!(file)
+    Mix.shell().info("  #{slug} (#{byte_size(source)} bytes)...")
+
+    {elapsed_us, {:ok, spans, errors}} =
+      :timer.tc(fn ->
+        LangExtract.run(client, source, template, max_concurrency: 2)
+      end)
+
+    extractions = Enum.map(spans, &span_to_normalized/1)
+    elapsed_ms = div(elapsed_us, 1000)
+
+    case errors do
+      [] ->
+        Mix.shell().info("    #{length(spans)} extractions in #{elapsed_ms}ms")
+
+      _ ->
+        Mix.shell().error(
+          "    #{length(errors)} chunk error(s), #{length(spans)} partial extractions in #{elapsed_ms}ms"
+        )
+    end
+
+    error_fields =
+      case errors do
+        [] -> %{}
+        _ -> %{"errors" => Enum.map(errors, &chunk_error_to_map/1)}
+      end
+
+    result =
+      Map.merge(
+        %{
+          "source" => slug,
+          "task" => task_name,
+          "library" => "elixir",
+          "extractions" => extractions,
+          "timing" => %{"total_ms" => elapsed_ms}
+        },
+        error_fields
+      )
+
+    out_path = Path.join(run_dir, "#{slug}.json")
+    File.write!(out_path, Jason.encode!(result, pretty: true))
   end
 
   defp load_task(name) do
