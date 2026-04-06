@@ -63,11 +63,11 @@ defmodule LangExtract do
 
       client = LangExtract.new(:claude, api_key: "sk-...")
       template = %LangExtract.Prompt.Template{description: "Extract entities."}
-      {:ok, spans} = LangExtract.run(client, "the quick brown fox", template)
+      {:ok, spans, errors} = LangExtract.run(client, "the quick brown fox", template)
 
   """
   @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
-          {:ok, [Span.t()]} | {:error, term()}
+          {:ok, [Span.t()], [LangExtract.Pipeline.ChunkError.t()]}
   def run(%Client{} = client, source, %Prompt.Template{} = template, opts \\ []) do
     Orchestrator.run(client, source, template, opts)
   end

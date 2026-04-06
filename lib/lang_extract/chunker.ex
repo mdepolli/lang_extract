@@ -3,9 +3,13 @@ defmodule LangExtract.Chunker.Chunk do
   A chunk of text with its byte offset in the source.
   """
 
-  @type t :: %__MODULE__{text: String.t(), byte_start: non_neg_integer()}
-  @enforce_keys [:text, :byte_start]
-  defstruct [:text, :byte_start]
+  @type t :: %__MODULE__{
+          text: String.t(),
+          byte_start: non_neg_integer(),
+          byte_end: non_neg_integer()
+        }
+  @enforce_keys [:text, :byte_start, :byte_end]
+  defstruct [:text, :byte_start, :byte_end]
 end
 
 defmodule LangExtract.Chunker do
@@ -37,8 +41,6 @@ defmodule LangExtract.Chunker do
 
   """
   @spec chunk(String.t(), keyword()) :: [Chunk.t()]
-  def chunk("", _opts), do: []
-
   def chunk(text, opts) when is_binary(text) do
     max_chars = Keyword.fetch!(opts, :max_chunk_chars)
 
@@ -56,14 +58,18 @@ defmodule LangExtract.Chunker do
         if current_len + sentence_len <= max_chars or current_text == "" do
           {chunks, current_text <> sentence, current_start, current_len + sentence_len}
         else
-          chunk = %Chunk{text: current_text, byte_start: current_start}
-          new_start = current_start + byte_size(current_text)
-          {[chunk | chunks], sentence, new_start, sentence_len}
+          byte_end = current_start + byte_size(current_text)
+          chunk = %Chunk{text: current_text, byte_start: current_start, byte_end: byte_end}
+          {[chunk | chunks], sentence, byte_end, sentence_len}
         end
       end)
 
     if current_text != "" do
-      Enum.reverse([%Chunk{text: current_text, byte_start: current_start} | chunks])
+      byte_end = current_start + byte_size(current_text)
+
+      Enum.reverse([
+        %Chunk{text: current_text, byte_start: current_start, byte_end: byte_end} | chunks
+      ])
     else
       Enum.reverse(chunks)
     end

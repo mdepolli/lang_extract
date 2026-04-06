@@ -6,58 +6,34 @@ defmodule LangExtract.Orchestrator do
   aligns extractions to source text, and returns enriched spans.
 
   Auto-chunks source text by default (1000 characters). Customize with
-  `:max_chunk_chars` or disable with `max_chunk_chars: :disabled`.
+  `:max_chunk_chars`.
   """
 
   @default_max_chunk_chars 1000
 
   alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt}
+  alias Pipeline.ChunkError
+  alias Prompt.Template
 
-  @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
-          {:ok, [Span.t()]} | {:error, term()}
-  def run(%Client{} = client, source, %Prompt.Template{} = template, opts \\ []) do
-    case Keyword.get(opts, :max_chunk_chars, @default_max_chunk_chars) do
-      :disabled -> run_single(client, source, template, opts)
-      max_chars -> run_chunked(client, source, template, max_chars, opts)
-    end
-  end
+  @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
+          {:ok, [Span.t()], [ChunkError.t()]}
+  def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
+    max_chars = Keyword.get(opts, :max_chunk_chars, @default_max_chunk_chars)
+    max_concurrency = Keyword.get(opts, :max_concurrency, 3)
+    timeout = Keyword.get(opts, :task_timeout, :infinity)
 
-  defp run_single(client, source, template, opts) do
-    prompt = Prompt.Builder.build(template, source)
-
-    with {:ok, raw_output} <- client.provider.infer(prompt, infer_opts(client)) do
-      Pipeline.extract(source, raw_output, opts)
-    end
-  end
-
-  defp run_chunked(client, source, template, max_chars, opts) do
     chunks = Chunker.chunk(source, max_chunk_chars: max_chars)
+    previous_texts = [nil | Enum.map(chunks, & &1.text)]
 
-    if chunks == [] do
-      {:ok, []}
-    else
-      max_concurrency = Keyword.get(opts, :max_concurrency, 3)
-
-      timeout = Keyword.get(opts, :task_timeout, :infinity)
-
-      chunks
-      |> with_previous_text()
-      |> Task.async_stream(
-        fn {chunk, prev_text} -> process_chunk(client, chunk, template, prev_text, opts) end,
-        ordered: true,
-        max_concurrency: max_concurrency,
-        timeout: timeout
-      )
-      |> collect_results()
-    end
-  end
-
-  defp with_previous_text(chunks) do
     chunks
-    |> Enum.reduce({[], nil}, fn chunk, {acc, prev} ->
-      {[{chunk, prev} | acc], chunk.text}
-    end)
-    |> then(fn {pairs, _} -> Enum.reverse(pairs) end)
+    |> Enum.zip(previous_texts)
+    |> Task.async_stream(
+      fn {chunk, prev_text} -> process_chunk(client, chunk, template, prev_text, opts) end,
+      ordered: true,
+      max_concurrency: max_concurrency,
+      timeout: timeout
+    )
+    |> collect_results()
   end
 
   defp collect_results(stream) do
@@ -66,38 +42,29 @@ defmodule LangExtract.Orchestrator do
         {:ok, {:ok, chunk_spans}}, {spans_acc, errors_acc} ->
           {[chunk_spans | spans_acc], errors_acc}
 
-        {:ok, {:error, reason}}, {spans_acc, errors_acc} ->
-          {spans_acc, [reason | errors_acc]}
-
-        {:exit, reason}, {spans_acc, errors_acc} ->
-          {spans_acc, [{:task_error, reason} | errors_acc]}
+        {:ok, {:error, %ChunkError{} = error}}, {spans_acc, errors_acc} ->
+          {spans_acc, [error | errors_acc]}
       end)
 
-    case errors do
-      [] ->
-        {:ok, spans |> Enum.reverse() |> List.flatten()}
-
-      _ ->
-        partial = spans |> Enum.reverse() |> List.flatten()
-        {:error, {:chunk_errors, Enum.reverse(errors), partial}}
-    end
+    spans = spans |> Enum.reverse() |> List.flatten()
+    {:ok, spans, Enum.reverse(errors)}
   end
 
   defp process_chunk(client, chunk, template, prev_text, opts) do
     builder_opts = if prev_text, do: [previous_chunk: prev_text], else: []
     prompt = Prompt.Builder.build(template, chunk.text, builder_opts)
-    on_chunk_error = Keyword.get(opts, :on_chunk_error)
 
     with {:ok, raw_output} <- client.provider.infer(prompt, infer_opts(client)),
          {:ok, spans} <- Pipeline.extract(chunk.text, raw_output, opts) do
       {:ok, adjust_offsets(spans, chunk.byte_start)}
     else
-      {:error, {:invalid_format, raw_output}} ->
-        if on_chunk_error, do: on_chunk_error.(chunk, raw_output)
-        {:error, :invalid_format}
-
-      {:error, _} = error ->
-        error
+      {:error, reason} ->
+        {:error,
+         %ChunkError{
+           byte_start: chunk.byte_start,
+           byte_end: chunk.byte_end,
+           reason: reason
+         }}
     end
   end
 
