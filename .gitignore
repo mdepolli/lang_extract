@@ -30,6 +30,7 @@ lang_extract-*.tar
 
 # Claude Code
 .claude/
+CLAUDE.md
 
 # Elixir LS
 /.expert/
