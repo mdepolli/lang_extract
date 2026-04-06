@@ -28,12 +28,14 @@ defmodule Mix.Tasks.Benchmark.Run do
     template = build_template(task_def)
     corpus_files = Path.wildcard(Path.join(corpus_dir, "*.txt")) |> Enum.sort()
 
-    File.mkdir_p!(out_dir)
-    out_path = Path.join(out_dir, "#{task_name}.jsonl")
+    timestamp = Calendar.strftime(DateTime.utc_now(), "%Y%m%d_%H%M%S")
+    run_dir = Path.join(out_dir, "#{task_name}_#{timestamp}")
+    File.mkdir_p!(run_dir)
+    out_path = Path.join(run_dir, "results.jsonl")
 
     debug_dir =
       if debug_raw? do
-        dir = Path.join([out_dir, "debug", task_name])
+        dir = Path.join(run_dir, "debug")
         File.mkdir_p!(dir)
         dir
       end
@@ -82,7 +84,18 @@ defmodule Mix.Tasks.Benchmark.Run do
       end)
 
     File.write!(out_path, Enum.join(lines, "\n") <> "\n")
+
+    latest_link = Path.join(out_dir, "#{task_name}_latest")
+
+    case File.read_link(latest_link) do
+      {:ok, _} -> File.rm!(latest_link)
+      {:error, _} -> :ok
+    end
+
+    File.ln_s!(Path.expand(run_dir), latest_link)
+
     Mix.shell().info("\nResults written to #{out_path}")
+    Mix.shell().info("Symlink updated: #{latest_link} -> #{run_dir}")
   end
 
   defp load_task(name) do
