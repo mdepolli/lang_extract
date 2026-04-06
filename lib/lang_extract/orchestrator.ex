@@ -22,13 +22,10 @@ defmodule LangExtract.Orchestrator do
     max_concurrency = Keyword.get(opts, :max_concurrency, 3)
     timeout = Keyword.get(opts, :task_timeout, :infinity)
 
-    chunks = Chunker.chunk(source, max_chunk_chars: max_chars)
-    previous_texts = [nil | Enum.map(chunks, & &1.text)]
-
-    chunks
-    |> Enum.zip(previous_texts)
+    source
+    |> Chunker.chunk(max_chunk_chars: max_chars)
     |> Task.async_stream(
-      fn {chunk, prev_text} -> process_chunk(client, chunk, template, prev_text, opts) end,
+      fn chunk -> process_chunk(client, chunk, template, opts) end,
       ordered: true,
       max_concurrency: max_concurrency,
       timeout: timeout
@@ -50,9 +47,8 @@ defmodule LangExtract.Orchestrator do
     {:ok, spans, Enum.reverse(errors)}
   end
 
-  defp process_chunk(client, chunk, template, prev_text, opts) do
-    builder_opts = if prev_text, do: [previous_chunk: prev_text], else: []
-    prompt = Prompt.Builder.build(template, chunk.text, builder_opts)
+  defp process_chunk(client, chunk, template, opts) do
+    prompt = Prompt.Builder.build(template, chunk.text)
 
     with {:ok, raw_output} <- client.provider.infer(prompt, infer_opts(client)),
          {:ok, spans} <- Pipeline.extract(chunk.text, raw_output, opts) do

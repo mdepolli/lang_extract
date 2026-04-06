@@ -4,7 +4,7 @@ defmodule LangExtract.Prompt.BuilderTest do
   alias LangExtract.Pipeline.Extraction
   alias LangExtract.Prompt.{Builder, ExampleData, Template}
 
-  describe "build/3" do
+  describe "build/2" do
     test "renders description and chunk text with no examples" do
       template = %Template{
         description: "Extract entities from the text."
@@ -41,37 +41,6 @@ defmodule LangExtract.Prompt.BuilderTest do
       assert result =~ "condition: diabetes"
       assert result =~ "condition_attributes"
       assert String.ends_with?(String.trim(result), "Patient has asthma.")
-    end
-
-    test "includes previous chunk context" do
-      template = %Template{description: "Extract."}
-
-      result =
-        Builder.build(template, "Current chunk.", previous_chunk: "Previous text here.")
-
-      assert result =~ "[Previous text]: ...Previous text here."
-      assert result =~ "Current chunk."
-    end
-
-    test "truncates previous chunk to context_window_chars" do
-      template = %Template{description: "Extract."}
-
-      result =
-        Builder.build(template, "Current.",
-          previous_chunk: "This is a long previous chunk of text.",
-          context_window_chars: 10
-        )
-
-      assert result =~ "[Previous text]: ...k of text."
-      refute result =~ "This is a long"
-    end
-
-    test "omits context section when no previous chunk" do
-      template = %Template{description: "Extract."}
-
-      result = Builder.build(template, "Current chunk.")
-
-      refute result =~ "[Previous text]"
     end
 
     test "empty description is valid" do
