@@ -6,6 +6,7 @@ defmodule LangExtract do
 
   alias LangExtract.Alignment.{Aligner, Span}
   alias LangExtract.{Client, Orchestrator, Pipeline, Prompt, Provider}
+  alias Pipeline.ChunkError
 
   @doc """
   Aligns extraction strings to byte spans in source text.
@@ -55,6 +56,11 @@ defmodule LangExtract do
   @doc """
   Runs the full extraction pipeline: prompt → LLM → parse → align.
 
+  Returns `{:ok, {spans, chunk_errors}}` on success. When some chunks fail
+  to parse, the successful spans are still returned alongside the errors.
+  Returns `{:error, reason}` only for infrastructure failures (task exits,
+  timeouts).
+
   ## Options
 
     * `:fuzzy_threshold` - minimum overlap ratio for fuzzy match (default `0.75`)
@@ -63,11 +69,11 @@ defmodule LangExtract do
 
       client = LangExtract.new(:claude, api_key: "sk-...")
       template = %LangExtract.Prompt.Template{description: "Extract entities."}
-      {:ok, spans, errors} = LangExtract.run(client, "the quick brown fox", template)
+      {:ok, {spans, errors}} = LangExtract.run(client, "the quick brown fox", template)
 
   """
   @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
-          {:ok, [Span.t()], [LangExtract.Pipeline.ChunkError.t()]}
+          {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, term()}
   def run(%Client{} = client, source, %Prompt.Template{} = template, opts \\ []) do
     Orchestrator.run(client, source, template, opts)
   end

@@ -66,7 +66,7 @@ defmodule Mix.Tasks.Benchmark.Run do
     source = File.read!(file)
     Mix.shell().info("  #{slug} (#{byte_size(source)} bytes)...")
 
-    {elapsed_us, {:ok, spans, errors}} =
+    {elapsed_us, {:ok, {spans, errors}}} =
       :timer.tc(fn ->
         LangExtract.run(client, source, template, max_concurrency: 2)
       end)

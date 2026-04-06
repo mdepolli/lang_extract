@@ -16,7 +16,7 @@ defmodule LangExtract.Orchestrator do
   alias Prompt.Template
 
   @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
-          {:ok, [Span.t()], [ChunkError.t()]}
+          {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, term()}
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     max_chars = Keyword.get(opts, :max_chunk_chars, @default_max_chunk_chars)
     max_concurrency = Keyword.get(opts, :max_concurrency, 3)
@@ -34,17 +34,24 @@ defmodule LangExtract.Orchestrator do
   end
 
   defp collect_results(stream) do
-    {spans, errors} =
-      Enum.reduce(stream, {[], []}, fn
-        {:ok, {:ok, chunk_spans}}, {spans_acc, errors_acc} ->
-          {[chunk_spans | spans_acc], errors_acc}
+    Enum.reduce_while(stream, {[], []}, fn
+      {:ok, {:ok, chunk_spans}}, {spans_acc, errors_acc} ->
+        {:cont, {[chunk_spans | spans_acc], errors_acc}}
 
-        {:ok, {:error, %ChunkError{} = error}}, {spans_acc, errors_acc} ->
-          {spans_acc, [error | errors_acc]}
-      end)
+      {:ok, {:error, %ChunkError{} = error}}, {spans_acc, errors_acc} ->
+        {:cont, {spans_acc, [error | errors_acc]}}
 
+      {:exit, reason}, _acc ->
+        {:halt, {:error, {:task_exit, reason}}}
+    end)
+    |> finalize_results()
+  end
+
+  defp finalize_results({:error, _} = error), do: error
+
+  defp finalize_results({spans, errors}) do
     spans = spans |> Enum.reverse() |> List.flatten()
-    {:ok, spans, Enum.reverse(errors)}
+    {:ok, {spans, Enum.reverse(errors)}}
   end
 
   defp process_chunk(client, chunk, template, opts) do
