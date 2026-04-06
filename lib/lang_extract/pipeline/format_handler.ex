@@ -1,4 +1,4 @@
-defmodule LangExtract.FormatHandler do
+defmodule LangExtract.Pipeline.FormatHandler do
   @moduledoc """
   Port between external LLM format and internal domain.
 
@@ -6,7 +6,7 @@ defmodule LangExtract.FormatHandler do
   and normalizes raw LLM output back to canonical format for the parser.
   """
 
-  alias LangExtract.Extraction
+  alias LangExtract.Pipeline.Extraction
 
   @attribute_suffix "_attributes"
 
@@ -30,6 +30,9 @@ defmodule LangExtract.FormatHandler do
       {:ok, %{"extractions" => entries} = decoded} when is_list(entries) ->
         normalized = Enum.map(entries, &normalize_entry/1)
         {:ok, %{decoded | "extractions" => normalized}}
+
+      {:ok, %{} = decoded} when decoded != %{} ->
+        {:ok, decoded}
 
       _ ->
         {:error, {:invalid_format, raw}}

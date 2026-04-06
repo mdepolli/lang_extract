@@ -10,7 +10,7 @@ defmodule LangExtract.Prompt.Validator do
   """
 
   alias LangExtract.Alignment.Aligner
-  alias LangExtract.{Extraction, Prompt.ExampleData, Prompt.Template}
+  alias LangExtract.{Pipeline.Extraction, Prompt.ExampleData, Prompt.Template}
 
   defmodule Issue do
     @moduledoc """

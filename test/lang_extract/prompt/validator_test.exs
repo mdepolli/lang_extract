@@ -1,7 +1,7 @@
 defmodule LangExtract.Prompt.ValidatorTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Extraction
+  alias LangExtract.Pipeline.Extraction
   alias LangExtract.Prompt.{ExampleData, Template, Validator}
 
   describe "validate/1" do

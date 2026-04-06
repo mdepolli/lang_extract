@@ -3,7 +3,7 @@ defmodule LangExtract.Prompt.ExampleData do
   A single few-shot example: source text and expected extractions.
   """
 
-  alias LangExtract.Extraction
+  alias LangExtract.Pipeline.Extraction
 
   @type t :: %__MODULE__{
           text: String.t(),

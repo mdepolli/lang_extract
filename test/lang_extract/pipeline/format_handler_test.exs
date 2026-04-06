@@ -1,8 +1,8 @@
-defmodule LangExtract.FormatHandlerTest do
+defmodule LangExtract.Pipeline.FormatHandlerTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Extraction
-  alias LangExtract.FormatHandler
+  alias LangExtract.Pipeline.Extraction
+  alias LangExtract.Pipeline.FormatHandler
 
   describe "format_extractions/1" do
     test "serializes a single extraction to dynamic-key YAML with fences" do
@@ -252,9 +252,14 @@ defmodule LangExtract.FormatHandlerTest do
              }
     end
 
-    test "returns error for content without extractions key" do
+    test "returns error for non-YAML content" do
       assert {:error, {:invalid_format, "just plain text"}} =
                FormatHandler.normalize("just plain text")
+    end
+
+    test "passes through valid YAML without extractions key" do
+      assert {:ok, %{"wrong_key" => []}} =
+               FormatHandler.normalize("wrong_key: []")
     end
 
     test "handles combined think tags, fences, and dynamic keys" do
@@ -322,7 +327,7 @@ defmodule LangExtract.FormatHandlerTest do
 
   describe "round-trip" do
     test "format_extractions |> normalize |> Parser.parse returns same extractions" do
-      alias LangExtract.Parser
+      alias LangExtract.Pipeline.Parser
 
       extractions = [
         %Extraction{

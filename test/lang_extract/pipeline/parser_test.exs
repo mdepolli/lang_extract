@@ -1,7 +1,7 @@
-defmodule LangExtract.ParserTest do
+defmodule LangExtract.Pipeline.ParserTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.{Extraction, Parser}
+  alias LangExtract.Pipeline.{Extraction, Parser}
 
   describe "parse/1" do
     test "parses valid map with all fields" do
@@ -149,12 +149,14 @@ defmodule LangExtract.ParserTest do
       assert span.attributes == %{"a" => 1}
     end
 
-    test "propagates format errors" do
+    test "propagates format errors for unparseable input" do
       assert {:error, {:invalid_format, "bad input"}} =
                LangExtract.extract("source", "bad input")
+    end
 
-      raw = "wrong_key:\n- a: 1"
-      assert {:error, {:invalid_format, ^raw}} = LangExtract.extract("source", raw)
+    test "propagates missing_extractions for valid YAML without extractions key" do
+      assert {:error, :missing_extractions} =
+               LangExtract.extract("source", "wrong_key:\n- a: 1")
     end
 
     test "handles dynamic-key format from LLM output" do

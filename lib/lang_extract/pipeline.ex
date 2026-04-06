@@ -1,8 +1,10 @@
 defmodule LangExtract.Pipeline do
-  @moduledoc false
+  @moduledoc """
+  Extraction pipeline: normalize LLM output, parse extractions, align to source text.
+  """
 
   alias LangExtract.Alignment.{Aligner, Span}
-  alias LangExtract.{FormatHandler, Parser}
+  alias LangExtract.Pipeline.{FormatHandler, Parser}
 
   @spec extract(String.t(), String.t(), keyword()) ::
           {:ok, [Span.t()]}

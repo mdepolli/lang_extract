@@ -6,7 +6,7 @@ defmodule LangExtract.Prompt.Builder do
   for cross-chunk coreference resolution.
   """
 
-  alias LangExtract.{FormatHandler, Prompt.Template}
+  alias LangExtract.{Pipeline.FormatHandler, Prompt.Template}
 
   @doc """
   Builds a Q&A-formatted prompt from a template and chunk text.
