@@ -69,6 +69,23 @@ defmodule Mix.Tasks.Benchmark.Run do
               "timing" => %{"total_ms" => elapsed_ms}
             })
 
+          {:error, {:chunk_errors, errors, partial_spans}} ->
+            extractions = Enum.map(partial_spans, &span_to_normalized/1)
+            elapsed_ms = div(elapsed_us, 1000)
+
+            Mix.shell().error(
+              "    #{length(errors)} chunk error(s), #{length(partial_spans)} partial extractions"
+            )
+
+            Jason.encode!(%{
+              "source" => slug,
+              "task" => task_name,
+              "library" => "elixir",
+              "extractions" => extractions,
+              "timing" => %{"total_ms" => elapsed_ms},
+              "errors" => Enum.map(errors, &inspect/1)
+            })
+
           {:error, reason} ->
             Mix.shell().error("    ERROR: #{inspect(reason)}")
 

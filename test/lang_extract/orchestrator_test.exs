@@ -82,7 +82,8 @@ defmodule LangExtract.OrchestratorTest do
     test "propagates provider error" do
       stub_claude(%{"error" => "unauthorized"}, status: 401)
 
-      assert {:error, :unauthorized} = LangExtract.run(claude_client(), "some text", template())
+      assert {:error, {:chunk_errors, [:unauthorized], []}} =
+               LangExtract.run(claude_client(), "some text", template())
     end
 
     test "propagates error for LLM output missing extractions key" do
@@ -94,7 +95,8 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:error, :invalid_format} = LangExtract.run(claude_client(), "some text", template())
+      assert {:error, {:chunk_errors, [:invalid_format], []}} =
+               LangExtract.run(claude_client(), "some text", template())
     end
 
     test "propagates format handler error for invalid LLM output" do
@@ -104,7 +106,8 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:error, :invalid_format} = LangExtract.run(claude_client(), "some text", template())
+      assert {:error, {:chunk_errors, [:invalid_format], []}} =
+               LangExtract.run(claude_client(), "some text", template())
     end
 
     test "returns ok with empty list when LLM returns no extractions" do
@@ -215,7 +218,7 @@ defmodule LangExtract.OrchestratorTest do
     test "provider error in chunked mode fails entire run" do
       stub_claude(%{"error" => "unauthorized"}, status: 401)
 
-      assert {:error, :unauthorized} =
+      assert {:error, {:chunk_errors, [:unauthorized, :unauthorized], []}} =
                LangExtract.run(claude_client(), "First sentence. Second sentence.", template(),
                  max_chunk_chars: 20
                )

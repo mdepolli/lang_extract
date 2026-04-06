@@ -61,19 +61,25 @@ defmodule LangExtract.Orchestrator do
   end
 
   defp collect_results(stream) do
-    Enum.reduce_while(stream, {:ok, []}, fn
-      {:ok, {:ok, spans}}, {:ok, acc} ->
-        {:cont, {:ok, [spans | acc]}}
+    {spans, errors} =
+      Enum.reduce(stream, {[], []}, fn
+        {:ok, {:ok, chunk_spans}}, {spans_acc, errors_acc} ->
+          {[chunk_spans | spans_acc], errors_acc}
 
-      {:ok, {:error, _} = error}, _acc ->
-        {:halt, error}
+        {:ok, {:error, reason}}, {spans_acc, errors_acc} ->
+          {spans_acc, [reason | errors_acc]}
 
-      {:exit, reason}, _acc ->
-        {:halt, {:error, {:task_error, reason}}}
-    end)
-    |> case do
-      {:ok, chunks} -> {:ok, chunks |> Enum.reverse() |> List.flatten()}
-      error -> error
+        {:exit, reason}, {spans_acc, errors_acc} ->
+          {spans_acc, [{:task_error, reason} | errors_acc]}
+      end)
+
+    case errors do
+      [] ->
+        {:ok, spans |> Enum.reverse() |> List.flatten()}
+
+      _ ->
+        partial = spans |> Enum.reverse() |> List.flatten()
+        {:error, {:chunk_errors, Enum.reverse(errors), partial}}
     end
   end
 
