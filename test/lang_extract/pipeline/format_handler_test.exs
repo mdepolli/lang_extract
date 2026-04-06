@@ -262,6 +262,30 @@ defmodule LangExtract.Pipeline.FormatHandlerTest do
                FormatHandler.normalize("wrong_key: []")
     end
 
+    test "quotes unquoted YAML values containing colons" do
+      yaml = """
+      extractions:
+        - dialogue: work and service: and these
+          dialogue_attributes:
+            speaker: Someone
+      """
+
+      assert {:ok, %{"extractions" => [entry]}} = FormatHandler.normalize(yaml)
+      assert entry["text"] == "work and service: and these"
+    end
+
+    test "preserves already-quoted YAML values" do
+      yaml = """
+      extractions:
+        - dialogue: "already quoted: value"
+          dialogue_attributes:
+            speaker: Someone
+      """
+
+      assert {:ok, %{"extractions" => [entry]}} = FormatHandler.normalize(yaml)
+      assert entry["text"] == "already quoted: value"
+    end
+
     test "handles combined think tags, fences, and dynamic keys" do
       input = """
       <think>Thinking...</think>

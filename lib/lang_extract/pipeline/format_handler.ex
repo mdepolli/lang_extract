@@ -24,7 +24,7 @@ defmodule LangExtract.Pipeline.FormatHandler do
 
   @spec normalize(String.t()) :: {:ok, map()} | {:error, {:invalid_format, String.t()}}
   def normalize(raw) when is_binary(raw) do
-    cleaned = raw |> strip_think_tags() |> strip_fences()
+    cleaned = raw |> strip_think_tags() |> strip_fences() |> quote_yaml_values()
 
     case YamlElixir.read_from_string(cleaned) do
       {:ok, %{"extractions" => entries} = decoded} when is_list(entries) ->
@@ -37,6 +37,18 @@ defmodule LangExtract.Pipeline.FormatHandler do
       _ ->
         {:error, {:invalid_format, raw}}
     end
+  end
+
+  @yaml_value_re ~r/^(\s+- \w+: )(.+)$/m
+  defp quote_yaml_values(yaml) do
+    Regex.replace(@yaml_value_re, yaml, fn
+      _, prefix, "\"" <> _ = quoted ->
+        "#{prefix}#{quoted}"
+
+      _, prefix, value ->
+        escaped = String.replace(value, "\"", "\\\"")
+        "#{prefix}\"#{escaped}\""
+    end)
   end
 
   @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
