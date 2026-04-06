@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 BENCHMARK_DIR = Path(__file__).resolve().parent.parent
@@ -113,7 +114,56 @@ def normalize_extraction(extraction, source_text: str) -> dict:
     }
 
 
-def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path):
+def run_document(file: Path, task_def: dict, task_name: str,
+                 examples: list[ExampleData], model, run_dir: Path) -> None:
+    slug = file.stem
+    source_text = file.read_text(encoding="utf-8")
+    print(f"  {slug} ({len(source_text.encode('utf-8'))} bytes)...", end=" ", flush=True)
+
+    try:
+        start = time.perf_counter()
+        result = lx.extract(
+            text_or_documents=source_text,
+            prompt_description=task_def["description"],
+            examples=examples,
+            model=model,
+            max_workers=2,
+            show_progress=False,
+        )
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+        extractions = [
+            normalize_extraction(e, source_text)
+            for e in (result.extractions or [])
+        ]
+        print(f"{len(extractions)} extractions in {elapsed_ms}ms")
+
+        output = {
+            "source": slug,
+            "task": task_name,
+            "library": "python",
+            "extractions": extractions,
+            "timing": {"total_ms": elapsed_ms},
+        }
+
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        output = {
+            "source": slug,
+            "task": task_name,
+            "library": "python",
+            "extractions": [],
+            "timing": None,
+            "error": str(e),
+        }
+
+    out_path = run_dir / f"{slug}.json"
+    with open(out_path, "w") as f:
+        json.dump(output, f, indent=2)
+
+
+def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path,
+                  document: str | None = None):
     task_def = load_task(task_name)
     examples = build_examples(task_def)
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -123,66 +173,37 @@ def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path):
 
     model = ClaudeProvider(api_key=api_key, temperature=0)
 
-    corpus_files = sorted(corpus_dir.glob("*.txt"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{task_name}.jsonl"
+    if document:
+        corpus_files = [corpus_dir / f"{document}.txt"]
+    else:
+        corpus_files = sorted(corpus_dir.glob("*.txt"))
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    run_dir = out_dir / f"{task_name}_{timestamp}"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Running task '{task_name}' on {len(corpus_files)} documents...")
 
-    lines = []
     for file in corpus_files:
-        slug = file.stem
-        source_text = file.read_text(encoding="utf-8")
-        print(f"  {slug} ({len(source_text.encode('utf-8'))} bytes)...", end=" ", flush=True)
+        run_document(file, task_def, task_name, examples, model, run_dir)
 
-        try:
-            start = time.perf_counter()
-            result = lx.extract(
-                text_or_documents=source_text,
-                prompt_description=task_def["description"],
-                examples=examples,
-                model=model,
-                max_workers=2,
-                show_progress=False,
-            )
-            elapsed_ms = int((time.perf_counter() - start) * 1000)
+    latest_link = out_dir / f"{task_name}_latest"
+    if latest_link.is_symlink():
+        latest_link.unlink()
+    elif latest_link.exists():
+        latest_link.unlink()
+    latest_link.symlink_to(run_dir.name)
 
-            extractions = [
-                normalize_extraction(e, source_text)
-                for e in (result.extractions or [])
-            ]
-            print(f"{len(extractions)} extractions in {elapsed_ms}ms")
-
-            lines.append(json.dumps({
-                "source": slug,
-                "task": task_name,
-                "library": "python",
-                "extractions": extractions,
-                "timing": {"total_ms": elapsed_ms},
-            }))
-
-        except Exception as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            lines.append(json.dumps({
-                "source": slug,
-                "task": task_name,
-                "library": "python",
-                "extractions": [],
-                "timing": None,
-                "error": str(e),
-            }))
-
-    with open(out_path, "w") as f:
-        f.write("\n".join(lines) + "\n")
-
-    print(f"\nResults written to {out_path}")
+    print(f"\nResults written to {run_dir}/")
+    print(f"Symlink updated: {latest_link} -> {run_dir.name}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Python langextract benchmark")
     parser.add_argument("--task", required=True, help="Task name (e.g., ner)")
+    parser.add_argument("--document", help="Single document slug to run")
     parser.add_argument("--corpus", default=str(BENCHMARK_DIR / "corpus"), help="Corpus directory")
     parser.add_argument("--out", default=str(BENCHMARK_DIR / "results" / "python"), help="Output directory")
     args = parser.parse_args()
 
-    run_benchmark(args.task, Path(args.corpus), Path(args.out))
+    run_benchmark(args.task, Path(args.corpus), Path(args.out), args.document)
