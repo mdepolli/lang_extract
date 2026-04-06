@@ -15,7 +15,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
     {opts, _, _} =
       OptionParser.parse(args,
-        strict: [task: :string, corpus: :string, out: :string]
+        strict: [task: :string, corpus: :string, out: :string, document: :string]
       )
 
     task_name = opts[:task] || raise "Missing --task argument"
@@ -25,7 +25,12 @@ defmodule Mix.Tasks.Benchmark.Run do
     task_def = load_task(task_name)
     client = build_client()
     template = build_template(task_def)
-    corpus_files = Path.wildcard(Path.join(corpus_dir, "*.txt")) |> Enum.sort()
+
+    corpus_files =
+      case opts[:document] do
+        nil -> Path.wildcard(Path.join(corpus_dir, "*.txt")) |> Enum.sort()
+        slug -> [Path.join(corpus_dir, "#{slug}.txt")]
+      end
 
     timestamp = Calendar.strftime(DateTime.utc_now(), "%Y%m%d_%H%M%S")
     run_dir = Path.join(out_dir, "#{task_name}_#{timestamp}")
