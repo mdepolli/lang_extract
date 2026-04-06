@@ -17,8 +17,8 @@ template = %LangExtract.Prompt.Template{
     %LangExtract.Prompt.ExampleData{
       text: "Hamlet is set in Denmark.",
       extractions: [
-        %LangExtract.Extraction{class: "work", text: "Hamlet", attributes: %{"type" => "play"}},
-        %LangExtract.Extraction{class: "location", text: "Denmark", attributes: %{}}
+        %LangExtract.Pipeline.Extraction{class: "work", text: "Hamlet", attributes: %{"type" => "play"}},
+        %LangExtract.Pipeline.Extraction{class: "location", text: "Denmark", attributes: %{}}
       ]
     }
   ]
@@ -91,12 +91,12 @@ template = %LangExtract.Prompt.Template{
     %LangExtract.Prompt.ExampleData{
       text: "Patient was diagnosed with diabetes and prescribed metformin.",
       extractions: [
-        %LangExtract.Extraction{
+        %LangExtract.Pipeline.Extraction{
           class: "condition",
           text: "diabetes",
           attributes: %{"chronicity" => "chronic"}
         },
-        %LangExtract.Extraction{
+        %LangExtract.Pipeline.Extraction{
           class: "medication",
           text: "metformin",
           attributes: %{}

@@ -131,7 +131,7 @@ byte positions in the source.
 
 #### Format Handler
 
-- **`LangExtract.FormatHandler`** — Hexagonal port between external LLM format
+- **`LangExtract.Pipeline.FormatHandler`** — Hexagonal port between external LLM format
   and internal domain. Serializes `Extraction` structs to dynamic-key JSON for
   prompts. Normalizes raw LLM output (strips `<think>` tags, markdown fences,
   converts dynamic keys to canonical `class`/`text`/`attributes` format).
