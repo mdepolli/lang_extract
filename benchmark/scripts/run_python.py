@@ -117,8 +117,9 @@ def normalize_extraction(extraction, source_text: str) -> dict:
 def run_document(file: Path, task_def: dict, task_name: str,
                  examples: list[ExampleData], model, run_dir: Path) -> None:
     slug = file.stem
-    source_text = file.read_text(encoding="utf-8")
-    print(f"  {slug} ({len(source_text.encode('utf-8'))} bytes)...", end=" ", flush=True)
+    source_bytes = file.read_bytes()
+    source_text = source_bytes.decode("utf-8")
+    print(f"  {slug} ({len(source_bytes)} bytes)...", end=" ", flush=True)
 
     try:
         start = time.perf_counter()
