@@ -39,7 +39,7 @@ defmodule LangExtract.Pipeline.FormatHandler do
     end
   end
 
-  @yaml_value_re ~r/^(\s+- \w+: )(.+)$/m
+  @yaml_value_re ~r/^(\s+- [\w-]+: )(.+)$/m
   defp quote_yaml_values(yaml) do
     Regex.replace(@yaml_value_re, yaml, fn
       _, prefix, "\"" <> _ = quoted ->
