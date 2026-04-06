@@ -31,6 +31,7 @@ defmodule LangExtract.Pipeline.FormatHandler do
         normalized = Enum.map(entries, &normalize_entry/1)
         {:ok, %{decoded | "extractions" => normalized}}
 
+      # Valid YAML without "extractions" key — let Parser return :missing_extractions
       {:ok, %{} = decoded} when decoded != %{} ->
         {:ok, decoded}
 
