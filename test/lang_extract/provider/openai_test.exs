@@ -212,7 +212,7 @@ defmodule LangExtract.Provider.OpenAITest do
 
     test "returns error on missing api key" do
       System.delete_env("OPENAI_API_KEY")
-      assert {:error, :missing_api_key} = OpenAI.infer("prompt")
+      assert {:error, :missing_api_key} = OpenAI.infer("prompt", [])
     end
   end
 end

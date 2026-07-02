@@ -227,7 +227,7 @@ defmodule LangExtract.Provider.GeminiTest do
 
     test "returns error on missing api key" do
       System.delete_env("GEMINI_API_KEY")
-      assert {:error, :missing_api_key} = Gemini.infer("prompt")
+      assert {:error, :missing_api_key} = Gemini.infer("prompt", [])
     end
   end
 end

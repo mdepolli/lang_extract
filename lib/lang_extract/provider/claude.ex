@@ -38,7 +38,7 @@ defmodule LangExtract.Provider.Claude do
 
   @impl true
   @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
-  def infer(prompt, opts \\ []) do
+  def infer(prompt, opts) do
     with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
       req
       |> Req.post(request_opts)

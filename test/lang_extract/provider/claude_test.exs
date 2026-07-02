@@ -216,7 +216,7 @@ defmodule LangExtract.Provider.ClaudeTest do
 
     test "returns error on missing api key" do
       System.delete_env("ANTHROPIC_API_KEY")
-      assert {:error, :missing_api_key} = Claude.infer("prompt")
+      assert {:error, :missing_api_key} = Claude.infer("prompt", [])
     end
   end
 end

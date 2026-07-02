@@ -2,6 +2,17 @@ defmodule LangExtract do
   @moduledoc """
   Extracts structured data from text with source grounding.
   Maps extraction strings back to exact byte positions in source text.
+
+  This module is the main entry point: `new/2` builds a client, `run/4`
+  executes the full pipeline, and `align/3` / `extract/3` expose the
+  lower-level steps. Beyond the facade:
+
+    * `LangExtract.Prompt.Validator` — pre-flight check that few-shot
+      examples align against their own source text
+    * `LangExtract.Serializer` — convert results to plain maps and JSONL
+      for storage or interop
+    * `LangExtract.Extraction` — the extraction struct used in template
+      examples and parsed LLM output
   """
 
   alias LangExtract.Alignment.{Aligner, Span}

@@ -1,6 +1,7 @@
 defmodule LangExtract.OrchestratorTest do
   use ExUnit.Case, async: true
 
+  alias LangExtract.Alignment.Span
   alias LangExtract.Client
   alias LangExtract.Pipeline.ChunkError
 
@@ -246,7 +247,7 @@ defmodule LangExtract.OrchestratorTest do
                  max_concurrency: 1
                )
 
-      assert [%{text: "First"} | _] = spans
+      assert [%Span{text: "First", class: "word", status: :exact}] = spans
       assert [%ChunkError{reason: :unauthorized} = error] = errors
       assert error.byte_start > 0
     end
