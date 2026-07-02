@@ -2,7 +2,7 @@ defmodule LangExtract.Alignment.Aligner do
   @moduledoc """
   Maps extraction strings to byte spans in source text.
 
-  Phase 1: Exact contiguous match via `List.myers_difference/2`.
+  Phase 1: Exact contiguous match via linear scan over source tokens.
   Phase 2: Fuzzy sliding-window fallback.
   """
 
@@ -16,24 +16,25 @@ defmodule LangExtract.Alignment.Aligner do
     source_tokens = Tokenizer.tokenize(source)
     source_words = reject_whitespace(source_tokens)
     source_words_tuple = List.to_tuple(source_words)
-    source_texts = Enum.map(source_words, &String.downcase(&1.text))
-    source_texts_tuple = List.to_tuple(source_texts)
+
+    source_texts_tuple =
+      source_words |> Enum.map(&String.downcase(&1.text)) |> List.to_tuple()
 
     Enum.map(extractions, fn extraction ->
-      align_one(extraction, source_words_tuple, source_texts, source_texts_tuple, fuzzy_threshold)
+      align_one(extraction, source_words_tuple, source_texts_tuple, fuzzy_threshold)
     end)
   end
 
-  defp align_one("", _source_words, _source_texts, _source_texts_tuple, _threshold) do
+  defp align_one("", _source_words, _source_texts_tuple, _threshold) do
     not_found_span("")
   end
 
-  defp align_one(extraction, source_words, source_texts, source_texts_tuple, threshold) do
+  defp align_one(extraction, source_words, source_texts_tuple, threshold) do
     ext_tokens = extraction |> Tokenizer.tokenize() |> reject_whitespace()
     ext_texts = Enum.map(ext_tokens, &String.downcase(&1.text))
     ext_length = length(ext_texts)
 
-    case exact_match(extraction, source_words, source_texts, ext_texts, ext_length) do
+    case exact_match(extraction, source_words, source_texts_tuple, ext_texts, ext_length) do
       {:ok, span} ->
         span
 
@@ -49,37 +50,26 @@ defmodule LangExtract.Alignment.Aligner do
     end
   end
 
-  defp exact_match(extraction, source_words, source_texts, ext_texts, ext_length) do
-    diff = List.myers_difference(source_texts, ext_texts)
+  defp exact_match(_extraction, _source_words, _source_texts_tuple, [], _ext_length) do
+    :no_match
+  end
 
-    {match, _index} =
-      Enum.reduce(diff, {nil, 0}, fn
-        {:eq, segment}, {best, src_idx} ->
-          seg_len = length(segment)
+  defp exact_match(extraction, source_words, source_texts_tuple, ext_texts, ext_length) do
+    last_start = tuple_size(source_texts_tuple) - ext_length
 
-          best =
-            if seg_len >= ext_length and is_nil(best) do
-              {src_idx, src_idx + ext_length - 1}
-            else
-              best
-            end
-
-          {best, src_idx + seg_len}
-
-        {:del, segment}, {best, src_idx} ->
-          {best, src_idx + length(segment)}
-
-        {:ins, _segment}, {best, src_idx} ->
-          {best, src_idx}
-      end)
-
-    case match do
-      {start_idx, end_idx} ->
-        {:ok, found_span(extraction, source_words, start_idx, end_idx, :exact)}
-
+    case Enum.find(0..last_start//1, &match_at?(source_texts_tuple, ext_texts, &1)) do
       nil ->
         :no_match
+
+      start_idx ->
+        {:ok, found_span(extraction, source_words, start_idx, start_idx + ext_length - 1, :exact)}
     end
+  end
+
+  defp match_at?(source_texts_tuple, ext_texts, start_idx) do
+    ext_texts
+    |> Enum.with_index(start_idx)
+    |> Enum.all?(fn {text, idx} -> elem(source_texts_tuple, idx) == text end)
   end
 
   defp fuzzy_match(extraction, source_words, source_texts_tuple, ext_texts, ext_length, threshold) do

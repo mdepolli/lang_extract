@@ -127,12 +127,12 @@ defmodule LangExtract.Alignment.AlignerTest do
       end)
     end
 
-    test "repeated token in source falls back to fuzzy for multi-word phrase" do
-      # "for" appears twice — Myers diff can't find contiguous exact match
+    test "repeated token elsewhere in source does not prevent exact match" do
+      # "for" also appears earlier in the source
       source = "Pt was prescribed Naprosyn for pain and prednisone for one month."
 
-      [span] = Aligner.align(source, ["for one month"], fuzzy_threshold: 0.6)
-      assert span.status == :fuzzy
+      [span] = Aligner.align(source, ["for one month"])
+      assert span.status == :exact
       extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
       assert extracted == "for one month"
     end
