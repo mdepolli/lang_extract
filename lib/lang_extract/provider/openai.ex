@@ -25,7 +25,6 @@ defmodule LangExtract.Provider.OpenAI do
       req_opts =
         Provider.req_options(opts,
           base_url: base_url,
-          retry: false,
           headers: %{"authorization" => "Bearer #{api_key}"}
         )
 

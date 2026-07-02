@@ -23,7 +23,7 @@ defmodule LangExtract.Provider.Gemini do
   def build_http_client(opts) do
     with {:ok, _api_key} <- Provider.fetch_api_key(opts, "GEMINI_API_KEY") do
       %{base_url: base_url} = Provider.common_opts(opts, @defaults)
-      req_opts = Provider.req_options(opts, base_url: base_url, retry: false)
+      req_opts = Provider.req_options(opts, base_url: base_url)
       {:ok, Req.new(req_opts)}
     end
   end

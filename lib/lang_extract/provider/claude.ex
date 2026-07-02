@@ -26,7 +26,6 @@ defmodule LangExtract.Provider.Claude do
       req_opts =
         Provider.req_options(opts,
           base_url: base_url,
-          retry: false,
           headers: %{
             "x-api-key" => api_key,
             "anthropic-version" => @api_version

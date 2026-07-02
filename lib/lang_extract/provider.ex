@@ -62,18 +62,28 @@ defmodule LangExtract.Provider do
     end
   end
 
+  # LLM completions routinely exceed Req's 15s receive_timeout default, and
+  # transient failures (429/5xx/transport) would otherwise permanently drop
+  # a chunk since the orchestrator doesn't retry.
+  @http_defaults [
+    receive_timeout: 120_000,
+    retry: :transient
+  ]
+
   @doc """
   Merges caller-supplied `:req_options` into the provider's Req options.
 
-  Allows passing through any Req configuration (timeouts, pool settings,
-  plug for testing, etc.) without the provider needing to know about them.
+  Applies shared HTTP defaults first (120s receive timeout, transient
+  retries), then the provider's own options, then anything in `:req_options`
+  — so callers can override any Req configuration (timeouts, retry policy,
+  pool settings, plug for testing, etc.) without the provider needing to
+  know about them.
   """
   @spec req_options(keyword(), keyword()) :: keyword()
   def req_options(opts, req_opts) do
-    case Keyword.get(opts, :req_options) do
-      nil -> req_opts
-      extra -> Keyword.merge(req_opts, extra)
-    end
+    @http_defaults
+    |> Keyword.merge(req_opts)
+    |> Keyword.merge(Keyword.get(opts, :req_options) || [])
   end
 
   @doc """

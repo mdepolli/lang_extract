@@ -22,6 +22,8 @@ defmodule LangExtract.Provider.OpenAITest do
 
       assert request_opts[:url] == "/v1/chat/completions"
       assert req.options.base_url == "https://api.openai.com"
+      assert req.options.receive_timeout == 120_000
+      assert req.options.retry == :transient
       assert req.headers["authorization"] == ["Bearer sk-test"]
 
       body = request_opts[:json]

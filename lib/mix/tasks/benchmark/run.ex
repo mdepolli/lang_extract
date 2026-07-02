@@ -133,8 +133,7 @@ defmodule Mix.Tasks.Benchmark.Run do
     LangExtract.new(:claude,
       api_key: api_key,
       model: "claude-sonnet-4-20250514",
-      temperature: 0,
-      req_options: [receive_timeout: 120_000]
+      temperature: 0
     )
   end
 

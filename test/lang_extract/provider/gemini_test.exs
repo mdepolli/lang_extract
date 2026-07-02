@@ -23,6 +23,8 @@ defmodule LangExtract.Provider.GeminiTest do
       assert request_opts[:url] == "/v1beta/models/gemini-2.0-flash:generateContent"
       assert request_opts[:params] == [key: "test-key"]
       assert req.options.base_url == "https://generativelanguage.googleapis.com"
+      assert req.options.receive_timeout == 120_000
+      assert req.options.retry == :transient
       # No auth header — key is in query params
       refute Map.has_key?(req.headers, "authorization")
       refute Map.has_key?(req.headers, "x-api-key")

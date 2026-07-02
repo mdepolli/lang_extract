@@ -22,6 +22,8 @@ defmodule LangExtract.Provider.ClaudeTest do
 
       assert request_opts[:url] == "/v1/messages"
       assert req.options.base_url == "https://api.anthropic.com"
+      assert req.options.receive_timeout == 120_000
+      assert req.options.retry == :transient
 
       body = request_opts[:json]
       assert body["model"] == "claude-sonnet-4-20250514"
@@ -71,6 +73,17 @@ defmodule LangExtract.Provider.ClaudeTest do
     test "returns error when api key is empty string" do
       System.put_env("ANTHROPIC_API_KEY", "")
       assert {:error, :missing_api_key} = Claude.build_request("prompt", [])
+    end
+
+    test "req_options override HTTP defaults" do
+      assert {:ok, {req, _request_opts}} =
+               Claude.build_request("prompt",
+                 api_key: "sk-test",
+                 req_options: [receive_timeout: 5_000, retry: false]
+               )
+
+      assert req.options.receive_timeout == 5_000
+      assert req.options.retry == false
     end
 
     test "custom base_url is used" do
