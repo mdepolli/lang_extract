@@ -44,6 +44,7 @@ defmodule LangExtract.MixProject do
       # Dev/Test
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:plug, "~> 1.15", only: :test}
     ]
   end
@@ -58,6 +59,10 @@ defmodule LangExtract.MixProject do
 
   defp package do
     [
+      # Explicit list so the benchmark Mix task (which needs the local
+      # benchmark/ corpus) doesn't ship in the package.
+      files:
+        ~w(lib/lang_extract lib/lang_extract.ex .formatter.exs mix.exs README.md LICENSE CHANGELOG.md),
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
       maintainers: ["Marcelo De Polli"]
