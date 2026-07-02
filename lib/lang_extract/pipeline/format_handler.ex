@@ -4,6 +4,10 @@ defmodule LangExtract.Pipeline.FormatHandler do
 
   Serializes `%Extraction{}` structs to dynamic-key YAML for prompts,
   and normalizes raw LLM output back to canonical format for the parser.
+
+  Both directions of the wire format live here on purpose — they share the
+  dynamic-key `_attributes` contract, so `Prompt.Builder` calls in for the
+  encode half rather than duplicating it.
   """
 
   alias LangExtract.Pipeline.Extraction

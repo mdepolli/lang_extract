@@ -5,6 +5,9 @@ defmodule LangExtract.Prompt.Validator do
   Each extraction text should align exactly against its own example's source text.
   Catches typos, hallucinated spans, and copy-paste errors before they reach the LLM.
 
+  Deliberately uses the production `Alignment.Aligner`, so a passing validation
+  predicts how the same extractions align at runtime.
+
   The validator is a pure function — it reports what it finds. The caller decides
   what to do with the results (log, raise, ignore).
   """
