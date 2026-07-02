@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`LangExtract.IO` renamed to `LangExtract.Serializer`** (breaking) — The old
+  name shadowed Elixir's standard-library `IO` module, forcing callers to alias
+  around the collision. The functions are unchanged.
+- **Provider HTTP defaults: 120s receive timeout and transient retries** —
+  Reverses the 0.2.0 "retries disabled by default" decision. LLM completions
+  routinely exceed Req's 15s `receive_timeout` default, and `retry: false`
+  meant a transient 429/5xx permanently dropped a chunk as a `ChunkError`.
+  Both remain overridable via `req_options:`.
+- **Exact alignment via linear scan** — Replaces `List.myers_difference/2`,
+  which did O(N²) work in source token count and missed genuinely contiguous
+  matches when extraction tokens also appeared scattered earlier in the source
+  (those fell back to `:fuzzy`; they now align as `:exact` with the same byte
+  offsets).
+- **Hex package no longer ships the benchmark Mix task** — `mix benchmark.run`
+  needs the local `benchmark/` corpus, which was never packaged, so the task
+  could only fail for downstream users. An explicit `files:` list now scopes
+  the package to the library itself.
+
+### Added
+
+- **`Serializer.span_to_map/1`** — Public single-span serialization
+  (previously private), also used by the benchmark task instead of a
+  duplicated implementation.
+
+### Fixed
+
+- **`Serializer.from_map/1` and `load_jsonl/1` no longer raise on malformed
+  input** — An unknown or missing extraction `"status"` now returns
+  `{:error, :invalid_data}` (the module's existing error contract) instead of
+  raising `ArgumentError` from `String.to_existing_atom/1`.
+
 ## [0.3.0] - 2026-04-06
 
 ### Changed
