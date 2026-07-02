@@ -8,7 +8,7 @@ defmodule LangExtract.MixProject do
     [
       app: :lang_extract,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       test_coverage: [
         ignore_modules: [
