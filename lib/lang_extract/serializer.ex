@@ -1,4 +1,4 @@
-defmodule LangExtract.IO do
+defmodule LangExtract.Serializer do
   @moduledoc """
   Serialization and deserialization of extraction results.
 
@@ -20,13 +20,32 @@ defmodule LangExtract.IO do
   end
 
   @doc """
+  Converts a single span to a plain map with string keys.
+  """
+  @spec span_to_map(Span.t()) :: map()
+  def span_to_map(%Span{} = span) do
+    %{
+      "class" => span.class,
+      "text" => span.text,
+      "byte_start" => span.byte_start,
+      "byte_end" => span.byte_end,
+      "status" => Atom.to_string(span.status),
+      "attributes" => span.attributes
+    }
+  end
+
+  @doc """
   Converts a plain map back to extraction results.
+
+  Returns `{:error, :invalid_data}` if the shape is wrong or an extraction
+  has an unknown `"status"`.
   """
   @spec from_map(map()) :: {:ok, {String.t(), [Span.t()]}} | {:error, :invalid_data}
   def from_map(%{"text" => text, "extractions" => extractions})
       when is_binary(text) and is_list(extractions) do
-    spans = Enum.map(extractions, &map_to_span/1)
-    {:ok, {text, spans}}
+    with {:ok, spans} <- map_spans(extractions) do
+      {:ok, {text, spans}}
+    end
   end
 
   def from_map(_), do: {:error, :invalid_data}
@@ -67,37 +86,47 @@ defmodule LangExtract.IO do
   end
 
   defp parse_jsonl_line(line, acc) do
-    case Jason.decode(line) do
-      {:ok, map} ->
-        case from_map(map) do
-          {:ok, result} -> {:cont, [result | acc]}
-          {:error, _} = error -> {:halt, error}
-        end
-
-      {:error, _} ->
-        {:halt, {:error, :invalid_data}}
+    with {:ok, map} <- Jason.decode(line),
+         {:ok, result} <- from_map(map) do
+      {:cont, [result | acc]}
+    else
+      {:error, _} -> {:halt, {:error, :invalid_data}}
     end
   end
 
-  defp span_to_map(%Span{} = span) do
-    %{
-      "class" => span.class,
-      "text" => span.text,
-      "byte_start" => span.byte_start,
-      "byte_end" => span.byte_end,
-      "status" => Atom.to_string(span.status),
-      "attributes" => span.attributes
-    }
+  defp map_spans(extractions) do
+    spans =
+      Enum.reduce_while(extractions, [], fn map, acc ->
+        case map_to_span(map) do
+          {:ok, span} -> {:cont, [span | acc]}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case spans do
+      {:error, _} = error -> error
+      list -> {:ok, Enum.reverse(list)}
+    end
   end
 
-  defp map_to_span(map) do
-    %Span{
-      class: map["class"],
-      text: map["text"],
-      byte_start: map["byte_start"],
-      byte_end: map["byte_end"],
-      status: String.to_existing_atom(map["status"]),
-      attributes: map["attributes"] || %{}
-    }
+  defp map_to_span(map) when is_map(map) do
+    with {:ok, status} <- parse_status(map["status"]) do
+      {:ok,
+       %Span{
+         class: map["class"],
+         text: map["text"],
+         byte_start: map["byte_start"],
+         byte_end: map["byte_end"],
+         status: status,
+         attributes: map["attributes"] || %{}
+       }}
+    end
   end
+
+  defp map_to_span(_), do: {:error, :invalid_data}
+
+  defp parse_status("exact"), do: {:ok, :exact}
+  defp parse_status("fuzzy"), do: {:ok, :fuzzy}
+  defp parse_status("not_found"), do: {:ok, :not_found}
+  defp parse_status(_), do: {:error, :invalid_data}
 end

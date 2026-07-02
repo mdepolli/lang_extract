@@ -202,17 +202,17 @@ stripped automatically.
 Convert results to plain maps for storage or interop:
 
 ```elixir
-map = LangExtract.IO.to_map(source, spans)
+map = LangExtract.Serializer.to_map(source, spans)
 # %{"text" => "...", "extractions" => [%{"class" => "...", "status" => "exact", ...}]}
 
-{:ok, {source, spans}} = LangExtract.IO.from_map(map)
+{:ok, {source, spans}} = LangExtract.Serializer.from_map(map)
 ```
 
 Save and load multiple results as JSONL:
 
 ```elixir
-LangExtract.IO.save_jsonl([{source1, spans1}, {source2, spans2}], "results.jsonl")
-{:ok, results} = LangExtract.IO.load_jsonl("results.jsonl")
+LangExtract.Serializer.save_jsonl([{source1, spans1}, {source2, spans2}], "results.jsonl")
+{:ok, results} = LangExtract.Serializer.load_jsonl("results.jsonl")
 ```
 
 ## Provider Options

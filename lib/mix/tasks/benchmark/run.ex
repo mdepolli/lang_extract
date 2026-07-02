@@ -4,7 +4,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   use Mix.Task
 
-  alias LangExtract.{Pipeline.ChunkError, Pipeline.Extraction, Prompt}
+  alias LangExtract.{Pipeline.ChunkError, Pipeline.Extraction, Prompt, Serializer}
 
   @default_corpus "benchmark/corpus"
   @default_out "benchmark/results/elixir"
@@ -76,7 +76,7 @@ defmodule Mix.Tasks.Benchmark.Run do
     result =
       case run_result do
         {:ok, {spans, errors}} ->
-          extractions = Enum.map(spans, &span_to_normalized/1)
+          extractions = Enum.map(spans, &Serializer.span_to_map/1)
 
           case errors do
             [] ->
@@ -160,17 +160,6 @@ defmodule Mix.Tasks.Benchmark.Run do
       "byte_start" => err.byte_start,
       "byte_end" => err.byte_end,
       "reason" => inspect(err.reason)
-    }
-  end
-
-  defp span_to_normalized(span) do
-    %{
-      "class" => span.class,
-      "text" => span.text,
-      "byte_start" => span.byte_start,
-      "byte_end" => span.byte_end,
-      "status" => Atom.to_string(span.status),
-      "attributes" => span.attributes
     }
   end
 end

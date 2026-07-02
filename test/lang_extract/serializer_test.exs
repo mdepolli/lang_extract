@@ -1,8 +1,8 @@
-defmodule LangExtract.IOTest do
+defmodule LangExtract.SerializerTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Alignment.Span
-  alias LangExtract.IO, as: LIO
+  alias LangExtract.Serializer
 
   @exact_span %Span{
     text: "fox",
@@ -26,7 +26,7 @@ defmodule LangExtract.IOTest do
 
   describe "to_map/2" do
     test "converts spans to plain map" do
-      result = LIO.to_map(@source, [@exact_span])
+      result = Serializer.to_map(@source, [@exact_span])
 
       assert result["text"] == @source
       assert [extraction] = result["extractions"]
@@ -39,7 +39,7 @@ defmodule LangExtract.IOTest do
     end
 
     test "not_found span has nil byte offsets" do
-      result = LIO.to_map(@source, [@not_found_span])
+      result = Serializer.to_map(@source, [@not_found_span])
 
       [extraction] = result["extractions"]
       assert extraction["status"] == "not_found"
@@ -48,25 +48,40 @@ defmodule LangExtract.IOTest do
     end
 
     test "empty spans list" do
-      result = LIO.to_map(@source, [])
+      result = Serializer.to_map(@source, [])
       assert result["extractions"] == []
     end
 
     test "preserves nested attributes" do
       span = %Span{@exact_span | attributes: %{"nested" => %{"deep" => true}}}
-      result = LIO.to_map(@source, [span])
+      result = Serializer.to_map(@source, [span])
 
       [extraction] = result["extractions"]
       assert extraction["attributes"] == %{"nested" => %{"deep" => true}}
     end
   end
 
+  describe "span_to_map/1" do
+    test "converts a single span" do
+      map = Serializer.span_to_map(@exact_span)
+
+      assert map == %{
+               "class" => "animal",
+               "text" => "fox",
+               "byte_start" => 16,
+               "byte_end" => 19,
+               "status" => "exact",
+               "attributes" => %{"type" => "mammal"}
+             }
+    end
+  end
+
   describe "from_map/1" do
     test "round-trips with to_map" do
       original_spans = [@exact_span, @not_found_span]
-      map = LIO.to_map(@source, original_spans)
+      map = Serializer.to_map(@source, original_spans)
 
-      assert {:ok, {source, spans}} = LIO.from_map(map)
+      assert {:ok, {source, spans}} = Serializer.from_map(map)
       assert source == @source
       assert length(spans) == 2
 
@@ -81,15 +96,39 @@ defmodule LangExtract.IOTest do
     end
 
     test "returns error for missing text key" do
-      assert {:error, :invalid_data} = LIO.from_map(%{"extractions" => []})
+      assert {:error, :invalid_data} = Serializer.from_map(%{"extractions" => []})
     end
 
     test "returns error for missing extractions key" do
-      assert {:error, :invalid_data} = LIO.from_map(%{"text" => "hello"})
+      assert {:error, :invalid_data} = Serializer.from_map(%{"text" => "hello"})
     end
 
     test "returns error for non-map input" do
-      assert {:error, :invalid_data} = LIO.from_map("not a map")
+      assert {:error, :invalid_data} = Serializer.from_map("not a map")
+    end
+
+    test "returns error for unknown status" do
+      map = %{
+        "text" => @source,
+        "extractions" => [%{"text" => "fox", "status" => "bogus"}]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for missing status" do
+      map = %{
+        "text" => @source,
+        "extractions" => [%{"text" => "fox"}]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for non-map extraction entry" do
+      map = %{"text" => @source, "extractions" => ["not a map"]}
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
     end
   end
 
@@ -103,8 +142,8 @@ defmodule LangExtract.IOTest do
         {"another text", [@not_found_span]}
       ]
 
-      assert :ok = LIO.save_jsonl(results, path)
-      assert {:ok, loaded} = LIO.load_jsonl(path)
+      assert :ok = Serializer.save_jsonl(results, path)
+      assert {:ok, loaded} = Serializer.load_jsonl(path)
 
       assert length(loaded) == 2
 
@@ -119,12 +158,35 @@ defmodule LangExtract.IOTest do
     test "empty results list produces empty file", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "empty.jsonl")
 
-      assert :ok = LIO.save_jsonl([], path)
-      assert {:ok, []} = LIO.load_jsonl(path)
+      assert :ok = Serializer.save_jsonl([], path)
+      assert {:ok, []} = Serializer.load_jsonl(path)
     end
 
     test "load_jsonl on nonexistent file returns error" do
-      assert {:error, :enoent} = LIO.load_jsonl("/nonexistent/path.jsonl")
+      assert {:error, :enoent} = Serializer.load_jsonl("/nonexistent/path.jsonl")
+    end
+
+    @tag :tmp_dir
+    test "load_jsonl returns error for malformed status", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "bad_status.jsonl")
+
+      line =
+        Jason.encode!(%{
+          "text" => @source,
+          "extractions" => [%{"text" => "fox", "status" => "almost_exact"}]
+        })
+
+      File.write!(path, line <> "\n")
+
+      assert {:error, :invalid_data} = Serializer.load_jsonl(path)
+    end
+
+    @tag :tmp_dir
+    test "load_jsonl returns error for invalid JSON line", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "bad_json.jsonl")
+      File.write!(path, "{not json}\n")
+
+      assert {:error, :invalid_data} = Serializer.load_jsonl(path)
     end
   end
 end
