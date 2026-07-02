@@ -1,4 +1,4 @@
-defmodule LangExtract.Pipeline.Extraction do
+defmodule LangExtract.Extraction do
   @moduledoc """
   A single extraction from LLM output.
 

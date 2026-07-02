@@ -2,13 +2,13 @@ defmodule LangExtract.Pipeline.Parser do
   @moduledoc """
   Parses canonical extraction maps into `%Extraction{}` structs.
 
-  Expects normalized maps from `FormatHandler`. Validates each
+  Expects normalized maps from `LangExtract.WireFormat`. Validates each
   entry before constructing structs.
   """
 
   require Logger
 
-  alias LangExtract.Pipeline.Extraction
+  alias LangExtract.Extraction
 
   @spec parse(map()) :: {:ok, [Extraction.t()]} | {:error, :missing_extractions}
   def parse(decoded) when is_map(decoded) do

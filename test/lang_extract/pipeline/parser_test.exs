@@ -1,7 +1,8 @@
 defmodule LangExtract.Pipeline.ParserTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Pipeline.{Extraction, Parser}
+  alias LangExtract.Extraction
+  alias LangExtract.Pipeline.Parser
 
   describe "parse/1" do
     test "parses valid map with all fields" do

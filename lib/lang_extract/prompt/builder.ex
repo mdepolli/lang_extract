@@ -3,7 +3,7 @@ defmodule LangExtract.Prompt.Builder do
   Renders Q&A-formatted prompts from a template for LLM extraction.
   """
 
-  alias LangExtract.{Pipeline.FormatHandler, Prompt.Template}
+  alias LangExtract.{Prompt.Template, WireFormat}
 
   @spec build(Template.t(), String.t()) :: String.t()
   def build(%Template{} = template, chunk_text) do
@@ -21,7 +21,7 @@ defmodule LangExtract.Prompt.Builder do
 
   defp format_examples(examples) do
     Enum.map_join(examples, "\n\n", fn example ->
-      formatted = FormatHandler.format_extractions(example.extractions)
+      formatted = WireFormat.format_extractions(example.extractions)
       "#{example.text}\n#{formatted}"
     end)
   end

@@ -4,13 +4,14 @@ defmodule LangExtract.Pipeline do
   """
 
   alias LangExtract.Alignment.{Aligner, Span}
-  alias LangExtract.Pipeline.{FormatHandler, Parser}
+  alias LangExtract.Pipeline.Parser
+  alias LangExtract.WireFormat
 
   @spec extract(String.t(), String.t(), keyword()) ::
           {:ok, [Span.t()]}
           | {:error, {:invalid_format, String.t()} | :missing_extractions}
   def extract(source, raw_llm_output, opts) do
-    with {:ok, normalized} <- FormatHandler.normalize(raw_llm_output),
+    with {:ok, normalized} <- WireFormat.normalize(raw_llm_output),
          {:ok, extractions} <- Parser.parse(normalized) do
       texts = Enum.map(extractions, & &1.text)
       spans = Aligner.align(source, texts, opts)

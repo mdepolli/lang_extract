@@ -1,4 +1,4 @@
-defmodule LangExtract.Pipeline.FormatHandler do
+defmodule LangExtract.WireFormat do
   @moduledoc """
   Port between external LLM format and internal domain.
 
@@ -6,11 +6,11 @@ defmodule LangExtract.Pipeline.FormatHandler do
   and normalizes raw LLM output back to canonical format for the parser.
 
   Both directions of the wire format live here on purpose — they share the
-  dynamic-key `_attributes` contract, so `Prompt.Builder` calls in for the
-  encode half rather than duplicating it.
+  dynamic-key `_attributes` contract. `Prompt.Builder` uses the encode half;
+  `Pipeline` uses the decode half.
   """
 
-  alias LangExtract.Pipeline.Extraction
+  alias LangExtract.Extraction
 
   @attribute_suffix "_attributes"
 

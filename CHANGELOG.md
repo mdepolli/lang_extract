@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`LangExtract.IO` renamed to `LangExtract.Serializer`** (breaking) — The old
   name shadowed Elixir's standard-library `IO` module, forcing callers to alias
   around the collision. The functions are unchanged.
+- **`LangExtract.Pipeline.Extraction` promoted to `LangExtract.Extraction`**
+  (breaking) — The struct users build in every template example is the
+  library's central payload, shared by `Prompt` and `Pipeline` alike; it now
+  lives at the top level instead of inside one consumer's namespace.
+- **`LangExtract.Pipeline.FormatHandler` renamed to `LangExtract.WireFormat`**
+  (breaking) — The LLM wire-format port (encode for prompts, decode for
+  responses) moved to the top level for the same reason. With both moves,
+  `Prompt` no longer depends on `Pipeline` at all.
 - **Provider HTTP defaults: 120s receive timeout and transient retries** —
   Reverses the 0.2.0 "retries disabled by default" decision. LLM completions
   routinely exceed Req's 15s `receive_timeout` default, and `retry: false`

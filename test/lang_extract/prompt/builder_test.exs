@@ -1,7 +1,7 @@
 defmodule LangExtract.Prompt.BuilderTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Pipeline.Extraction
+  alias LangExtract.Extraction
   alias LangExtract.Prompt.{Builder, ExampleData, Template}
 
   describe "build/2" do

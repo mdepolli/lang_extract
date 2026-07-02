@@ -17,8 +17,8 @@ template = %LangExtract.Prompt.Template{
     %LangExtract.Prompt.ExampleData{
       text: "Hamlet is set in Denmark.",
       extractions: [
-        %LangExtract.Pipeline.Extraction{class: "work", text: "Hamlet", attributes: %{"type" => "play"}},
-        %LangExtract.Pipeline.Extraction{class: "location", text: "Denmark", attributes: %{}}
+        %LangExtract.Extraction{class: "work", text: "Hamlet", attributes: %{"type" => "play"}},
+        %LangExtract.Extraction{class: "location", text: "Denmark", attributes: %{}}
       ]
     }
   ]
@@ -96,12 +96,12 @@ template = %LangExtract.Prompt.Template{
     %LangExtract.Prompt.ExampleData{
       text: "Patient was diagnosed with diabetes and prescribed metformin.",
       extractions: [
-        %LangExtract.Pipeline.Extraction{
+        %LangExtract.Extraction{
           class: "condition",
           text: "diabetes",
           attributes: %{"chronicity" => "chronic"}
         },
-        %LangExtract.Pipeline.Extraction{
+        %LangExtract.Extraction{
           class: "medication",
           text: "metformin",
           attributes: %{}
@@ -250,8 +250,8 @@ The pipeline has five stages:
 
 The aligner uses two phases:
 
-- **Phase 1 (Exact)**: `List.myers_difference/2` on downcased word tokens.
-  If a contiguous equal segment covers all extraction tokens, it's an exact match.
+- **Phase 1 (Exact)**: Linear scan for the extraction's downcased word tokens
+  as a contiguous run in the source tokens. First occurrence wins.
 - **Phase 2 (Fuzzy)**: Sliding window with token frequency overlap. The window
   with the highest overlap ratio above `:fuzzy_threshold` (default 0.75) wins.
 
@@ -260,14 +260,16 @@ The aligner uses two phases:
 ```
 lib/lang_extract/
 ├── alignment/              # Tokenizer, Token, Aligner, Span
-├── pipeline/               # FormatHandler, Parser, Extraction, ChunkError
+├── pipeline/               # Parser, ChunkError
 ├── prompt/                 # Template, ExampleData, Builder, Validator
 ├── provider/               # Claude, OpenAI, Gemini implementations
 ├── client.ex               # Configured LLM client struct
+├── extraction.ex           # Core extraction struct
+├── wire_format.ex          # LLM wire format (encode + decode)
 ├── orchestrator.ex         # Pipeline wiring + chunking
 ├── chunker.ex              # Sentence-aware text splitting
 ├── pipeline.ex             # Extraction pipeline public API
-└── io.ex                   # Serialization + JSONL
+└── serializer.ex           # Serialization + JSONL
 ```
 
 ## Compared to the Python Original
