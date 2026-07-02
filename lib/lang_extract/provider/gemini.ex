@@ -3,6 +3,11 @@ defmodule LangExtract.Provider.Gemini do
   Gemini (Google) provider for LLM inference.
 
   Calls the Gemini generateContent API via Req.
+
+  Note: the Gemini API takes the key as a URL query parameter (unlike
+  Claude and OpenAI, which use headers), so request URLs contain the
+  secret. Avoid logging request URLs (e.g. via custom Req steps or
+  verbose HTTP logging) when using this provider.
   """
 
   @behaviour LangExtract.Provider

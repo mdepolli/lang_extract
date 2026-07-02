@@ -78,6 +78,11 @@ client = LangExtract.new(:openai,
 )
 ```
 
+> **Note:** the Gemini API takes the key as a URL query parameter (unlike
+> Claude and OpenAI, which use headers), so request URLs contain the secret.
+> Avoid logging request URLs (e.g. via custom Req steps or verbose HTTP
+> logging) when using the Gemini provider.
+
 ### 2. Define a prompt template
 
 The template tells the LLM what to extract. Few-shot examples teach it the
