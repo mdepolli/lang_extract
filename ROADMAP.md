@@ -13,8 +13,9 @@ and natural extensions that haven't been implemented yet.
   extraction token count.
 - **Light plural stemming** — The original normalizes tokens by stripping
   trailing "s" during fuzzy matching. We only downcase.
-- **`MATCH_LESSER` status** — Partial contiguous Myers matches that preempt the
-  fuzzy phase. Currently our aligner falls through to fuzzy for any non-exact
+- **`MATCH_LESSER` status** — A partial-contiguous-match status that preempts
+  the fuzzy phase when a prefix/subset of the extraction tokens appears
+  contiguously. Currently our aligner falls through to fuzzy for any non-exact
   match.
 - **Cross-chunk deduplication** — When chunking, the same entity might be
   extracted from adjacent chunks at sentence boundaries. The original merges
@@ -65,7 +66,9 @@ and natural extensions that haven't been implemented yet.
   Needs updating to read per-document JSON files from timestamped run directories.
 - **Alignment quality comparison tooling** — Python produces more `exact` matches
   than Elixir for the same extractions. Tooling to quantify the gap per-document
-  would help prioritize aligner improvements.
+  would help prioritize aligner improvements. Note: the 0.4.0 linear-scan exact
+  matcher fixed a class of contiguous matches Myers missed — re-measure before
+  investing here.
 
 ## Tech Debt
 

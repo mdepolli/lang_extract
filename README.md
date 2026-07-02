@@ -43,7 +43,7 @@ Add `lang_extract` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lang_extract, "~> 0.1.0"}
+    {:lang_extract, "~> 0.4.0"}
   ]
 end
 ```
@@ -126,14 +126,14 @@ timeouts) return `{:error, reason}` instead.
 
 Each span contains:
 
-| Field | Description |
-|---|---|
-| `text` | The extracted text as returned by the LLM |
-| `class` | Entity type (e.g., `"condition"`, `"medication"`) |
-| `attributes` | Arbitrary metadata the LLM attached |
+| Field        | Description                                          |
+| ------------ | ---------------------------------------------------- |
+| `text`       | The extracted text as returned by the LLM            |
+| `class`      | Entity type (e.g., `"condition"`, `"medication"`)    |
+| `attributes` | Arbitrary metadata the LLM attached                  |
 | `byte_start` | Inclusive byte offset in source (`nil` if not found) |
-| `byte_end` | Exclusive byte offset in source (`nil` if not found) |
-| `status` | `:exact`, `:fuzzy`, or `:not_found` |
+| `byte_end`   | Exclusive byte offset in source (`nil` if not found) |
+| `status`     | `:exact`, `:fuzzy`, or `:not_found`                  |
 
 Verify byte offsets round-trip:
 
@@ -219,22 +219,27 @@ LangExtract.Serializer.save_jsonl([{source1, spans1}, {source2, spans2}], "resul
 
 All providers accept these common options:
 
-| Option | Default | Description |
-|---|---|---|
-| `:api_key` | From env var | API key (falls back to provider-specific env var) |
-| `:model` | Provider default | Model ID |
-| `:max_tokens` | `4096` | Maximum response tokens |
-| `:temperature` | `0` | Sampling temperature |
-| `:base_url` | Provider default | API base URL |
+| Option         | Default          | Description                                                              |
+| -------------- | ---------------- | ------------------------------------------------------------------------ |
+| `:api_key`     | From env var     | API key (falls back to provider-specific env var)                        |
+| `:model`       | Provider default | Model ID                                                                 |
+| `:max_tokens`  | `4096`           | Maximum response tokens                                                  |
+| `:temperature` | `0`              | Sampling temperature                                                     |
+| `:base_url`    | Provider default | API base URL                                                             |
+| `:req_options` | `[]`             | Extra [Req](https://hex.pm/packages/req) options merged into the request |
 
 Environment variable fallbacks: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 `GEMINI_API_KEY`.
 
+HTTP defaults suit LLM latency: 120s receive timeout and transient retries
+(429/5xx/transport errors). Override either via `:req_options`, e.g.
+`req_options: [receive_timeout: 30_000, retry: false]`.
+
 Provider-specific options:
 
-| Provider | Option | Default | Description |
-|---|---|---|---|
-| `:openai` | `:json_mode` | `true` | Enable JSON mode. Set `false` for compatible endpoints that don't support it. |
+| Provider  | Option       | Default | Description                                                                   |
+| --------- | ------------ | ------- | ----------------------------------------------------------------------------- |
+| `:openai` | `:json_mode` | `true`  | Enable JSON mode. Set `false` for compatible endpoints that don't support it. |
 
 ## How It Works
 
@@ -243,9 +248,9 @@ The pipeline has five stages:
 ```
 1. Prompt Builder    — Renders few-shot Q&A prompt with dynamic-key examples
 2. LLM Provider      — Calls Claude/OpenAI/Gemini via Req
-3. Format Handler    — Strips fences/<think> tags, normalizes dynamic keys to canonical form
+3. Wire Format       — Strips fences/<think> tags, normalizes dynamic keys to canonical form
 4. Parser            — Validates and constructs Extraction structs
-5. Aligner           — Maps extraction text to byte positions via Myers diff + fuzzy fallback
+5. Aligner           — Maps extraction text to byte positions via linear scan + fuzzy fallback
 ```
 
 The aligner uses two phases:
@@ -277,15 +282,15 @@ lib/lang_extract/
 This is an Elixir port of [google/langextract](https://github.com/google/langextract).
 Key differences:
 
-| | Python | Elixir |
-|---|---|---|
-| Codebase | ~4,000 LOC | ~1,400 LOC |
-| Providers | Gemini, OpenAI, Ollama | Claude, OpenAI, Gemini |
-| Offsets | Character positions | Byte positions |
-| Parallelism | ThreadPoolExecutor | Task.async_stream |
-| Chunking | Always-on (1000 chars) | Always-on (1000 chars, configurable) |
-| Alignment statuses | 4 (exact, lesser, greater, fuzzy) | 3 (exact, fuzzy, not_found) |
-| Prompt validation | Built-in severity levels | Caller decides |
+|                    | Python                            | Elixir                               |
+| ------------------ | --------------------------------- | ------------------------------------ |
+| Codebase           | ~4,000 LOC                        | ~1,400 LOC                           |
+| Providers          | Gemini, OpenAI, Ollama            | Claude, OpenAI, Gemini               |
+| Offsets            | Character positions               | Byte positions                       |
+| Parallelism        | ThreadPoolExecutor                | Task.async_stream                    |
+| Chunking           | Always-on (1000 chars)            | Always-on (1000 chars, configurable) |
+| Alignment statuses | 4 (exact, lesser, greater, fuzzy) | 3 (exact, fuzzy, not_found)          |
+| Prompt validation  | Built-in severity levels          | Caller decides                       |
 
 Not ported: visualization (HTML output), multi-pass extraction,
 batch Vertex AI, plugin system. See [ROADMAP.md](ROADMAP.md) for planned
