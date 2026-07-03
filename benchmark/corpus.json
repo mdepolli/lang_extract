@@ -1,14 +1,14 @@
 [
-  {"slug": "the-happy-prince", "url": "https://www.gutenberg.org/cache/epub/902/pg902.txt", "max_bytes": null},
-  {"slug": "a-christmas-carol", "url": "https://www.gutenberg.org/cache/epub/46/pg46.txt", "max_bytes": 5000},
-  {"slug": "the-tell-tale-heart", "url": "https://www.gutenberg.org/cache/epub/2148/pg2148.txt", "max_bytes": 5000},
-  {"slug": "the-yellow-wallpaper", "url": "https://www.gutenberg.org/cache/epub/1952/pg1952.txt", "max_bytes": null},
-  {"slug": "romeo-and-juliet", "url": "https://www.gutenberg.org/cache/epub/1513/pg1513.txt", "max_bytes": 15000},
-  {"slug": "the-importance-of-being-earnest", "url": "https://www.gutenberg.org/cache/epub/844/pg844.txt", "max_bytes": 20000},
-  {"slug": "a-modest-proposal", "url": "https://www.gutenberg.org/cache/epub/1080/pg1080.txt", "max_bytes": null},
-  {"slug": "metamorphosis", "url": "https://www.gutenberg.org/cache/epub/5200/pg5200.txt", "max_bytes": 30000},
-  {"slug": "frankenstein", "url": "https://www.gutenberg.org/cache/epub/84/pg84.txt", "max_bytes": 40000},
-  {"slug": "pride-and-prejudice", "url": "https://www.gutenberg.org/cache/epub/1342/pg1342.txt", "max_bytes": 50000},
-  {"slug": "great-expectations", "url": "https://www.gutenberg.org/cache/epub/1400/pg1400.txt", "max_bytes": 50000},
-  {"slug": "moby-dick", "url": "https://www.gutenberg.org/cache/epub/2701/pg2701.txt", "max_bytes": 50000}
+  {"slug": "the-happy-prince", "url": "https://www.gutenberg.org/cache/epub/902/pg902.txt", "max_bytes": null, "sha256": "2e68f21637844e0f1a4b5908b5adb23d6a7baaa64f61a7b4015fde680503e9dd"},
+  {"slug": "a-christmas-carol", "url": "https://www.gutenberg.org/cache/epub/46/pg46.txt", "max_bytes": 5000, "sha256": "3014a18e100bc943a76314196b269e4647559aad7853f2cc7867def9e85f4d9a"},
+  {"slug": "the-tell-tale-heart", "url": "https://www.gutenberg.org/cache/epub/2148/pg2148.txt", "max_bytes": 5000, "sha256": "c09fe41c34a19855769bcd46c9ebf6a77821b45f475b2773d052c12e1d43abf4"},
+  {"slug": "the-yellow-wallpaper", "url": "https://www.gutenberg.org/cache/epub/1952/pg1952.txt", "max_bytes": null, "sha256": "3b7d6015eb33dcf6b41303c3887b784b4a2e127f4361f1b94188f34ec11c6f50"},
+  {"slug": "romeo-and-juliet", "url": "https://www.gutenberg.org/cache/epub/1513/pg1513.txt", "max_bytes": 15000, "sha256": "42c934af3c0897f70966eda142e999f5db817fbe44fa3d1512f17e75516a66be"},
+  {"slug": "the-importance-of-being-earnest", "url": "https://www.gutenberg.org/cache/epub/844/pg844.txt", "max_bytes": 20000, "sha256": "5f09912fe2e192c722921a2715a9ecd7427f1134f5f581299c8e43b035f93790"},
+  {"slug": "a-modest-proposal", "url": "https://www.gutenberg.org/cache/epub/1080/pg1080.txt", "max_bytes": null, "sha256": "aa2044d2e735549074a277a75656e9c4e921639c90bf3bb9520ec589067fa3f9"},
+  {"slug": "metamorphosis", "url": "https://www.gutenberg.org/cache/epub/5200/pg5200.txt", "max_bytes": 30000, "sha256": "4911e5d2c0a9c302ab28dd9b6041f59ec49b7e6a07b061273ae0f646f48377b0"},
+  {"slug": "frankenstein", "url": "https://www.gutenberg.org/cache/epub/84/pg84.txt", "max_bytes": 40000, "sha256": "54a6bfd722743c590b5b42807c440846ac1cd6823d4f3b8393e878139efe5b9d"},
+  {"slug": "pride-and-prejudice", "url": "https://www.gutenberg.org/cache/epub/1342/pg1342.txt", "max_bytes": 50000, "sha256": "5c260604c8a31620165e6c280728ca0347af75436aff0c6509358adb275be6e5"},
+  {"slug": "great-expectations", "url": "https://www.gutenberg.org/cache/epub/1400/pg1400.txt", "max_bytes": 50000, "sha256": "0893aa8a1f92a233fdc08ce075dc502cfa125e35b771793b72d2151361b22a66"},
+  {"slug": "moby-dick", "url": "https://www.gutenberg.org/cache/epub/2701/pg2701.txt", "max_bytes": 50000, "sha256": "771f146101228cc9517506531af3646675371a026fe8c2aa3d95841afca16fc1"}
 ]
