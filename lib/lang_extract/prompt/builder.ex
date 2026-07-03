@@ -5,11 +5,22 @@ defmodule LangExtract.Prompt.Builder do
 
   alias LangExtract.{Prompt.Template, WireFormat}
 
+  # YAML-mode output invites paraphrase: models merge interrupted quotes,
+  # normalize punctuation, and echo few-shot examples on empty passages.
+  # Grounding requires verbatim spans, so the prompt demands them.
+  @instructions String.trim("""
+                Extract only text that appears verbatim in the passage below, exactly as
+                written, including punctuation and quotation marks. Never merge separate
+                fragments, complete text from memory, or copy from the examples. If the
+                passage contains nothing to extract, output an empty list: extractions: []
+                """)
+
   @spec build(Template.t(), String.t()) :: String.t()
   def build(%Template{} = template, chunk_text) do
     [
       non_empty(template.description),
       format_examples(template.examples),
+      @instructions,
       chunk_text
     ]
     |> Enum.reject(&is_nil/1)

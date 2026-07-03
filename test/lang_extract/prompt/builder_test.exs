@@ -43,6 +43,18 @@ defmodule LangExtract.Prompt.BuilderTest do
       assert String.ends_with?(String.trim(result), "Patient has asthma.")
     end
 
+    test "includes verbatim extraction instructions before the passage" do
+      template = %Template{description: "Extract things."}
+
+      result = Builder.build(template, "The passage.")
+
+      assert result =~ "verbatim"
+      assert result =~ "extractions: []"
+
+      [_pre, post] = String.split(result, "verbatim", parts: 2)
+      assert post =~ "The passage."
+    end
+
     test "empty description is valid" do
       template = %Template{
         description: "",

@@ -59,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Verbatim extraction instruction in prompts** — `Prompt.Builder` now
+  instructs the model to extract only verbatim spans and to emit
+  `extractions: []` for contentless passages. Reduces ungrounded extractions
+  (few-shot echoes, merged interrupted quotes) that could never align.
 - **`Serializer.span_to_map/1`** — Public single-span serialization
   (previously private), also used by the benchmark task instead of a
   duplicated implementation.
