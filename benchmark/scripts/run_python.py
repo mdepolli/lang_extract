@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,12 +32,14 @@ class ClaudeProvider(base_model.BaseLanguageModel):
     MAX_ATTEMPTS = 4
 
     def __init__(self, api_key: str, model_id: str = "claude-sonnet-5",
-                 temperature: float | None = None, max_tokens: int = 8192, **kwargs):
+                 temperature: float | None = None, max_tokens: int = 8192,
+                 max_workers: int = 2, **kwargs):
         super().__init__(**kwargs)
         self.api_key = api_key
         self.model_id = model_id
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.max_workers = max_workers
 
     def _request(self, body: dict) -> dict:
         """POST to the Messages API, retrying transient failures with backoff.
@@ -102,8 +105,17 @@ class ClaudeProvider(base_model.BaseLanguageModel):
         return self._completion_text(self._request(body))
 
     def infer(self, batch_prompts, **kwargs):
-        for prompt in batch_prompts:
-            yield [core_types.ScoredOutput(score=1.0, output=self._complete(prompt))]
+        # Parallelism lives in the provider (upstream convention — see the
+        # Gemini provider). max_workers=2 matches the Elixir runner's
+        # max_concurrency: 2. pool.map preserves prompt order.
+        prompts = list(batch_prompts)
+        if len(prompts) > 1 and self.max_workers > 1:
+            with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+                for text in pool.map(self._complete, prompts):
+                    yield [core_types.ScoredOutput(score=1.0, output=text)]
+        else:
+            for prompt in prompts:
+                yield [core_types.ScoredOutput(score=1.0, output=self._complete(prompt))]
 
 
 STATUS_MAP = {
