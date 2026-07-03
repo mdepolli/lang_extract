@@ -378,6 +378,55 @@ defmodule LangExtract.WireFormatTest do
     end
   end
 
+  describe "normalize/1 with block scalars" do
+    test "preserves literal block scalar values" do
+      input = """
+      extractions:
+        - dialogue: |-
+            Two households, both alike in dignity,
+            In fair Verona, where we lay our scene.
+          dialogue_attributes:
+            speaker: Chorus
+      """
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+      assert [entry] = decoded["extractions"]
+      assert entry["class"] == "dialogue"
+
+      assert entry["text"] ==
+               "Two households, both alike in dignity,\nIn fair Verona, where we lay our scene."
+
+      assert entry["attributes"] == %{"speaker" => "Chorus"}
+    end
+
+    test "preserves folded block scalars" do
+      input = """
+      extractions:
+        - dialogue: >-
+            Sweet is the scent of the hawthorn,
+            and sweet are the bluebells.
+          dialogue_attributes:
+            speaker: Nightingale
+      """
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+      assert [entry] = decoded["extractions"]
+      assert entry["text"] == "Sweet is the scent of the hawthorn, and sweet are the bluebells."
+    end
+
+    test "still quotes plain values containing colon-space" do
+      input = """
+      extractions:
+        - dialogue: Friar Lawrence said: be patient
+          dialogue_attributes: {}
+      """
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+      assert [entry] = decoded["extractions"]
+      assert entry["text"] == "Friar Lawrence said: be patient"
+    end
+  end
+
   # Strips the ```yaml ... ``` fences and decodes the YAML body.
   defp decode_fenced_yaml(fenced) do
     fenced

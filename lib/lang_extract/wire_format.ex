@@ -45,14 +45,22 @@ defmodule LangExtract.WireFormat do
   end
 
   @yaml_value_re ~r/^(\s+- [\w-]+: )(.+)$/m
+  # Block scalar headers (|, |-, >2+, ...) introduce the indented lines that
+  # follow — quoting one as a value orphans its block and breaks the parse.
+  @block_scalar_re ~r/^[|>][0-9+-]{0,2}$/
+
   defp quote_yaml_values(yaml) do
     Regex.replace(@yaml_value_re, yaml, fn
       _, prefix, "\"" <> _ = quoted ->
         "#{prefix}#{quoted}"
 
-      _, prefix, value ->
-        escaped = String.replace(value, "\"", "\\\"")
-        "#{prefix}\"#{escaped}\""
+      full, prefix, value ->
+        if value =~ @block_scalar_re do
+          full
+        else
+          escaped = String.replace(value, "\"", "\\\"")
+          "#{prefix}\"#{escaped}\""
+        end
     end)
   end
 

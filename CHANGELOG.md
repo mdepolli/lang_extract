@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejects non-default sampling parameters with a 400, so the old
   `temperature: 0` default broke every request. It is now sent only when the
   caller explicitly sets `:temperature`.
+- **`WireFormat.normalize/1` no longer corrupts YAML block scalars** — the
+  colon-quoting pass treated block scalar headers (`dialogue: |-`) as values
+  and quoted them, orphaning the indented lines and failing the parse.
+  Claude Sonnet 5 emits multi-line extractions as block scalars, so this
+  caused chunk-level `{:invalid_format, _}` failures.
 
 ## [0.4.0] - 2026-07-02
 
