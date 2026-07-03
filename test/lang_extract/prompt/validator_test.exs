@@ -57,7 +57,9 @@ defmodule LangExtract.Prompt.ValidatorTest do
         ]
       }
 
-      assert {:error, [issue]} = Validator.validate(template, fuzzy_threshold: 0.99)
+      assert {:error, [issue]} =
+               Validator.validate(template, fuzzy_threshold: 0.99, accept_lesser: false)
+
       assert issue.status == :not_found
     end
 

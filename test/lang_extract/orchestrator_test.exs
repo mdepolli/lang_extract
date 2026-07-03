@@ -142,16 +142,19 @@ defmodule LangExtract.OrchestratorTest do
         claude_extraction_response([%{"phrase" => "quick brown dog", "phrase_attributes" => %{}}])
       )
 
-      # Default threshold (0.75) — not_found (2/3 = 0.67 < 0.75)
+      # High coverage bar with lesser disabled — not_found (2/3 = 0.67 < 0.75)
       assert {:ok, {[span], []}} =
-               LangExtract.run(claude_client(), "the quick brown fox jumps", template())
+               LangExtract.run(claude_client(), "the quick brown fox jumps", template(),
+                 accept_lesser: false
+               )
 
       assert span.status == :not_found
 
       # Low threshold — fuzzy match
       assert {:ok, {[span], []}} =
                LangExtract.run(claude_client(), "the quick brown fox jumps", template(),
-                 fuzzy_threshold: 0.6
+                 fuzzy_threshold: 0.6,
+                 accept_lesser: false
                )
 
       assert span.status == :fuzzy

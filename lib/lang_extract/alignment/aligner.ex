@@ -2,62 +2,79 @@ defmodule LangExtract.Alignment.Aligner do
   @moduledoc """
   Maps extraction strings to byte spans in source text.
 
-  Phase 1: Exact contiguous match via linear scan over source tokens.
-  Phase 2: Fuzzy sliding-window fallback.
+  Mirrors upstream langextract's `WordAligner` (v1.6.0) semantics in three
+  phases over downcased word tokens:
+
+  1. **Exact** — the extraction's tokens appear contiguously in the source
+     (linear scan, first occurrence wins). Status `:exact`.
+  2. **Lesser** — difflib-style block decomposition: if a matching block is
+     anchored at the extraction's first token, its source run grounds the
+     extraction (upstream `MATCH_LESSER`). Blocks elsewhere in the extraction
+     do not qualify. Status `:fuzzy`.
+  3. **LCS fuzzy** — for extractions sharing no token run at all, an LCS
+     subsequence match over lightly stemmed tokens, accepted when coverage
+     (matched / extraction tokens) ≥ `:fuzzy_threshold` and density
+     (matched / span length) ≥ `:min_density`, preferring the tightest span.
+     Status `:fuzzy`.
+
+  Known divergence from upstream: repeated exact mentions each take the first
+  occurrence (upstream assigns successive occurrences via an occurrence DP).
   """
 
   alias LangExtract.Alignment.{Span, Tokenizer}
 
   @default_fuzzy_threshold 0.75
+  @default_min_density 1 / 3
 
   @spec align(String.t(), [String.t()], keyword()) :: [Span.t()]
   def align(source, extractions, opts \\ []) do
-    fuzzy_threshold = Keyword.get(opts, :fuzzy_threshold, @default_fuzzy_threshold)
+    config = %{
+      threshold: Keyword.get(opts, :fuzzy_threshold, @default_fuzzy_threshold),
+      min_density: Keyword.get(opts, :min_density, @default_min_density),
+      accept_lesser: Keyword.get(opts, :accept_lesser, true)
+    }
+
     source_tokens = Tokenizer.tokenize(source)
     source_words = reject_whitespace(source_tokens)
     source_words_tuple = List.to_tuple(source_words)
-
-    source_texts_tuple =
-      source_words |> Enum.map(&String.downcase(&1.text)) |> List.to_tuple()
+    source_texts = Enum.map(source_words, &String.downcase(&1.text))
+    source_texts_tuple = List.to_tuple(source_texts)
+    source_stemmed = Enum.map(source_texts, &stem_token/1)
 
     Enum.map(extractions, fn extraction ->
-      align_one(extraction, source_words_tuple, source_texts_tuple, fuzzy_threshold)
+      align_one(extraction, source_words_tuple, source_texts_tuple, source_stemmed, config)
     end)
   end
 
-  defp align_one("", _source_words, _source_texts_tuple, _threshold) do
+  defp align_one("", _source_words, _source_texts_tuple, _source_stemmed, _config) do
     not_found_span("")
   end
 
-  defp align_one(extraction, source_words, source_texts_tuple, threshold) do
+  defp align_one(extraction, source_words, source_texts_tuple, source_stemmed, config) do
     ext_tokens = extraction |> Tokenizer.tokenize() |> reject_whitespace()
     ext_texts = Enum.map(ext_tokens, &String.downcase(&1.text))
-    ext_length = length(ext_texts)
 
-    case exact_match(extraction, source_words, source_texts_tuple, ext_texts, ext_length) do
-      {:ok, span} ->
-        span
-
-      :no_match ->
-        fuzzy_match(
-          extraction,
-          source_words,
-          source_texts_tuple,
-          ext_texts,
-          ext_length,
-          threshold
-        )
+    with :no_match <- exact_match(extraction, source_words, source_texts_tuple, ext_texts),
+         :no_match <-
+           lesser_match(extraction, source_words, source_texts_tuple, ext_texts, config),
+         :no_match <- lcs_match(extraction, source_words, source_stemmed, ext_texts, config) do
+      not_found_span(extraction)
+    else
+      {:ok, span} -> span
     end
   end
 
-  defp exact_match(_extraction, _source_words, _source_texts_tuple, [], _ext_length) do
+  # --- Phase 1: exact contiguous match ---
+
+  defp exact_match(_extraction, _source_words, _source_texts_tuple, []) do
     :no_match
   end
 
-  defp exact_match(extraction, source_words, source_texts_tuple, ext_texts, ext_length) do
+  defp exact_match(extraction, source_words, source_texts_tuple, ext_texts) do
+    ext_length = length(ext_texts)
     last_start = tuple_size(source_texts_tuple) - ext_length
 
-    case Enum.find(0..last_start//1, &match_at?(source_texts_tuple, ext_texts, &1)) do
+    case Enum.find(0..last_start//1, &subslice_at?(source_texts_tuple, ext_texts, &1)) do
       nil ->
         :no_match
 
@@ -66,84 +83,187 @@ defmodule LangExtract.Alignment.Aligner do
     end
   end
 
-  defp match_at?(source_texts_tuple, ext_texts, start_idx) do
+  defp subslice_at?(source_texts_tuple, ext_texts, start_idx) do
     ext_texts
     |> Enum.with_index(start_idx)
     |> Enum.all?(fn {text, idx} -> elem(source_texts_tuple, idx) == text end)
   end
 
-  defp fuzzy_match(extraction, source_words, source_texts_tuple, ext_texts, ext_length, threshold) do
-    if ext_length == 0 do
-      not_found_span(extraction)
-    else
-      ext_freq = Enum.frequencies(ext_texts)
+  # --- Phase 2: lesser match (longest contiguous partial run) ---
 
-      best = slide_window(source_texts_tuple, ext_freq, ext_length)
+  defp lesser_match(_e, _sw, _st, _ext, %{accept_lesser: false}), do: :no_match
+  defp lesser_match(_e, _sw, _st, [], _config), do: :no_match
 
-      case best do
-        {ratio, start_idx, end_idx} when ratio >= threshold ->
-          found_span(extraction, source_words, start_idx, end_idx, :fuzzy)
+  defp lesser_match(extraction, source_words, source_texts_tuple, ext_texts, _config) do
+    ext_tuple = List.to_tuple(ext_texts)
 
-        _ ->
-          not_found_span(extraction)
-      end
+    case prefix_block(
+           source_texts_tuple,
+           ext_tuple,
+           tuple_size(source_texts_tuple),
+           tuple_size(ext_tuple)
+         ) do
+      nil ->
+        :no_match
+
+      {start_idx, block_len} ->
+        {:ok, found_span(extraction, source_words, start_idx, start_idx + block_len - 1, :fuzzy)}
     end
   end
 
-  defp slide_window(source_texts_tuple, ext_freq, window_size) do
-    source_length = tuple_size(source_texts_tuple)
+  # difflib decomposes matches by recursively taking the longest common block
+  # (ties: lowest source index, then lowest extraction index). Only a block
+  # anchored at extraction token 0 grounds MATCH_LESSER, and such a block can
+  # only come from the leftmost recursion path — so chase it directly.
+  defp prefix_block(_source_tuple, _ext_tuple, source_hi, ext_hi)
+       when source_hi <= 0 or ext_hi <= 0,
+       do: nil
 
-    if source_length < window_size do
-      {0.0, 0, 0}
-    else
-      init_window = for i <- 0..(window_size - 1), do: elem(source_texts_tuple, i)
-      init_freq = Enum.frequencies(init_window)
-      init_overlap = compute_overlap(init_freq, ext_freq)
-      init_best = {init_overlap / window_size, 0, window_size - 1}
-
-      {best, _freq} =
-        Enum.reduce(window_size..(source_length - 1)//1, {init_best, init_freq}, fn idx, acc ->
-          slide_step(idx, acc, source_texts_tuple, ext_freq, window_size)
-        end)
-
-      best
+  defp prefix_block(source_tuple, ext_tuple, source_hi, ext_hi) do
+    case longest_block(source_tuple, ext_tuple, source_hi, ext_hi) do
+      {_i, _j, 0} -> nil
+      {i, 0, n} -> {i, n}
+      {i, j, _n} -> prefix_block(source_tuple, ext_tuple, i, j)
     end
   end
 
-  defp slide_step(
-         idx,
-         {{best_ratio, _, _} = best, freq},
-         source_texts_tuple,
-         ext_freq,
-         window_size
-       ) do
-    incoming = elem(source_texts_tuple, idx)
-    outgoing = elem(source_texts_tuple, idx - window_size)
-    freq = freq |> add_token(incoming) |> remove_token(outgoing)
-    overlap = compute_overlap(freq, ext_freq)
-    ratio = overlap / window_size
-
-    best = if ratio > best_ratio, do: {ratio, idx - window_size + 1, idx}, else: best
-    {best, freq}
-  end
-
-  defp add_token(freq, token) do
-    Map.update(freq, token, 1, &(&1 + 1))
-  end
-
-  defp remove_token(freq, token) do
-    case Map.get(freq, token) do
-      1 -> Map.delete(freq, token)
-      n when n > 1 -> Map.put(freq, token, n - 1)
-      _ -> freq
-    end
-  end
-
-  defp compute_overlap(window_freq, ext_freq) do
-    Enum.reduce(ext_freq, 0, fn {token, ext_count}, acc ->
-      window_count = Map.get(window_freq, token, 0)
-      acc + min(window_count, ext_count)
+  # Longest common contiguous run of source[0..source_hi) and ext[0..ext_hi);
+  # among maximal runs prefers the lowest source index, then lowest extraction
+  # index (difflib find_longest_match tie-breaks).
+  defp longest_block(source_tuple, ext_tuple, source_hi, ext_hi) do
+    Enum.reduce(0..(source_hi - 1), {0, 0, 0}, fn i, best ->
+      Enum.reduce(0..(ext_hi - 1), best, fn j, acc ->
+        best_at(source_tuple, ext_tuple, i, j, source_hi, ext_hi, acc)
+      end)
     end)
+  end
+
+  defp best_at(source_tuple, ext_tuple, i, j, source_hi, ext_hi, {_, _, best_n} = acc) do
+    n = run_length(source_tuple, ext_tuple, i, j, source_hi, ext_hi)
+    if n > best_n, do: {i, j, n}, else: acc
+  end
+
+  defp run_length(source_tuple, ext_tuple, i, j, source_hi, ext_hi) do
+    if i < source_hi and j < ext_hi and elem(source_tuple, i) == elem(ext_tuple, j) do
+      1 + run_length(source_tuple, ext_tuple, i + 1, j + 1, source_hi, ext_hi)
+    else
+      0
+    end
+  end
+
+  # --- Phase 3: LCS subsequence match over stemmed tokens ---
+
+  defp lcs_match(_e, _sw, _stemmed, [], _config), do: :no_match
+
+  defp lcs_match(extraction, source_words, source_stemmed, ext_texts, config) do
+    ext_stemmed = Enum.map(ext_texts, &stem_token/1)
+    ext_length = length(ext_stemmed)
+    spans = best_lcs_spans(source_stemmed, ext_stemmed)
+
+    spans
+    |> Map.keys()
+    |> Enum.sort(:desc)
+    |> Enum.find_value(:no_match, fn matches ->
+      {start_idx, end_idx} = spans[matches]
+      span_len = end_idx - start_idx + 1
+      coverage = matches / ext_length
+      density = matches / span_len
+
+      if coverage >= config.threshold and density >= config.min_density do
+        {:ok, found_span(extraction, source_words, start_idx, end_idx, :fuzzy)}
+      end
+    end)
+  end
+
+  # Port of upstream _best_lcs_spans (resolver.py): for each achievable match
+  # count k, the tightest source span containing k extraction tokens as a
+  # subsequence. dp[{j, k}] holds the latest source start covering k matches
+  # within the first j extraction tokens; later starts yield minimal spans,
+  # earliest start wins ties.
+  defp best_lcs_spans(source, extraction) do
+    m = length(extraction)
+    ext = List.to_tuple(extraction)
+
+    initial_dp =
+      for j <- 0..m, k <- 0..m, into: %{} do
+        {{j, k}, if(k == 0, do: 0, else: -1)}
+      end
+
+    {best, _dp} =
+      source
+      |> Enum.with_index(1)
+      |> Enum.reduce({%{}, initial_dp}, fn {src_tok, i}, {best, prev} ->
+        curr = dp_row(src_tok, i, m, ext, prev)
+        {harvest_spans(best, curr, i, m), curr}
+      end)
+
+    best
+  end
+
+  defp dp_row(src_tok, i, m, ext, prev) do
+    base = for k <- 0..m, into: %{}, do: {{0, k}, if(k == 0, do: i, else: -1)}
+
+    Enum.reduce(1..m, base, fn j, acc ->
+      matches_here = src_tok == elem(ext, j - 1)
+      acc = Map.put(acc, {j, 0}, i)
+
+      Enum.reduce(1..m, acc, fn k, acc ->
+        Map.put(acc, {j, k}, dp_cell(prev, acc, i, j, k, matches_here))
+      end)
+    end)
+  end
+
+  defp dp_cell(prev, acc, i, j, k, matches_here) do
+    skip = max(Map.fetch!(prev, {j, k}), Map.fetch!(acc, {j - 1, k}))
+
+    if matches_here do
+      candidate = if k == 1, do: i - 1, else: Map.fetch!(prev, {j - 1, k - 1})
+      max(skip, candidate)
+    else
+      skip
+    end
+  end
+
+  defp harvest_spans(best, curr, i, m) do
+    end_idx = i - 1
+
+    Enum.reduce(1..m, best, fn k, best ->
+      start_idx = Map.fetch!(curr, {m, k})
+
+      if start_idx < 0 do
+        best
+      else
+        update_tightest(best, k, start_idx, end_idx)
+      end
+    end)
+  end
+
+  defp update_tightest(best, k, start_idx, end_idx) do
+    new_len = end_idx - start_idx + 1
+
+    case Map.get(best, k) do
+      nil ->
+        Map.put(best, k, {start_idx, end_idx})
+
+      {cur_start, cur_end} ->
+        cur_len = cur_end - cur_start + 1
+
+        if new_len < cur_len or (new_len == cur_len and start_idx < cur_start) do
+          Map.put(best, k, {start_idx, end_idx})
+        else
+          best
+        end
+    end
+  end
+
+  # Upstream _normalize_token: light plural stemming, fuzzy phase only.
+  defp stem_token(token) do
+    if String.length(token) > 3 and String.ends_with?(token, "s") and
+         not String.ends_with?(token, "ss") do
+      binary_part(token, 0, byte_size(token) - 1)
+    else
+      token
+    end
   end
 
   defp not_found_span(text) do

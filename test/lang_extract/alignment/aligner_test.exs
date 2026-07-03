@@ -162,61 +162,112 @@ defmodule LangExtract.Alignment.AlignerTest do
     end
   end
 
-  describe "fuzzy matching" do
-    test "matches when most tokens overlap" do
+  describe "lesser matching (partial contiguous runs)" do
+    test "grounds partial overlap to the matched run's span" do
       source = "the quick brown fox jumps"
-      # LLM returned "quick brown dog" — "dog" not in source, falls to fuzzy.
-      # Windows of size 3 over source words:
-      #   [the,quick,brown]=2/3  [quick,brown,fox]=2/3  [brown,fox,jumps]=1/3
-      # First best window wins: indices 0-2, byte_start=0 ("the"), byte_end=15 ("brown")
+      # "dog" is not in the source; the longest contiguous run is "quick brown",
+      # so the span covers exactly those tokens (bytes 4..15).
       extraction = "quick brown dog"
 
-      assert [%Span{byte_start: 0, byte_end: 15, status: :fuzzy}] =
-               Aligner.align(source, [extraction], fuzzy_threshold: 0.6)
+      assert [%Span{byte_start: 4, byte_end: 15, status: :fuzzy}] =
+               Aligner.align(source, [extraction])
     end
 
-    test "returns not_found below threshold" do
+    test "grounds interrupted dialogue to its prefix fragment" do
+      # Model-stitched extraction: two quoted fragments merged, narrative
+      # interjection dropped. Real case from the dialogue benchmark. Upstream
+      # grounds the block anchored at the extraction's first token.
+      source =
+        ~s(“You young dog,” said the man, licking his lips, “what fat cheeks you ha’ got.”)
+
+      extraction = "You young dog, what fat cheeks you ha’ got."
+
+      [span] = Aligner.align(source, [extraction])
+      assert span.status == :fuzzy
+
+      extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
+      assert extracted =~ "You young dog"
+    end
+
+    test "non-prefix shared tokens do not ground as lesser" do
+      # "and"/"fever" match but no block is anchored at the extraction's
+      # first token ("headache") — upstream returns not_found here too.
+      source = "Patient reports back pain and a fever."
+
+      assert [%Span{status: :not_found}] = Aligner.align(source, ["headache and fever"])
+    end
+
+    test "prefix token grounds even when the rest is absent" do
+      source = "alpha one two three four five six beta"
+
+      [span] = Aligner.align(source, ["alpha beta gamma"])
+      assert span.status == :fuzzy
+
+      extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
+      assert extracted == "alpha"
+    end
+
+    test "accept_lesser: false disables partial grounding" do
+      source = "alpha one two three four five six beta"
+
+      assert [%Span{status: :not_found}] =
+               Aligner.align(source, ["alpha beta gamma"], accept_lesser: false)
+    end
+
+    test "non-prefix partial overlap grounds via LCS instead" do
+      # "mild" is absent, so no prefix-anchored block exists; LCS coverage
+      # 3/4 = 0.75 meets the threshold and grounds the shared run.
+      source = "Findings consistent with degenerative disc disease at L5-S1."
+
+      [span] = Aligner.align(source, ["mild degenerative disc disease"])
+      assert span.status == :fuzzy
+
+      extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
+      assert extracted == "degenerative disc disease"
+    end
+
+    test "reordered words return not_found (LCS is order-preserving)" do
+      source = "Patient has severe heart problems today."
+
+      assert [%Span{status: :not_found}] = Aligner.align(source, ["problems heart"])
+    end
+  end
+
+  describe "LCS fuzzy matching" do
+    test "no shared tokens returns not_found" do
       source = "the quick brown fox"
       extraction = "completely different words here"
 
       assert [%Span{status: :not_found}] = Aligner.align(source, [extraction])
     end
 
-    test "matches with reordered words" do
-      source = "Patient has severe heart problems today."
+    test "plural variants match via light stemming" do
+      source = "The cheeks were red."
 
-      [span] = Aligner.align(source, ["problems heart"], fuzzy_threshold: 0.6)
-      assert span.status == :fuzzy
-    end
-
-    test "matches partial overlap at 75% threshold" do
-      source = "Findings consistent with degenerative disc disease at L5-S1."
-
-      [span] = Aligner.align(source, ["mild degenerative disc disease"], fuzzy_threshold: 0.75)
+      [span] = Aligner.align(source, ["cheek"])
       assert span.status == :fuzzy
 
       extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
-      assert extracted =~ "degenerative disc disease"
+      assert extracted == "cheeks"
     end
 
-    test "fails fuzzy match with low token overlap" do
-      source = "Patient reports back pain and a fever."
-
-      assert [%Span{status: :not_found}] =
-               Aligner.align(source, ["headache and fever"], fuzzy_threshold: 0.75)
-    end
-
-    test "respects custom fuzzy threshold" do
+    test "coverage threshold gates acceptance when lesser is disabled" do
       source = "the quick brown fox jumps"
-      # 1 of 3 tokens match — 0.33 ratio
+      # 1 of 3 tokens covered — 0.33 coverage
       extraction = "quick red cat"
 
-      # Default threshold 0.75 → not found
-      assert [%Span{status: :not_found}] = Aligner.align(source, [extraction])
+      assert [%Span{status: :not_found}] =
+               Aligner.align(source, [extraction], accept_lesser: false)
 
-      # Lowered threshold → fuzzy match
       assert [%Span{status: :fuzzy}] =
-               Aligner.align(source, [extraction], fuzzy_threshold: 0.3)
+               Aligner.align(source, [extraction], accept_lesser: false, fuzzy_threshold: 0.3)
+    end
+
+    test "density gate rejects sparse spans" do
+      source = "alpha one two three four five six beta one two three four five six gamma"
+
+      assert [%Span{status: :not_found}] =
+               Aligner.align(source, ["alpha beta gamma"], accept_lesser: false)
     end
   end
 end

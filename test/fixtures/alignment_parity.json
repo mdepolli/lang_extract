@@ -1,0 +1,142 @@
+[
+  {
+    "name": "exact_simple",
+    "source": "the quick brown fox",
+    "extraction": "quick brown",
+    "upstream_status": "exact",
+    "upstream_raw_status": "match_exact",
+    "upstream_byte_start": 4,
+    "upstream_byte_end": 15,
+    "note": null
+  },
+  {
+    "name": "exact_multibyte",
+    "source": "café señor bueno",
+    "extraction": "señor",
+    "upstream_status": "exact",
+    "upstream_raw_status": "match_exact",
+    "upstream_byte_start": 6,
+    "upstream_byte_end": 12,
+    "note": null
+  },
+  {
+    "name": "exact_case_insensitive",
+    "source": "Hello world",
+    "extraction": "hello",
+    "upstream_status": "exact",
+    "upstream_raw_status": "match_exact",
+    "upstream_byte_start": 0,
+    "upstream_byte_end": 5,
+    "note": null
+  },
+  {
+    "name": "exact_across_punctuation",
+    "source": "Hello, world!",
+    "extraction": "Hello",
+    "upstream_status": "exact",
+    "upstream_raw_status": "match_exact",
+    "upstream_byte_start": 0,
+    "upstream_byte_end": 5,
+    "note": null
+  },
+  {
+    "name": "repeated_duplicate",
+    "source": "hello world hello",
+    "extraction": "hello",
+    "upstream_status": "exact",
+    "upstream_raw_status": "match_exact",
+    "upstream_byte_start": 0,
+    "upstream_byte_end": 5,
+    "note": null
+  },
+  {
+    "name": "stitched_dialogue",
+    "source": "“You young dog,” said the man, licking his lips, “what fat cheeks you ha’ got.”",
+    "extraction": "You young dog, what fat cheeks you ha’ got.",
+    "upstream_status": "fuzzy",
+    "upstream_raw_status": "match_lesser",
+    "upstream_byte_start": 3,
+    "upstream_byte_end": 17,
+    "note": "real benchmark case: merged interrupted dialogue"
+  },
+  {
+    "name": "lesser_single_token",
+    "source": "Patient reports back pain and a fever.",
+    "extraction": "headache and fever",
+    "upstream_status": "not_found",
+    "upstream_raw_status": null,
+    "upstream_byte_start": null,
+    "upstream_byte_end": null,
+    "note": null
+  },
+  {
+    "name": "plural_stemming",
+    "source": "The cheeks were red.",
+    "extraction": "cheek",
+    "upstream_status": "fuzzy",
+    "upstream_raw_status": "match_fuzzy",
+    "upstream_byte_start": 4,
+    "upstream_byte_end": 10,
+    "note": null
+  },
+  {
+    "name": "sparse_density",
+    "source": "alpha one two three four five six beta one two three four five six gamma",
+    "extraction": "alpha beta gamma",
+    "upstream_status": "fuzzy",
+    "upstream_raw_status": "match_lesser",
+    "upstream_byte_start": 0,
+    "upstream_byte_end": 5,
+    "note": null
+  },
+  {
+    "name": "smart_quote_contraction",
+    "source": "he said don’t go home",
+    "extraction": "don't go",
+    "upstream_status": "fuzzy",
+    "upstream_raw_status": "match_lesser",
+    "upstream_byte_start": 8,
+    "upstream_byte_end": 11,
+    "note": "tokenizers differ on contractions; divergence candidates"
+  },
+  {
+    "name": "partial_overlap",
+    "source": "Findings consistent with degenerative disc disease at L5-S1.",
+    "extraction": "mild degenerative disc disease",
+    "upstream_status": "fuzzy",
+    "upstream_raw_status": "match_fuzzy",
+    "upstream_byte_start": 25,
+    "upstream_byte_end": 50,
+    "note": null
+  },
+  {
+    "name": "reordered_words",
+    "source": "Patient has severe heart problems today.",
+    "extraction": "problems heart",
+    "upstream_status": "not_found",
+    "upstream_raw_status": null,
+    "upstream_byte_start": null,
+    "upstream_byte_end": null,
+    "note": null
+  },
+  {
+    "name": "no_shared_tokens",
+    "source": "the quick brown fox",
+    "extraction": "completely different words here",
+    "upstream_status": "not_found",
+    "upstream_raw_status": null,
+    "upstream_byte_start": null,
+    "upstream_byte_end": null,
+    "note": null
+  },
+  {
+    "name": "colon_in_text",
+    "source": "He warned: never open the vault after midnight.",
+    "extraction": "never open the vault",
+    "upstream_status": "exact",
+    "upstream_raw_status": "match_exact",
+    "upstream_byte_start": 11,
+    "upstream_byte_end": 31,
+    "note": null
+  }
+]

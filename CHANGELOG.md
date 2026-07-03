@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   routinely exceed Req's 15s `receive_timeout` default, and `retry: false`
   meant a transient 429/5xx permanently dropped a chunk as a `ChunkError`.
   Both remain overridable via `req_options:`.
+- **Aligner ports upstream langextract v1.6.0 semantics** — After the exact
+  phase, a difflib-style lesser phase grounds partial matches anchored at the
+  extraction's first token, and an LCS subsequence fallback (with upstream's
+  0.75 coverage and 1/3 density gates, plus light plural stemming) replaces
+  the fixed-window fuzzy matcher. Extractions that previously returned
+  `:not_found` (interrupted dialogue, plural variants) now ground as `:fuzzy`
+  with trimmed spans. New options: `:min_density`, `:accept_lesser`.
+  Verified against upstream via generated differential fixtures
+  (`test/fixtures/alignment_parity.json`).
 - **Exact alignment via linear scan** — Replaces `List.myers_difference/2`,
   which did O(N²) work in source token count and missed genuinely contiguous
   matches when extraction tokens also appeared scattered earlier in the source
