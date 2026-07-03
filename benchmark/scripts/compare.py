@@ -226,7 +226,7 @@ def main():
     report = {
         "metadata": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "model": "claude-sonnet-4-20250514",
+            "model": "claude-sonnet-5",
             "temperature": 0,
             "match_threshold": MATCH_THRESHOLD,
             "library_versions": get_library_versions(),

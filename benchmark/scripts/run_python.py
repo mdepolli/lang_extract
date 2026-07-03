@@ -24,7 +24,7 @@ from langextract.core.data import ExampleData, Extraction
 class ClaudeProvider(base_model.BaseLanguageModel):
     """Minimal Anthropic Claude provider for langextract."""
 
-    def __init__(self, api_key: str, model_id: str = "claude-sonnet-4-20250514",
+    def __init__(self, api_key: str, model_id: str = "claude-sonnet-5",
                  temperature: float = 0, max_tokens: int = 4096, **kwargs):
         super().__init__(**kwargs)
         self.api_key = api_key

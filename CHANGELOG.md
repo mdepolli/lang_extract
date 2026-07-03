@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Minimum Elixir raised to 1.15** — plug 1.20 (test dependency, pulled in by
   a security patch) requires Elixir 1.15, and CI can no longer verify 1.14.
 
+### Fixed
+
+- **Claude provider default model updated to `claude-sonnet-5`** — the previous
+  default, `claude-sonnet-4-20250514`, was retired upstream on 2026-06-15, so
+  `LangExtract.new(:claude)` without an explicit `:model` returned 404s.
+- **Claude provider no longer sends `temperature` by default** — claude-sonnet-5
+  rejects non-default sampling parameters with a 400, so the old
+  `temperature: 0` default broke every request. It is now sent only when the
+  caller explicitly sets `:temperature`.
+
 ## [0.4.0] - 2026-07-02
 
 ### Changed

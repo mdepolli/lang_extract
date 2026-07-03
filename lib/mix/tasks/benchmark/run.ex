@@ -132,7 +132,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
     LangExtract.new(:claude,
       api_key: api_key,
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-5",
       temperature: 0
     )
   end

@@ -9,10 +9,11 @@ defmodule LangExtract.Provider.Claude do
 
   alias LangExtract.Provider
 
+  # No :temperature default — claude-sonnet-5 rejects non-default sampling
+  # params with a 400, so it's only sent when the caller sets it.
   @defaults [
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-5",
     max_tokens: 4096,
-    temperature: 0,
     base_url: "https://api.anthropic.com"
   ]
   @api_version "2023-06-01"
@@ -54,12 +55,13 @@ defmodule LangExtract.Provider.Claude do
       %{model: model, max_tokens: max_tokens, temperature: temperature} =
         Provider.common_opts(opts, @defaults)
 
-      payload = %{
-        "model" => model,
-        "max_tokens" => max_tokens,
-        "temperature" => temperature,
-        "messages" => [%{"role" => "user", "content" => prompt}]
-      }
+      payload =
+        %{
+          "model" => model,
+          "max_tokens" => max_tokens,
+          "messages" => [%{"role" => "user", "content" => prompt}]
+        }
+        |> maybe_put_temperature(temperature)
 
       {:ok, {req, [url: "/v1/messages", json: payload]}}
     end
@@ -78,4 +80,10 @@ defmodule LangExtract.Provider.Claude do
   end
 
   defp extract_text(_), do: {:error, :empty_response}
+
+  defp maybe_put_temperature(payload, nil), do: payload
+
+  defp maybe_put_temperature(payload, temperature) do
+    Map.put(payload, "temperature", temperature)
+  end
 end

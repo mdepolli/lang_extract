@@ -26,10 +26,17 @@ defmodule LangExtract.Provider.ClaudeTest do
       assert req.options.retry == :transient
 
       body = request_opts[:json]
-      assert body["model"] == "claude-sonnet-4-20250514"
+      assert body["model"] == "claude-sonnet-5"
       assert body["max_tokens"] == 4096
-      assert body["temperature"] == 0
+      refute Map.has_key?(body, "temperature")
       assert body["messages"] == [%{"role" => "user", "content" => "Extract entities."}]
+    end
+
+    test "temperature is sent only when explicitly set" do
+      assert {:ok, {_req, request_opts}} =
+               Claude.build_request("prompt", api_key: "sk-test", temperature: 0)
+
+      assert request_opts[:json]["temperature"] == 0
     end
 
     test "custom opts override defaults" do

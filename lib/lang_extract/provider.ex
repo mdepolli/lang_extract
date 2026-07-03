@@ -38,7 +38,7 @@ defmodule LangExtract.Provider do
   @spec common_opts(keyword(), keyword()) :: %{
           model: String.t(),
           max_tokens: integer(),
-          temperature: number(),
+          temperature: number() | nil,
           base_url: String.t()
         }
   def common_opts(opts, defaults) do
