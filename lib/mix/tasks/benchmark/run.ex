@@ -18,23 +18,16 @@ defmodule Mix.Tasks.Benchmark.Run do
         strict: [task: :string, corpus: :string, out: :string, document: :string]
       )
 
-    task_name = opts[:task] || raise "Missing --task argument"
+    task_name = opts[:task] || Mix.raise("Missing --task argument")
     corpus_dir = opts[:corpus] || @default_corpus
     out_dir = opts[:out] || @default_out
 
     task_def = load_task(task_name)
     client = build_client()
     template = build_template(task_def)
+    corpus_files = corpus_files!(corpus_dir, opts[:document])
 
-    corpus_files =
-      case opts[:document] do
-        nil -> Path.wildcard(Path.join(corpus_dir, "*.txt")) |> Enum.sort()
-        slug -> [Path.join(corpus_dir, "#{slug}.txt")]
-      end
-
-    timestamp = Calendar.strftime(DateTime.utc_now(), "%Y%m%d_%H%M%S")
-    run_dir = Path.join(out_dir, "#{task_name}_#{timestamp}")
-    File.mkdir_p!(run_dir)
+    run_dir = create_run_dir!(out_dir, task_name)
 
     Mix.shell().info("Running task '#{task_name}' on #{length(corpus_files)} documents...")
 
@@ -42,27 +35,57 @@ defmodule Mix.Tasks.Benchmark.Run do
       run_document(file, client, template, task_name, run_dir)
     end)
 
-    latest_link = Path.join(out_dir, "#{task_name}_latest")
-
-    case File.read_link(latest_link) do
-      {:ok, _} ->
-        File.rm!(latest_link)
-
-      {:error, :enoent} ->
-        :ok
-
-      {:error, reason} ->
-        Mix.shell().error("Warning: #{latest_link}: #{:file.format_error(reason)}")
-    end
-
-    File.ln_s!(Path.basename(run_dir), latest_link)
+    update_latest_symlink(out_dir, task_name, run_dir)
 
     Mix.shell().info("\nResults written to #{run_dir}/")
-    Mix.shell().info("Symlink updated: #{latest_link} -> #{Path.basename(run_dir)}")
   end
 
+  defp corpus_files!(corpus_dir, nil) do
+    case corpus_dir |> Path.join("*.txt") |> Path.wildcard() |> Enum.sort() do
+      [] -> Mix.raise("No corpus files found in #{corpus_dir}")
+      files -> files
+    end
+  end
+
+  defp corpus_files!(corpus_dir, slug) do
+    path = Path.join(corpus_dir, "#{slug}.txt")
+
+    if File.exists?(path) do
+      [path]
+    else
+      Mix.raise("Corpus document not found: #{path}")
+    end
+  end
+
+  defp create_run_dir!(out_dir, task_name) do
+    timestamp = Calendar.strftime(DateTime.utc_now(), "%Y%m%d_%H%M%S")
+    run_dir = Path.join(out_dir, "#{task_name}_#{timestamp}")
+    File.mkdir_p!(out_dir)
+
+    case File.mkdir(run_dir) do
+      :ok -> run_dir
+      {:error, :eexist} -> Mix.raise("Run directory already exists: #{run_dir}")
+      {:error, reason} -> Mix.raise("Could not create #{run_dir}: #{:file.format_error(reason)}")
+    end
+  end
+
+  # One document's failure must not abandon the rest of the corpus run —
+  # every document gets a result file, error or not.
   defp run_document(file, client, template, task_name, run_dir) do
     slug = Path.basename(file, ".txt")
+
+    result =
+      try do
+        extract_document(file, slug, client, template, task_name)
+      rescue
+        e -> failure_result(slug, task_name, Exception.message(e))
+      end
+
+    report_document(result)
+    File.write!(Path.join(run_dir, "#{slug}.json"), Jason.encode!(result, pretty: true))
+  end
+
+  defp extract_document(file, slug, client, template, task_name) do
     source = File.read!(file)
     Mix.shell().info("  #{slug} (#{byte_size(source)} bytes)...")
 
@@ -71,64 +94,81 @@ defmodule Mix.Tasks.Benchmark.Run do
         LangExtract.run(client, source, template, max_chunk_chars: 1000, max_concurrency: 2)
       end)
 
-    elapsed_ms = div(elapsed_us, 1000)
+    document_result(slug, task_name, run_result, div(elapsed_us, 1000))
+  end
 
-    result =
-      case run_result do
-        {:ok, {spans, errors}} ->
-          extractions = Enum.map(spans, &Serializer.span_to_map/1)
+  @doc false
+  def document_result(slug, task_name, {:ok, {spans, errors}}, elapsed_ms) do
+    %{
+      "source" => slug,
+      "task" => task_name,
+      "library" => "elixir",
+      "extractions" => Enum.map(spans, &Serializer.span_to_map/1),
+      "timing" => %{"total_ms" => elapsed_ms},
+      "errors" => Enum.map(errors, &chunk_error_to_map/1)
+    }
+  end
 
-          case errors do
-            [] ->
-              Mix.shell().info("    #{length(spans)} extractions in #{elapsed_ms}ms")
+  def document_result(slug, task_name, {:error, reason}, _elapsed_ms) do
+    failure_result(slug, task_name, inspect(reason))
+  end
 
-            _ ->
-              Mix.shell().error(
-                "    #{length(errors)} chunk error(s), #{length(spans)} partial extractions in #{elapsed_ms}ms"
-              )
-          end
+  defp failure_result(slug, task_name, reason) do
+    %{
+      "source" => slug,
+      "task" => task_name,
+      "library" => "elixir",
+      "extractions" => [],
+      "timing" => nil,
+      "errors" => [%{"byte_start" => nil, "byte_end" => nil, "reason" => reason}]
+    }
+  end
 
-          error_fields =
-            case errors do
-              [] -> %{}
-              _ -> %{"errors" => Enum.map(errors, &chunk_error_to_map/1)}
-            end
+  defp report_document(%{"timing" => nil, "errors" => [%{"reason" => reason}]}) do
+    Mix.shell().error("    ERROR: #{reason}")
+  end
 
-          Map.merge(
-            %{
-              "source" => slug,
-              "task" => task_name,
-              "library" => "elixir",
-              "extractions" => extractions,
-              "timing" => %{"total_ms" => elapsed_ms}
-            },
-            error_fields
-          )
+  defp report_document(result) do
+    extractions = length(result["extractions"])
+    errors = length(result["errors"])
+    ms = result["timing"]["total_ms"]
 
-        {:error, reason} ->
-          Mix.shell().error("    ERROR: #{inspect(reason)}")
+    if errors == 0 do
+      Mix.shell().info("    #{extractions} extractions in #{ms}ms")
+    else
+      Mix.shell().error(
+        "    #{errors} chunk error(s), #{extractions} partial extractions in #{ms}ms"
+      )
+    end
+  end
 
-          %{
-            "source" => slug,
-            "task" => task_name,
-            "library" => "elixir",
-            "extractions" => [],
-            "timing" => %{"total_ms" => elapsed_ms},
-            "error" => inspect(reason)
-          }
-      end
+  # A failed rotation shouldn't crash an otherwise successful run.
+  defp update_latest_symlink(out_dir, task_name, run_dir) do
+    link = Path.join(out_dir, "#{task_name}_latest")
+    _ = File.rm(link)
 
-    out_path = Path.join(run_dir, "#{slug}.json")
-    File.write!(out_path, Jason.encode!(result, pretty: true))
+    case File.ln_s(Path.basename(run_dir), link) do
+      :ok ->
+        Mix.shell().info("Symlink updated: #{link} -> #{Path.basename(run_dir)}")
+
+      {:error, reason} ->
+        Mix.shell().error("Warning: could not update #{link}: #{:file.format_error(reason)}")
+    end
   end
 
   defp load_task(name) do
     path = Path.join("benchmark/tasks", "#{name}.json")
-    path |> File.read!() |> Jason.decode!()
+
+    with {:ok, content} <- File.read(path),
+         {:ok, task_def} <- Jason.decode(content) do
+      task_def
+    else
+      {:error, reason} -> Mix.raise("Could not load task #{path}: #{inspect(reason)}")
+    end
   end
 
   defp build_client do
-    api_key = System.get_env("ANTHROPIC_API_KEY") || raise "ANTHROPIC_API_KEY not set"
+    api_key = System.get_env("ANTHROPIC_API_KEY") || Mix.raise("ANTHROPIC_API_KEY not set")
 
     LangExtract.new(:claude,
       api_key: api_key,

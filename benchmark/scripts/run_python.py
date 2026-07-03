@@ -207,6 +207,7 @@ def run_document(file: Path, task_def: dict, task_name: str,
             "library": "python",
             "extractions": extractions,
             "timing": {"total_ms": elapsed_ms},
+            "errors": [],
         }
 
     except Exception as e:
@@ -217,7 +218,7 @@ def run_document(file: Path, task_def: dict, task_name: str,
             "library": "python",
             "extractions": [],
             "timing": None,
-            "error": str(e),
+            "errors": [{"byte_start": None, "byte_end": None, "reason": str(e)}],
         }
 
     out_path = run_dir / f"{slug}.json"
