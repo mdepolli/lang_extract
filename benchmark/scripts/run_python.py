@@ -183,12 +183,15 @@ def run_document(file: Path, task_def: dict, task_name: str,
 
     try:
         start = time.perf_counter()
+        # Each library runs its native wire format: upstream defaults to JSON
+        # (its YAML path can't parse Sonnet 5 output - unquoted colon-space
+        # values, multiple fences - verified still broken at v1.6.0), Elixir
+        # is YAML-native. Format-handling robustness is part of the comparison.
         result = lx.extract(
             text_or_documents=source_text,
             prompt_description=task_def["description"],
             examples=examples,
             model=model,
-            format_type=core_types.FormatType.YAML,
             max_char_buffer=1000,
             max_workers=2,
             show_progress=False,
