@@ -25,7 +25,7 @@ class ClaudeProvider(base_model.BaseLanguageModel):
     """Minimal Anthropic Claude provider for langextract."""
 
     def __init__(self, api_key: str, model_id: str = "claude-sonnet-5",
-                 temperature: float = 0, max_tokens: int = 4096, **kwargs):
+                 temperature: float | None = None, max_tokens: int = 8192, **kwargs):
         super().__init__(**kwargs)
         self.api_key = api_key
         self.model_id = model_id
@@ -34,6 +34,13 @@ class ClaudeProvider(base_model.BaseLanguageModel):
 
     def infer(self, batch_prompts, **kwargs):
         for prompt in batch_prompts:
+            body = {
+                "model": self.model_id,
+                "max_tokens": self.max_tokens,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            if self.temperature is not None:
+                body["temperature"] = self.temperature
             resp = requests.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
@@ -41,12 +48,7 @@ class ClaudeProvider(base_model.BaseLanguageModel):
                     "anthropic-version": "2023-06-01",
                     "content-type": "application/json",
                 },
-                json={
-                    "model": self.model_id,
-                    "max_tokens": self.max_tokens,
-                    "temperature": self.temperature,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
+                json=body,
                 timeout=120,
             )
             resp.raise_for_status()
@@ -128,6 +130,7 @@ def run_document(file: Path, task_def: dict, task_name: str,
             prompt_description=task_def["description"],
             examples=examples,
             model=model,
+            max_char_buffer=1000,
             max_workers=2,
             show_progress=False,
         )
@@ -172,7 +175,7 @@ def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path,
         print("ERROR: ANTHROPIC_API_KEY not set", file=sys.stderr)
         sys.exit(1)
 
-    model = ClaudeProvider(api_key=api_key, temperature=0)
+    model = ClaudeProvider(api_key=api_key)
 
     if document:
         corpus_files = [corpus_dir / f"{document}.txt"]

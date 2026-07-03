@@ -68,7 +68,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
     {elapsed_us, run_result} =
       :timer.tc(fn ->
-        LangExtract.run(client, source, template, max_concurrency: 2)
+        LangExtract.run(client, source, template, max_chunk_chars: 1000, max_concurrency: 2)
       end)
 
     elapsed_ms = div(elapsed_us, 1000)
@@ -133,7 +133,7 @@ defmodule Mix.Tasks.Benchmark.Run do
     LangExtract.new(:claude,
       api_key: api_key,
       model: "claude-sonnet-5",
-      temperature: 0
+      max_tokens: 8192
     )
   end
 
