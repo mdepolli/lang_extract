@@ -21,8 +21,14 @@ from langextract.core import base_model, types as core_types
 from langextract.core.data import ExampleData, Extraction
 
 
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+RETRYABLE_STATUS = {408, 429, 500, 502, 503, 529}
+
+
 class ClaudeProvider(base_model.BaseLanguageModel):
     """Minimal Anthropic Claude provider for langextract."""
+
+    MAX_ATTEMPTS = 4
 
     def __init__(self, api_key: str, model_id: str = "claude-sonnet-5",
                  temperature: float | None = None, max_tokens: int = 8192, **kwargs):
@@ -32,32 +38,72 @@ class ClaudeProvider(base_model.BaseLanguageModel):
         self.temperature = temperature
         self.max_tokens = max_tokens
 
+    def _request(self, body: dict) -> dict:
+        """POST to the Messages API, retrying transient failures with backoff.
+
+        Mirrors the Elixir runner's Req defaults: transient retries on
+        429/5xx/timeouts, 120s read timeout, honoring retry-after.
+        """
+        delay = 1.0
+        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            resp = None
+            error: Exception | None = None
+            try:
+                resp = requests.post(
+                    ANTHROPIC_URL,
+                    headers={
+                        "x-api-key": self.api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json=body,
+                    timeout=(10, 120),
+                )
+            except (requests.ConnectionError, requests.Timeout) as e:
+                error = e
+            if resp is not None:
+                if resp.status_code not in RETRYABLE_STATUS:
+                    resp.raise_for_status()
+                    return resp.json()
+                error = requests.HTTPError(
+                    f"HTTP {resp.status_code} from Anthropic API", response=resp
+                )
+                retry_after = resp.headers.get("retry-after", "")
+                if retry_after.isdigit():
+                    delay = max(delay, int(retry_after))
+            if attempt == self.MAX_ATTEMPTS:
+                raise error
+            time.sleep(delay)
+            delay *= 2
+        raise AssertionError("unreachable")
+
+    def _completion_text(self, data: dict) -> str:
+        stop_reason = data.get("stop_reason")
+        if stop_reason == "max_tokens":
+            raise RuntimeError(
+                "response truncated at max_tokens - raise ClaudeProvider max_tokens"
+            )
+        text = next(
+            (b["text"] for b in data.get("content", []) if b.get("type") == "text"),
+            None,
+        )
+        if not text:
+            raise RuntimeError(f"no text content in response (stop_reason={stop_reason})")
+        return text
+
+    def _complete(self, prompt: str) -> str:
+        body = {
+            "model": self.model_id,
+            "max_tokens": self.max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if self.temperature is not None:
+            body["temperature"] = self.temperature
+        return self._completion_text(self._request(body))
+
     def infer(self, batch_prompts, **kwargs):
         for prompt in batch_prompts:
-            body = {
-                "model": self.model_id,
-                "max_tokens": self.max_tokens,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            if self.temperature is not None:
-                body["temperature"] = self.temperature
-            resp = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": self.api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json=body,
-                timeout=120,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            text = next(
-                (b["text"] for b in data.get("content", []) if b.get("type") == "text"),
-                "",
-            )
-            yield [core_types.ScoredOutput(score=1.0, output=text)]
+            yield [core_types.ScoredOutput(score=1.0, output=self._complete(prompt))]
 
 
 STATUS_MAP = {
