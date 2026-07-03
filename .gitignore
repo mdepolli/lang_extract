@@ -34,3 +34,6 @@ CLAUDE.md
 
 # Elixir LS
 /.expert/
+
+# Python bytecode caches (benchmark scripts)
+__pycache__/
