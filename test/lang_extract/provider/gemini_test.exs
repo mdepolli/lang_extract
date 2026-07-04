@@ -20,7 +20,7 @@ defmodule LangExtract.Provider.GeminiTest do
       assert {:ok, {req, request_opts}} =
                Gemini.build_request("Extract entities.", api_key: "test-key")
 
-      assert request_opts[:url] == "/v1beta/models/gemini-2.0-flash:generateContent"
+      assert request_opts[:url] == "/v1beta/models/gemini-3.5-flash:generateContent"
       assert request_opts[:params] == [key: "test-key"]
       assert req.options.base_url == "https://generativelanguage.googleapis.com"
       assert req.options.receive_timeout == 120_000

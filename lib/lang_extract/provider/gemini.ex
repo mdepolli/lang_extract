@@ -15,7 +15,7 @@ defmodule LangExtract.Provider.Gemini do
   alias LangExtract.Provider
 
   @defaults [
-    model: "gemini-2.0-flash",
+    model: "gemini-3.5-flash",
     max_tokens: 4096,
     temperature: 0,
     base_url: "https://generativelanguage.googleapis.com"

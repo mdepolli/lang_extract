@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Claude provider default model updated to `claude-sonnet-5`** — the previous
   default, `claude-sonnet-4-20250514`, was retired upstream on 2026-06-15, so
   `LangExtract.new(:claude)` without an explicit `:model` returned 404s.
+- **Gemini provider default model updated to `gemini-3.5-flash`** — tracking
+  upstream langextract's default (their #472); `gemini-2.0-flash` is
+  approaching retirement, the same failure class as the Claude default.
 - **Claude provider no longer sends `temperature` by default** — claude-sonnet-5
   rejects non-default sampling parameters with a 400, so the old
   `temperature: 0` default broke every request. It is now sent only when the
