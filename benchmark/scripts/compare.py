@@ -13,6 +13,12 @@ Offset metrics are restricted to pairs where BOTH sides report "exact":
 fuzzy spans are not positionally comparable (Python's match_lesser maps to
 "fuzzy" with spans smaller than the extraction; Elixir fuzzy spans are the
 best sliding-window, often larger).
+
+Attribute agreement is strict dict equality over matched pairs that carry
+attributes. Both libraries pass attributes through verbatim, so for
+free-text values (dialogue speakers) this measures model phrasing
+stability across runs (~60% is normal); its value is as a tripwire —
+a library that mangled attributes would drive it toward zero.
 """
 
 import argparse
@@ -126,6 +132,7 @@ def compare_task(
     python_statuses = {"exact": 0, "fuzzy": 0, "not_found": 0}
     class_agreements = class_total = 0
     status_agreements = status_total = 0
+    attr_agreements = attr_total = 0
     offset_deltas: list[int] = []
     offset_exact_agreements = 0
     elixir_times: list[int] = []
@@ -183,6 +190,15 @@ def compare_task(
             if a["status"] == b["status"]:
                 status_agreements += 1
 
+            # Only pairs where either side carries attributes count, so
+            # attribute-free tasks report n=0 instead of a vacuous 100%.
+            a_attrs = a.get("attributes") or {}
+            b_attrs = b.get("attributes") or {}
+            if a_attrs or b_attrs:
+                attr_total += 1
+                if a_attrs == b_attrs:
+                    attr_agreements += 1
+
             both_exact = a["status"] == "exact" and b["status"] == "exact"
             if both_exact and a["byte_start"] is not None and b["byte_start"] is not None:
                 delta = abs(a["byte_start"] - b["byte_start"])
@@ -221,6 +237,8 @@ def compare_task(
         "python_only": totals["python_only"],
         "class_agreement_pct": pct(class_agreements, class_total),
         "status_agreement_pct": pct(status_agreements, status_total),
+        "attribute_agreement_pct": pct(attr_agreements, attr_total),
+        "attributed_pairs": attr_total,
         "offset_pairs_compared": len(offset_deltas),
         "offset_identical_pct": pct(offset_exact_agreements, len(offset_deltas)),
         "offset_mean_delta": round(sum(offset_deltas) / len(offset_deltas), 1)
@@ -255,6 +273,8 @@ def print_summary(s: dict):
     print(f"{'Library-only:':22s} {s['elixir_only']:>12d} {s['python_only']:>12d}")
     print(f"{'Class agreement:':22s} {'':>12s} {'':>12s} {s['class_agreement_pct']:>10.1f}%")
     print(f"{'Status agreement:':22s} {'':>12s} {'':>12s} {s['status_agreement_pct']:>10.1f}%")
+    if s["attributed_pairs"]:
+        print(f"{'Attribute agreement:':22s} {'':>12s} {'':>12s} {s['attribute_agreement_pct']:>10.1f}%  ({s['attributed_pairs']} attributed pairs)")
     print(f"{'Offsets identical:':22s} {'':>12s} {'':>12s} {s['offset_identical_pct']:>10.1f}%  ({s['offset_pairs_compared']} exact pairs)")
     print(f"{'Offset mean delta:':22s} {'':>12s} {'':>12s} {s['offset_mean_delta']:>9.1f}b")
     print(f"{'Offset max delta:':22s} {'':>12s} {'':>12s} {s['offset_max_delta']:>9d}b")

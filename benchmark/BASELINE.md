@@ -22,6 +22,9 @@ Cross-library agreement (998 matched pairs, 82% match rate):
 
 - Class agreement: 100.0%
 - Status agreement: 92.4%
+- Attribute agreement: 58.7% (strict dict equality on speaker labels — a
+  free-text field, so this measures model phrasing stability, not library
+  behavior; both libraries pass attributes through verbatim)
 - Byte offsets identical: 95.8% of the 907 both-exact pairs
   (mean delta 41.4 bytes, max 14,479 bytes on the disagreeing tail)
 
