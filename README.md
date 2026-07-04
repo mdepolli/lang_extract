@@ -8,17 +8,25 @@ Extract structured data from text using LLMs, with every extraction grounded to
 exact byte positions in the source. An Elixir port of
 [google/langextract](https://github.com/google/langextract).
 
+You give it two things: a **client** (which LLM to call) and a **template**
+(the task definition). There is no schema DSL and no fine-tuned model — the
+template is a plain-language description of what to extract, plus at least one
+worked example: a sample text with the extractions you'd expect back from it.
+That example is what teaches the model your class names, your span
+granularity, and the output format:
+
 ```elixir
 client = LangExtract.new(:claude, api_key: System.get_env("ANTHROPIC_API_KEY"))
 
 template = %LangExtract.Prompt.Template{
-  description: "Extract people and locations from the text.",
+  description: "Extract literary works, people, and locations from the text.",
   examples: [
     %LangExtract.Prompt.ExampleData{
-      text: "Hamlet is set in Denmark.",
+      text: "Dickens wrote Oliver Twist while living in London.",
       extractions: [
-        %LangExtract.Extraction{class: "work", text: "Hamlet", attributes: %{"type" => "play"}},
-        %LangExtract.Extraction{class: "location", text: "Denmark", attributes: %{}}
+        %LangExtract.Extraction{class: "person", text: "Dickens"},
+        %LangExtract.Extraction{class: "work", text: "Oliver Twist", attributes: %{"type" => "novel"}},
+        %LangExtract.Extraction{class: "location", text: "London"}
       ]
     }
   ]
@@ -29,8 +37,8 @@ template = %LangExtract.Prompt.Template{
 for span <- spans do
   IO.puts("#{span.class}: \"#{span.text}\" [bytes #{span.byte_start}..#{span.byte_end}] (#{span.status})")
 end
-# person: "William Shakespeare" [bytes 31..50] (exact)
 # work: "Romeo and Juliet" [bytes 0..16] (exact)
+# person: "William Shakespeare" [bytes 32..51] (exact)
 ```
 
 Every extraction maps back to its exact position in the source binary via
@@ -85,9 +93,24 @@ client = LangExtract.new(:openai,
 
 ### 2. Define a prompt template
 
-The template tells the LLM what to extract. Few-shot examples teach it the
-output format using dynamic keys — the extraction class name becomes the YAML
-key, which reads naturally in context:
+The template is the task definition — the only place the model learns what
+"right" looks like. It has two parts:
+
+- **`description`** — a plain-language instruction: what to extract.
+- **`examples`** — worked examples: a sample `text` paired with the
+  extractions you would expect from it.
+
+The extractions inside each example are the answer key for its sample text.
+They pin down everything the description leaves open: the class vocabulary
+(`"condition"`, not `"diagnosis"`), the span granularity (`"diabetes"`, not
+`"diagnosed with diabetes"`), which attributes to attach, and the exact
+output shape — the class name becomes the YAML key in the model's reply, so
+the examples also teach the wire format. A description alone would leave the
+model to invent all of that.
+
+Each extraction's `text` must appear verbatim in its example's `text`: the
+examples double as alignment ground truth, and the validator (below) checks
+this before you spend tokens.
 
 ```elixir
 template = %LangExtract.Prompt.Template{
@@ -250,15 +273,21 @@ The pipeline has five stages:
 2. LLM Provider      — Calls Claude/OpenAI/Gemini via Req
 3. Wire Format       — Strips fences/<think> tags, normalizes dynamic keys to canonical form
 4. Parser            — Validates and constructs Extraction structs
-5. Aligner           — Maps extraction text to byte positions via linear scan + fuzzy fallback
+5. Aligner           — Maps extraction text to byte positions (exact scan, then fuzzy fallbacks)
 ```
 
-The aligner uses two phases:
+The aligner mirrors upstream langextract v1.6.0 semantics in three phases:
 
-- **Phase 1 (Exact)**: Linear scan for the extraction's downcased word tokens
-  as a contiguous run in the source tokens. First occurrence wins.
-- **Phase 2 (Fuzzy)**: Sliding window with token frequency overlap. The window
-  with the highest overlap ratio above `:fuzzy_threshold` (default 0.75) wins.
+- **Exact**: Linear scan for the extraction's downcased word tokens as a
+  contiguous run in the source tokens. First occurrence wins.
+- **Lesser (prefix match)**: When the model stitches or truncates a span, the
+  longest matching token block anchored at the extraction's first token
+  grounds it to its opening fragment in the source (status `:fuzzy`;
+  disable with `accept_lesser: false`).
+- **LCS fuzzy**: Longest-common-subsequence dynamic program over normalized
+  (stemmed, downcased) tokens. Accepts the tightest source window with
+  coverage ≥ `:fuzzy_threshold` (default 0.75) and token density ≥
+  `:min_density` (default 1/3); status `:fuzzy`.
 
 ## Architecture
 
@@ -284,7 +313,7 @@ Key differences:
 
 |                    | Python                            | Elixir                               |
 | ------------------ | --------------------------------- | ------------------------------------ |
-| Codebase           | ~4,000 LOC                        | ~1,400 LOC                           |
+| Codebase           | ~4,000 LOC                        | ~2,000 LOC                           |
 | Providers          | Gemini, OpenAI, Ollama            | Claude, OpenAI, Gemini               |
 | Offsets            | Character positions               | Byte positions                       |
 | Parallelism        | ThreadPoolExecutor                | Task.async_stream                    |
