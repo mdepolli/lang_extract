@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Repeated mentions now ground to successive occurrences** — the aligner
+  gained a phase-0 monotonic occurrence DP (port of upstream #485): over the
+  extraction list in model output order, it selects at most one exact
+  occurrence per extraction, order-preserving and non-overlapping,
+  maximizing matched tokens. Previously every within-chunk repeat took the
+  first occurrence's offsets — 32% of exact spans in the ner benchmark
+  landed on an already-claimed position; after the port, offset agreement
+  with upstream on repeated mentions with matched counts is 90.9%, on par
+  with unique mentions. `exact_algorithm: :first_occurrence` restores the
+  old behavior.
 - **Minimum Elixir raised to 1.15** — plug 1.20 (test dependency, pulled in by
   a security patch) requires Elixir 1.15, and CI can no longer verify 1.14.
 
