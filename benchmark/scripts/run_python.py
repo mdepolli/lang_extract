@@ -4,6 +4,8 @@
 import argparse
 import json
 import os
+import re
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -126,6 +128,47 @@ STATUS_MAP = {
 }
 
 
+def git_commit(repo: Path) -> str:
+    """Full commit SHA, suffixed -dirty when the tree has uncommitted changes."""
+    try:
+        sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "-C", str(repo), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        return sha + ("-dirty" if dirty else "")
+    except (subprocess.SubprocessError, OSError):
+        return "unknown"
+
+
+def langextract_version(repo: Path) -> str:
+    """A git checkout exposes no __version__; read pyproject.toml instead."""
+    version = getattr(lx, "__version__", None)
+    if version:
+        return version
+    try:
+        text = (repo / "pyproject.toml").read_text()
+    except OSError:
+        return "unknown"
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    return match.group(1) if match else "unknown"
+
+
+def run_meta(model: "ClaudeProvider") -> dict:
+    upstream = Path.home() / "code" / "langextract"
+    return {
+        "runner_commit": git_commit(BENCHMARK_DIR.parent),
+        "langextract_version": langextract_version(upstream),
+        "langextract_commit": git_commit(upstream),
+        "model": model.model_id,
+        "max_tokens": model.max_tokens,
+        "max_char_buffer": 1000,
+    }
+
+
 def load_task(task_name: str) -> dict:
     path = BENCHMARK_DIR / "tasks" / f"{task_name}.json"
     with open(path) as f:
@@ -175,7 +218,8 @@ def normalize_extraction(extraction, source_text: str) -> dict:
 
 
 def run_document(file: Path, task_def: dict, task_name: str,
-                 examples: list[ExampleData], model, run_dir: Path) -> None:
+                 examples: list[ExampleData], model, run_dir: Path,
+                 meta: dict) -> None:
     slug = file.stem
     source_bytes = file.read_bytes()
     source_text = source_bytes.decode("utf-8")
@@ -224,6 +268,7 @@ def run_document(file: Path, task_def: dict, task_name: str,
             "errors": [{"byte_start": None, "byte_end": None, "reason": str(e)}],
         }
 
+    output["meta"] = meta
     out_path = run_dir / f"{slug}.json"
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2)
@@ -251,8 +296,9 @@ def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path,
 
     print(f"Running task '{task_name}' on {len(corpus_files)} documents...")
 
+    meta = run_meta(model)
     for file in corpus_files:
-        run_document(file, task_def, task_name, examples, model, run_dir)
+        run_document(file, task_def, task_name, examples, model, run_dir, meta)
 
     latest_link = out_dir / f"{task_name}_latest"
     if latest_link.is_symlink():

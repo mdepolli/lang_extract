@@ -9,6 +9,10 @@ defmodule Mix.Tasks.Benchmark.Run do
   @default_corpus "benchmark/corpus"
   @default_out "benchmark/results/elixir"
 
+  @model "claude-sonnet-5"
+  @max_tokens 8192
+  @max_chunk_chars 1000
+
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
@@ -31,8 +35,10 @@ defmodule Mix.Tasks.Benchmark.Run do
 
     Mix.shell().info("Running task '#{task_name}' on #{length(corpus_files)} documents...")
 
+    meta = run_meta()
+
     Enum.each(corpus_files, fn file ->
-      run_document(file, client, template, task_name, run_dir)
+      run_document(file, client, template, task_name, run_dir, meta)
     end)
 
     update_latest_symlink(out_dir, task_name, run_dir)
@@ -71,7 +77,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   # One document's failure must not abandon the rest of the corpus run —
   # every document gets a result file, error or not.
-  defp run_document(file, client, template, task_name, run_dir) do
+  defp run_document(file, client, template, task_name, run_dir, meta) do
     slug = Path.basename(file, ".txt")
 
     result =
@@ -81,8 +87,30 @@ defmodule Mix.Tasks.Benchmark.Run do
         e -> failure_result(slug, task_name, Exception.message(e))
       end
 
+    result = Map.put(result, "meta", meta)
     report_document(result)
     File.write!(Path.join(run_dir, "#{slug}.json"), Jason.encode!(result, pretty: true))
+  end
+
+  defp run_meta do
+    %{
+      "runner_commit" => git_commit(),
+      "library_version" => to_string(Application.spec(:lang_extract, :vsn)),
+      "model" => @model,
+      "max_tokens" => @max_tokens,
+      "max_chunk_chars" => @max_chunk_chars
+    }
+  end
+
+  # A stamp from uncommitted code is misleading — mark it.
+  defp git_commit do
+    with {sha, 0} <- System.cmd("git", ["rev-parse", "HEAD"], stderr_to_stdout: true),
+         {status, 0} <- System.cmd("git", ["status", "--porcelain"], stderr_to_stdout: true) do
+      suffix = if String.trim(status) == "", do: "", else: "-dirty"
+      String.trim(sha) <> suffix
+    else
+      _ -> "unknown"
+    end
   end
 
   defp extract_document(file, slug, client, template, task_name) do
@@ -91,7 +119,10 @@ defmodule Mix.Tasks.Benchmark.Run do
 
     {elapsed_us, run_result} =
       :timer.tc(fn ->
-        LangExtract.run(client, source, template, max_chunk_chars: 1000, max_concurrency: 2)
+        LangExtract.run(client, source, template,
+          max_chunk_chars: @max_chunk_chars,
+          max_concurrency: 2
+        )
       end)
 
     document_result(slug, task_name, run_result, div(elapsed_us, 1000))
@@ -172,8 +203,8 @@ defmodule Mix.Tasks.Benchmark.Run do
 
     LangExtract.new(:claude,
       api_key: api_key,
-      model: "claude-sonnet-5",
-      max_tokens: 8192
+      model: @model,
+      max_tokens: @max_tokens
     )
   end
 

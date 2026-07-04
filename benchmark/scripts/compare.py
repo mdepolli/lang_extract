@@ -263,27 +263,13 @@ def print_summary(s: dict):
     print(f"{'Avg time/doc:':22s} {e_time:>12s} {p_time:>12s}")
 
 
-def get_library_versions() -> dict:
-    """Attempt to read library versions for reproducibility."""
-    versions = {}
-    try:
-        import langextract
-
-        versions["langextract"] = getattr(langextract, "__version__", "unknown")
-    except ImportError:
-        versions["langextract"] = "not installed"
-
-    mix_path = BENCHMARK_DIR.parent / "mix.exs"
-    if mix_path.exists():
-        import re
-
-        content = mix_path.read_text()
-        match = re.search(r'@version\s+"([^"]+)"', content)
-        versions["lang_extract"] = match.group(1) if match else "unknown"
-    else:
-        versions["lang_extract"] = "unknown"
-
-    return versions
+def first_meta(results: dict[str, dict[str, dict]]) -> dict:
+    """Provenance stamp from the first result entry that carries one."""
+    for docs in results.values():
+        for entry in docs.values():
+            if entry.get("meta"):
+                return entry["meta"]
+    return {}
 
 
 def main():
@@ -325,11 +311,9 @@ def main():
     report = {
         "metadata": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "model": "claude-sonnet-5",
-            "max_tokens": 8192,
-            "chunk_chars": 1000,
             "match_threshold": MATCH_THRESHOLD,
-            "library_versions": get_library_versions(),
+            "elixir": first_meta(elixir_results),
+            "python": first_meta(python_results),
         },
         "tasks": summaries,
     }
