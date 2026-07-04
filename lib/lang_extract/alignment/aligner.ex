@@ -2,9 +2,15 @@ defmodule LangExtract.Alignment.Aligner do
   @moduledoc """
   Maps extraction strings to byte spans in source text.
 
-  Mirrors upstream langextract's `WordAligner` (v1.6.0) semantics in three
-  phases over downcased word tokens:
+  Mirrors upstream langextract's `WordAligner` (v1.6.0 + #485) semantics in
+  four phases over downcased word tokens:
 
+  0. **Occurrence DP** — over the whole extraction list in model output
+     order: selects at most one exact occurrence per extraction, keeping
+     selections order-preserving and non-overlapping while maximizing total
+     matched tokens; ties prefer the earliest-ending chain, so repeated
+     mentions resolve to successive occurrences. Status `:exact`.
+     Extractions the DP cannot place fall through to the phases below.
   1. **Exact** — the extraction's tokens appear contiguously in the source
      (linear scan, first occurrence wins). Status `:exact`.
   2. **Lesser** — difflib-style block decomposition: if a matching block is
@@ -17,8 +23,10 @@ defmodule LangExtract.Alignment.Aligner do
      (matched / span length) ≥ `:min_density`, preferring the tightest span.
      Status `:fuzzy`.
 
-  Known divergence from upstream: repeated exact mentions each take the first
-  occurrence (upstream assigns successive occurrences via an occurrence DP).
+  Known divergence from upstream: our fallthrough phases treat each leftover
+  extraction standalone, while upstream reruns difflib over the concatenated
+  tokens of all sibling extractions — see @known_divergences in
+  aligner_parity_test.exs for the observable consequences.
   """
 
   alias LangExtract.Alignment.{Span, Tokenizer}
@@ -31,7 +39,8 @@ defmodule LangExtract.Alignment.Aligner do
     config = %{
       threshold: Keyword.get(opts, :fuzzy_threshold, @default_fuzzy_threshold),
       min_density: Keyword.get(opts, :min_density, @default_min_density),
-      accept_lesser: Keyword.get(opts, :accept_lesser, true)
+      accept_lesser: Keyword.get(opts, :accept_lesser, true),
+      exact_algorithm: Keyword.get(opts, :exact_algorithm, :dp)
     }
 
     source_tokens = Tokenizer.tokenize(source)
@@ -41,19 +50,40 @@ defmodule LangExtract.Alignment.Aligner do
     source_texts_tuple = List.to_tuple(source_texts)
     source_stemmed = Enum.map(source_texts, &stem_token/1)
 
-    Enum.map(extractions, fn extraction ->
-      align_one(extraction, source_words_tuple, source_texts_tuple, source_stemmed, config)
+    ext_token_lists =
+      Enum.map(extractions, fn extraction ->
+        extraction
+        |> Tokenizer.tokenize()
+        |> reject_whitespace()
+        |> Enum.map(&String.downcase(&1.text))
+      end)
+
+    selection =
+      occurrence_selection(config.exact_algorithm, source_texts_tuple, ext_token_lists)
+
+    extractions
+    |> Enum.zip(ext_token_lists)
+    |> Enum.with_index()
+    |> Enum.map(fn {{extraction, ext_texts}, idx} ->
+      case selection do
+        %{^idx => start_idx} ->
+          end_idx = start_idx + length(ext_texts) - 1
+          found_span(extraction, source_words_tuple, start_idx, end_idx, :exact)
+
+        _ ->
+          align_one(
+            extraction,
+            ext_texts,
+            source_words_tuple,
+            source_texts_tuple,
+            source_stemmed,
+            config
+          )
+      end
     end)
   end
 
-  defp align_one("", _source_words, _source_texts_tuple, _source_stemmed, _config) do
-    not_found_span("")
-  end
-
-  defp align_one(extraction, source_words, source_texts_tuple, source_stemmed, config) do
-    ext_tokens = extraction |> Tokenizer.tokenize() |> reject_whitespace()
-    ext_texts = Enum.map(ext_tokens, &String.downcase(&1.text))
-
+  defp align_one(extraction, ext_texts, source_words, source_texts_tuple, source_stemmed, config) do
     with :no_match <- exact_match(extraction, source_words, source_texts_tuple, ext_texts),
          :no_match <-
            lesser_match(extraction, source_words, source_texts_tuple, ext_texts, config),
@@ -61,6 +91,87 @@ defmodule LangExtract.Alignment.Aligner do
       not_found_span(extraction)
     else
       {:ok, span} -> span
+    end
+  end
+
+  # --- Phase 0: monotonic occurrence DP (upstream #485) ---
+  #
+  # Port of upstream _select_monotonic_matches: chains are built over a
+  # Pareto frontier of {chain_end, chain_weight, node} entries kept strictly
+  # increasing in both end and weight. Weight totals matched tokens so longer
+  # extractions win contested regions; equal-weight ties keep the
+  # earliest-ending chain, which is what maps repeated mentions to
+  # successive occurrences. Nodes are {extraction_index, start, parent}.
+
+  defp occurrence_selection(:first_occurrence, _source_texts_tuple, _ext_token_lists), do: %{}
+
+  defp occurrence_selection(:dp, source_texts_tuple, ext_token_lists) do
+    ext_token_lists
+    |> Enum.with_index()
+    |> Enum.reduce([], fn {ext_texts, idx}, frontier ->
+      add_extraction(frontier, idx, ext_texts, occurrences(source_texts_tuple, ext_texts))
+    end)
+    |> backtrack()
+  end
+
+  defp add_extraction(frontier, _idx, [], _occurrences), do: frontier
+  defp add_extraction(frontier, _idx, _ext_texts, []), do: frontier
+
+  defp add_extraction(frontier, idx, ext_texts, occurrences) do
+    len = length(ext_texts)
+
+    # Candidates chain off the pre-insert frontier so an extraction cannot
+    # extend a chain that already contains it.
+    occurrences
+    |> Enum.map(fn start ->
+      {pred_weight, parent} =
+        case best_ending_at_or_before(frontier, start) do
+          nil -> {0, nil}
+          {_chain_end, weight, node} -> {weight, node}
+        end
+
+      {start + len, len + pred_weight, {idx, start, parent}}
+    end)
+    |> Enum.reduce(frontier, &insert_if_undominated(&2, &1))
+  end
+
+  defp best_ending_at_or_before(frontier, position) do
+    frontier
+    |> Enum.take_while(fn {chain_end, _weight, _node} -> chain_end <= position end)
+    |> List.last()
+  end
+
+  defp insert_if_undominated(frontier, {chain_end, weight, _node} = entry) do
+    case best_ending_at_or_before(frontier, chain_end) do
+      {_chain_end, covering_weight, _node} when covering_weight >= weight ->
+        frontier
+
+      _ ->
+        {keep, rest} = Enum.split_while(frontier, fn {e, _w, _n} -> e < chain_end end)
+        keep ++ [entry | Enum.drop_while(rest, fn {_e, w, _n} -> w <= weight end)]
+    end
+  end
+
+  defp backtrack([]), do: %{}
+
+  defp backtrack(frontier) do
+    {_chain_end, _weight, node} = List.last(frontier)
+    collect_chain(node, %{})
+  end
+
+  defp collect_chain(nil, selection), do: selection
+
+  defp collect_chain({idx, start, parent}, selection) do
+    collect_chain(parent, Map.put(selection, idx, start))
+  end
+
+  defp occurrences(source_texts_tuple, ext_texts) do
+    last_start = tuple_size(source_texts_tuple) - length(ext_texts)
+
+    if last_start < 0 do
+      []
+    else
+      Enum.filter(0..last_start//1, &subslice_at?(source_texts_tuple, ext_texts, &1))
     end
   end
 

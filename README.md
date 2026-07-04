@@ -276,8 +276,13 @@ The pipeline has five stages:
 5. Aligner           — Maps extraction text to byte positions (exact scan, then fuzzy fallbacks)
 ```
 
-The aligner mirrors upstream langextract v1.6.0 semantics in three phases:
+The aligner mirrors upstream langextract v1.6.0 (+ #485) semantics in four
+phases:
 
+- **Occurrence DP**: Over the whole extraction list, selects one exact
+  occurrence per extraction — order-preserving, non-overlapping, maximizing
+  matched tokens — so repeated mentions ground to successive occurrences.
+  Unplaced extractions fall through to the phases below.
 - **Exact**: Linear scan for the extraction's downcased word tokens as a
   contiguous run in the source tokens. First occurrence wins.
 - **Lesser (prefix match)**: When the model stitches or truncates a span, the

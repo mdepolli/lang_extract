@@ -2,141 +2,423 @@
   {
     "name": "exact_simple",
     "source": "the quick brown fox",
-    "extraction": "quick brown",
-    "upstream_status": "exact",
-    "upstream_raw_status": "match_exact",
-    "upstream_byte_start": 4,
-    "upstream_byte_end": 15,
+    "extractions": [
+      "quick brown"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 4,
+        "byte_end": 15
+      }
+    ],
     "note": null
   },
   {
     "name": "exact_multibyte",
     "source": "café señor bueno",
-    "extraction": "señor",
-    "upstream_status": "exact",
-    "upstream_raw_status": "match_exact",
-    "upstream_byte_start": 6,
-    "upstream_byte_end": 12,
+    "extractions": [
+      "señor"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 6,
+        "byte_end": 12
+      }
+    ],
     "note": null
   },
   {
     "name": "exact_case_insensitive",
     "source": "Hello world",
-    "extraction": "hello",
-    "upstream_status": "exact",
-    "upstream_raw_status": "match_exact",
-    "upstream_byte_start": 0,
-    "upstream_byte_end": 5,
+    "extractions": [
+      "hello"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 5
+      }
+    ],
     "note": null
   },
   {
     "name": "exact_across_punctuation",
     "source": "Hello, world!",
-    "extraction": "Hello",
-    "upstream_status": "exact",
-    "upstream_raw_status": "match_exact",
-    "upstream_byte_start": 0,
-    "upstream_byte_end": 5,
+    "extractions": [
+      "Hello"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 5
+      }
+    ],
     "note": null
   },
   {
     "name": "repeated_duplicate",
     "source": "hello world hello",
-    "extraction": "hello",
-    "upstream_status": "exact",
-    "upstream_raw_status": "match_exact",
-    "upstream_byte_start": 0,
-    "upstream_byte_end": 5,
+    "extractions": [
+      "hello"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 5
+      }
+    ],
     "note": null
   },
   {
     "name": "stitched_dialogue",
     "source": "“You young dog,” said the man, licking his lips, “what fat cheeks you ha’ got.”",
-    "extraction": "You young dog, what fat cheeks you ha’ got.",
-    "upstream_status": "fuzzy",
-    "upstream_raw_status": "match_lesser",
-    "upstream_byte_start": 3,
-    "upstream_byte_end": 17,
+    "extractions": [
+      "You young dog, what fat cheeks you ha’ got."
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_lesser",
+        "byte_start": 3,
+        "byte_end": 17
+      }
+    ],
     "note": "real benchmark case: merged interrupted dialogue"
   },
   {
     "name": "lesser_single_token",
     "source": "Patient reports back pain and a fever.",
-    "extraction": "headache and fever",
-    "upstream_status": "not_found",
-    "upstream_raw_status": null,
-    "upstream_byte_start": null,
-    "upstream_byte_end": null,
+    "extractions": [
+      "headache and fever"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
     "note": null
   },
   {
     "name": "plural_stemming",
     "source": "The cheeks were red.",
-    "extraction": "cheek",
-    "upstream_status": "fuzzy",
-    "upstream_raw_status": "match_fuzzy",
-    "upstream_byte_start": 4,
-    "upstream_byte_end": 10,
+    "extractions": [
+      "cheek"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 4,
+        "byte_end": 10
+      }
+    ],
     "note": null
   },
   {
     "name": "sparse_density",
     "source": "alpha one two three four five six beta one two three four five six gamma",
-    "extraction": "alpha beta gamma",
-    "upstream_status": "fuzzy",
-    "upstream_raw_status": "match_lesser",
-    "upstream_byte_start": 0,
-    "upstream_byte_end": 5,
+    "extractions": [
+      "alpha beta gamma"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_lesser",
+        "byte_start": 0,
+        "byte_end": 5
+      }
+    ],
     "note": null
   },
   {
     "name": "smart_quote_contraction",
     "source": "he said don’t go home",
-    "extraction": "don't go",
-    "upstream_status": "fuzzy",
-    "upstream_raw_status": "match_lesser",
-    "upstream_byte_start": 8,
-    "upstream_byte_end": 11,
+    "extractions": [
+      "don't go"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_lesser",
+        "byte_start": 8,
+        "byte_end": 11
+      }
+    ],
     "note": "tokenizers differ on contractions; divergence candidates"
   },
   {
     "name": "partial_overlap",
     "source": "Findings consistent with degenerative disc disease at L5-S1.",
-    "extraction": "mild degenerative disc disease",
-    "upstream_status": "fuzzy",
-    "upstream_raw_status": "match_fuzzy",
-    "upstream_byte_start": 25,
-    "upstream_byte_end": 50,
+    "extractions": [
+      "mild degenerative disc disease"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 25,
+        "byte_end": 50
+      }
+    ],
     "note": null
   },
   {
     "name": "reordered_words",
     "source": "Patient has severe heart problems today.",
-    "extraction": "problems heart",
-    "upstream_status": "not_found",
-    "upstream_raw_status": null,
-    "upstream_byte_start": null,
-    "upstream_byte_end": null,
+    "extractions": [
+      "problems heart"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
     "note": null
   },
   {
     "name": "no_shared_tokens",
     "source": "the quick brown fox",
-    "extraction": "completely different words here",
-    "upstream_status": "not_found",
-    "upstream_raw_status": null,
-    "upstream_byte_start": null,
-    "upstream_byte_end": null,
+    "extractions": [
+      "completely different words here"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
     "note": null
   },
   {
     "name": "colon_in_text",
     "source": "He warned: never open the vault after midnight.",
-    "extraction": "never open the vault",
-    "upstream_status": "exact",
-    "upstream_raw_status": "match_exact",
-    "upstream_byte_start": 11,
-    "upstream_byte_end": 31,
+    "extractions": [
+      "never open the vault"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 11,
+        "byte_end": 31
+      }
+    ],
     "note": null
+  },
+  {
+    "name": "dp_two_identical",
+    "source": "hello world again hello world",
+    "extractions": [
+      "hello world",
+      "hello world"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 11
+      },
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 18,
+        "byte_end": 29
+      }
+    ],
+    "note": "repeats map to successive occurrences"
+  },
+  {
+    "name": "dp_three_mentions_two_extracted",
+    "source": "Ahab spoke. Then Ahab paused. Finally Ahab left.",
+    "extractions": [
+      "Ahab",
+      "Ahab"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 4
+      },
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 17,
+        "byte_end": 21
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "dp_repeat_with_unique_between",
+    "source": "Ahab called Starbuck. Later Ahab smiled.",
+    "extractions": [
+      "Ahab",
+      "Starbuck",
+      "Ahab"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 4
+      },
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 12,
+        "byte_end": 20
+      },
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 28,
+        "byte_end": 32
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "dp_second_occurrence_after_unique",
+    "source": "spam eggs spam",
+    "extractions": [
+      "eggs",
+      "spam"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 5,
+        "byte_end": 9
+      },
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 10,
+        "byte_end": 14
+      }
+    ],
+    "note": "chain through the unique mention forces the later occurrence"
+  },
+  {
+    "name": "dp_out_of_order_emission",
+    "source": "Alice met Bob at noon.",
+    "extractions": [
+      "Bob",
+      "Alice"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 10,
+        "byte_end": 13
+      },
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 5
+      }
+    ],
+    "note": "monotonic chain drops one; legacy phases recover it"
+  },
+  {
+    "name": "dp_contested_overlap",
+    "source": "big cat sat big cat",
+    "extractions": [
+      "big cat",
+      "cat sat"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 7
+      },
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 4,
+        "byte_end": 11
+      }
+    ],
+    "note": "DP chain vs legacy phase may produce overlapping spans"
+  },
+  {
+    "name": "dp_multibyte_repeats",
+    "source": "café bar opened. café bar closed.",
+    "extractions": [
+      "café bar",
+      "café bar"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 9
+      },
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 18,
+        "byte_end": 27
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "dp_paraphrase_among_repeats",
+    "source": "Queequeg smiled. Queequeg nodded.",
+    "extractions": [
+      "Queequeg",
+      "Queequeg",
+      "Queequeg vanished"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 0,
+        "byte_end": 8
+      },
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 17,
+        "byte_end": 25
+      },
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
+    "note": "third extraction has no exact occurrence; falls to legacy phases"
   }
 ]

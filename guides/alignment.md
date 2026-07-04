@@ -71,9 +71,17 @@ text against the source bytes.
 
 ## How alignment works
 
-The aligner mirrors upstream langextract v1.6.0 semantics in three phases,
-each tried in order:
+The aligner mirrors upstream langextract v1.6.0 (+ #485) semantics in four
+phases, each tried in order:
 
+0. **Occurrence DP** — runs once over the whole extraction list in model
+   output order: it selects at most one exact occurrence per extraction,
+   keeping selections order-preserving and non-overlapping while maximizing
+   total matched tokens. Ties prefer the earliest-ending chain, which is
+   what maps repeated mentions to successive occurrences — the second
+   "Ahab" extracted from a chunk grounds to the second "Ahab" in the text.
+   Status `:exact`. Extractions the DP cannot place fall through, each
+   tried standalone by the phases below.
 1. **Exact** — linear scan for the extraction's downcased tokens as a
    contiguous run in the source tokens. First occurrence wins.
 2. **Lesser (prefix match)** — the longest matching token block anchored at
@@ -84,15 +92,6 @@ each tried in order:
    window is accepted when coverage ≥ `:fuzzy_threshold` and token density
    ≥ `:min_density`. Status `:fuzzy`.
 
-## Repeated mentions
-
-When the same text is extracted more than once from one chunk (common for
-named entities), **every copy grounds to the first occurrence** — the second
-"Ahab" in a chunk gets the first "Ahab"'s offsets. Extractions still align
-and report `:exact`; only the positions of repeat mentions are affected.
-Upstream langextract assigns successive occurrences to successive positions;
-porting that behavior is under evaluation.
-
 ## Tuning
 
 All alignment options are accepted by `LangExtract.run/4`,
@@ -100,6 +99,7 @@ All alignment options are accepted by `LangExtract.run/4`,
 
 | Option             | Default | Effect                                                        |
 | ------------------ | ------- | ------------------------------------------------------------- |
+| `:exact_algorithm` | `:dp`   | `:first_occurrence` disables the occurrence DP (phase 0)      |
 | `:fuzzy_threshold` | `0.75`  | Minimum fraction of extraction tokens the LCS match must cover |
 | `:min_density`     | `1/3`   | Minimum matched-token density of the accepted source window    |
 | `:accept_lesser`   | `true`  | Set `false` to disable prefix matching (phase 2)               |
