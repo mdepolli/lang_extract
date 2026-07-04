@@ -28,9 +28,18 @@ defmodule LangExtract.WireFormat do
 
   @spec normalize(String.t()) :: {:ok, map()} | {:error, {:invalid_format, String.t()}}
   def normalize(raw) when is_binary(raw) do
-    cleaned = raw |> strip_think_tags() |> strip_fences() |> quote_yaml_values()
+    cleaned = raw |> strip_think_tags() |> strip_fences()
 
-    case YamlElixir.read_from_string(cleaned) do
+    # Valid YAML must never be rewritten (the quoting repairs corrupt legal
+    # constructs like multi-line plain scalars) — repair only on failure.
+    with :error <- parse(cleaned),
+         :error <- cleaned |> quote_yaml_values() |> parse() do
+      {:error, {:invalid_format, raw}}
+    end
+  end
+
+  defp parse(yaml) do
+    case YamlElixir.read_from_string(yaml) do
       {:ok, %{"extractions" => entries} = decoded} when is_list(entries) ->
         normalized = Enum.map(entries, &normalize_entry/1)
         {:ok, %{decoded | "extractions" => normalized}}
@@ -40,7 +49,7 @@ defmodule LangExtract.WireFormat do
         {:ok, decoded}
 
       _ ->
-        {:error, {:invalid_format, raw}}
+        :error
     end
   end
 
@@ -49,19 +58,86 @@ defmodule LangExtract.WireFormat do
   # follow — quoting one as a value orphans its block and breaks the parse.
   @block_scalar_re ~r/^[|>][0-9+-]{0,2}$/
 
+  # Only reached when the document already failed to parse, so rewriting
+  # aggressively is safe: fold stray plain-scalar continuation lines into
+  # their value line, then requote every value from scratch.
   defp quote_yaml_values(yaml) do
-    Regex.replace(@yaml_value_re, yaml, fn
-      _, prefix, "\"" <> _ = quoted ->
-        "#{prefix}#{quoted}"
+    yaml
+    |> join_plain_continuations()
+    |> requote_values()
+  end
 
-      full, prefix, value ->
-        if value =~ @block_scalar_re do
-          full
-        else
-          escaped = String.replace(value, "\"", "\\\"")
-          "#{prefix}\"#{escaped}\""
-        end
+  defp requote_values(yaml) do
+    Regex.replace(@yaml_value_re, yaml, fn full, prefix, value ->
+      if value =~ @block_scalar_re do
+        full
+      else
+        prefix <> requote(value)
+      end
     end)
+  end
+
+  # Strips one layer of (possibly unterminated or mis-escaped) model quoting,
+  # then requotes with everything inside escaped. Sources carry smart quotes,
+  # so an ASCII quote at the value boundary is model syntax, not span content.
+  defp requote(value) do
+    value
+    |> strip_outer_quotes()
+    |> String.replace("\\\"", "\"")
+    |> then(&("\"" <> String.replace(&1, "\"", "\\\"") <> "\""))
+  end
+
+  defp strip_outer_quotes(value) do
+    trimmed = String.trim_trailing(value)
+
+    cond do
+      byte_size(trimmed) > 1 and String.starts_with?(trimmed, "\"") and
+          String.ends_with?(trimmed, "\"") ->
+        binary_part(trimmed, 1, byte_size(trimmed) - 2)
+
+      String.starts_with?(trimmed, "\"") ->
+        binary_part(trimmed, 1, byte_size(trimmed) - 1)
+
+      true ->
+        trimmed
+    end
+  end
+
+  @item_value_re ~r/^\s*- [\w-]+: (.+)$/
+  @key_line_re ~r/^\s*(?:- )?[\w-]+:(?: |$)/
+
+  # The model sometimes continues a plain scalar on deeper-indented lines
+  # (verse dialogue); fold those into the value line so requoting covers
+  # the whole scalar. Block scalar content is never touched.
+  defp join_plain_continuations(yaml) do
+    yaml
+    |> String.split("\n")
+    |> Enum.reduce([], &join_line/2)
+    |> Enum.reverse()
+    |> Enum.join("\n")
+  end
+
+  defp join_line(line, []), do: [line]
+
+  defp join_line(line, [prev | rest] = acc) do
+    if continuation?(line, prev) do
+      [prev <> " " <> String.trim(line) | rest]
+    else
+      [line | acc]
+    end
+  end
+
+  defp continuation?(line, prev) do
+    String.trim(line) != "" and
+      not Regex.match?(@key_line_re, line) and
+      plain_item_value?(prev)
+  end
+
+  defp plain_item_value?(prev) do
+    case Regex.run(@item_value_re, prev) do
+      [_, value] -> not Regex.match?(@block_scalar_re, value)
+      nil -> false
+    end
   end
 
   @think_pattern ~r/<think>.*?(?:<\/think>|$)/s

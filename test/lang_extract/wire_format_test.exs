@@ -414,6 +414,53 @@ defmodule LangExtract.WireFormatTest do
       assert entry["text"] == "Sweet is the scent of the hawthorn, and sweet are the bluebells."
     end
 
+    test "repairs an unterminated leading quote" do
+      # Real Sonnet 5 defect: the model opens a quoted scalar on the last
+      # entry and never closes it, swallowing the rest of the document.
+      input = """
+      extractions:
+        - dialogue: "Death is a great price to pay for a red rose,"
+          dialogue_attributes:
+            speaker: the Nightingale
+        - dialogue: "and Life is very dear to all.
+          dialogue_attributes:
+            speaker: the Nightingale
+      """
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+      assert [first, second] = decoded["extractions"]
+      assert first["text"] == "Death is a great price to pay for a red rose,"
+      assert second["text"] == "and Life is very dear to all."
+    end
+
+    test "repairs unescaped quotes inside a quoted value" do
+      input = """
+      extractions:
+        - dialogue: "Well," said he, "I believe you."
+          dialogue_attributes:
+            speaker: he
+      """
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+      assert [entry] = decoded["extractions"]
+      assert entry["text"] == ~s(Well," said he, "I believe you.)
+    end
+
+    test "repairs multi-line plain scalars containing colons" do
+      input = """
+      extractions:
+        - dialogue: What, drawn, and talk of peace? I hate the word
+            As I hate hell, all Montagues, and thee:
+            Have at thee, coward.
+          dialogue_attributes:
+            speaker: TYBALT
+      """
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+      assert [entry] = decoded["extractions"]
+      assert entry["text"] =~ "I hate the word As I hate hell, all Montagues, and thee:"
+    end
+
     test "still quotes plain values containing colon-space" do
       input = """
       extractions:

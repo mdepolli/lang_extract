@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and quoted them, orphaning the indented lines and failing the parse.
   Claude Sonnet 5 emits multi-line extractions as block scalars, so this
   caused chunk-level `{:invalid_format, _}` failures.
+- **`WireFormat.normalize/1` parses first, repairs only on failure** — valid
+  YAML (including multi-line plain scalars) is never rewritten. The repair
+  pass now also recovers unterminated and mis-escaped quoted values and folds
+  plain-scalar continuation lines, fixing all chunk failures observed in the
+  July 2026 benchmark (11/11 payloads, 90 extractions recovered).
 
 ## [0.4.0] - 2026-07-02
 
