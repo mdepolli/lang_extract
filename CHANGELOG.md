@@ -69,8 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matches when extraction tokens also appeared scattered earlier in the source
   (those fell back to `:fuzzy`; they now align as `:exact` with the same byte
   offsets).
-- **Hex package no longer ships the benchmark Mix task** — `mix benchmark.run`
-  needs the local `benchmark/` corpus, which was never packaged, so the task
+- **Hex package no longer ships the benchmark Mix task** — the
+  `benchmark.run` task needs the local `benchmark/` corpus, which was never
+  packaged, so the task
   could only fail for downstream users. An explicit `files:` list now scopes
   the package to the library itself.
 

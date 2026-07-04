@@ -322,9 +322,12 @@ Key differences:
 | Prompt validation  | Built-in severity levels          | Caller decides                       |
 
 Not ported: visualization (HTML output), multi-pass extraction,
-batch Vertex AI, plugin system. See [ROADMAP.md](ROADMAP.md) for planned
-improvements.
+batch Vertex AI, plugin system. See the
+[roadmap](https://github.com/mdepolli/lang_extract/blob/main/ROADMAP.md)
+for planned improvements.
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+MIT — see the
+[LICENSE](https://github.com/mdepolli/lang_extract/blob/main/LICENSE) file
+for details.

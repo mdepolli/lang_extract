@@ -76,7 +76,45 @@ defmodule LangExtract.MixProject do
       source_url: @source_url,
       extras: [
         "README.md",
+        "guides/alignment.md",
         "CHANGELOG.md"
+      ],
+      groups_for_modules: [
+        Core: [
+          LangExtract,
+          LangExtract.Client,
+          LangExtract.Extraction,
+          LangExtract.WireFormat
+        ],
+        Prompt: [
+          LangExtract.Prompt.Template,
+          LangExtract.Prompt.ExampleData,
+          LangExtract.Prompt.Builder,
+          LangExtract.Prompt.Validator,
+          LangExtract.Prompt.Validator.Issue,
+          LangExtract.Prompt.Validator.ValidationError
+        ],
+        Pipeline: [
+          LangExtract.Orchestrator,
+          LangExtract.Chunker,
+          LangExtract.Chunker.Chunk,
+          LangExtract.Pipeline,
+          LangExtract.Pipeline.Parser,
+          LangExtract.Pipeline.ChunkError
+        ],
+        Alignment: [
+          LangExtract.Alignment.Aligner,
+          LangExtract.Alignment.Span,
+          LangExtract.Alignment.Token,
+          LangExtract.Alignment.Tokenizer
+        ],
+        Providers: [
+          LangExtract.Provider,
+          LangExtract.Provider.Claude,
+          LangExtract.Provider.OpenAI,
+          LangExtract.Provider.Gemini
+        ],
+        Serialization: [LangExtract.Serializer]
       ]
     ]
   end

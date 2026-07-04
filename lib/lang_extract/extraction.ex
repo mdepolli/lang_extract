@@ -1,9 +1,12 @@
 defmodule LangExtract.Extraction do
   @moduledoc """
-  A single extraction from LLM output.
+  A single extraction: an entity class, its verbatim source text, and
+  arbitrary attributes.
 
-  Contains the entity class, verbatim source text, and arbitrary attributes.
-  Positional information is added later by the aligner on `%LangExtract.Alignment.Span{}`.
+  Appears on both sides of the LLM exchange: as expected output inside
+  few-shot examples (`LangExtract.Prompt.ExampleData`) and as parsed output
+  from the model's reply. Positional information is added later by the
+  aligner on `%LangExtract.Alignment.Span{}`.
   """
 
   @type t :: %__MODULE__{

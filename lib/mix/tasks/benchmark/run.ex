@@ -1,5 +1,7 @@
 defmodule Mix.Tasks.Benchmark.Run do
-  @moduledoc "Run LangExtract benchmark against corpus texts."
+  # Repo-internal tool (excluded from the hex package); hidden from
+  # generated docs — it needs the local benchmark/ corpus to run.
+  @moduledoc false
   @shortdoc "Run extraction benchmark"
 
   use Mix.Task
