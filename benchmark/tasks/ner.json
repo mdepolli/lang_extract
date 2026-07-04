@@ -1,22 +1,31 @@
 {
   "name": "ner",
-  "description": "Extract all named entities from the text. For each entity, identify whether it is a person, place, or organization. Use the exact text from the source — do not paraphrase.",
+  "description": "Extract every mention of a named entity from the text, classifying each as a person, place, or organization. Extract repeated mentions separately, once per occurrence. Use the exact text from the source — do not paraphrase.",
   "examples": [
     {
       "text": "Shakespeare was born in Stratford-upon-Avon in 1564. He later joined the Lord Chamberlain's Men, a theatre company based in London.",
       "extractions": [
-        {"class": "entity", "text": "Shakespeare", "attributes": {"type": "person"}},
-        {"class": "entity", "text": "Stratford-upon-Avon", "attributes": {"type": "place"}},
-        {"class": "entity", "text": "Lord Chamberlain's Men", "attributes": {"type": "organization"}},
-        {"class": "entity", "text": "London", "attributes": {"type": "place"}}
+        {"class": "person", "text": "Shakespeare"},
+        {"class": "place", "text": "Stratford-upon-Avon"},
+        {"class": "organization", "text": "Lord Chamberlain's Men"},
+        {"class": "place", "text": "London"}
       ]
     },
     {
       "text": "In 1851, Herman Melville published Moby-Dick through Harper & Brothers in New York.",
       "extractions": [
-        {"class": "entity", "text": "Herman Melville", "attributes": {"type": "person"}},
-        {"class": "entity", "text": "Harper & Brothers", "attributes": {"type": "organization"}},
-        {"class": "entity", "text": "New York", "attributes": {"type": "place"}}
+        {"class": "person", "text": "Herman Melville"},
+        {"class": "organization", "text": "Harper & Brothers"},
+        {"class": "place", "text": "New York"}
+      ]
+    },
+    {
+      "text": "Elizabeth walked to Meryton with her sisters. In Meryton, the officers greeted Elizabeth warmly.",
+      "extractions": [
+        {"class": "person", "text": "Elizabeth"},
+        {"class": "place", "text": "Meryton"},
+        {"class": "place", "text": "Meryton"},
+        {"class": "person", "text": "Elizabeth"}
       ]
     }
   ]
