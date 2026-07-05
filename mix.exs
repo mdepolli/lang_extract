@@ -41,6 +41,9 @@ defmodule LangExtract.MixProject do
       # HTTP client
       {:req, "~> 0.5"},
 
+      # Observability (already transitive via Finch; explicit because we emit)
+      {:telemetry, "~> 1.0"},
+
       # Dev/Test
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
