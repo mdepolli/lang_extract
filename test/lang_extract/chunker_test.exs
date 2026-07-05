@@ -19,6 +19,38 @@ defmodule LangExtract.ChunkerTest do
       assert reconstructed == text
     end
 
+    # Packing counts characters (String.length) while offsets count bytes
+    # (byte_size) — this pins that mixed accounting with text where the two
+    # disagree at every chunk boundary.
+    test "multi-byte text at chunk boundaries: no split codepoints, byte offsets faithful" do
+      text =
+        "Ahab saw the 🐳 breach. Café déjà vu — again. " <>
+          "日本語のテキストです。 Ça alors, señor Ahab! " <>
+          "The 🐳🐳 returned at dawn. Fin de l'histoire."
+
+      for max_chars <- [20, 25, 30, 40, 60] do
+        chunks = Chunker.chunk(text, max_chunk_chars: max_chars)
+
+        for chunk <- chunks do
+          assert String.valid?(chunk.text), "split codepoint at max_chars=#{max_chars}"
+
+          assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
+                   chunk.text,
+                 "byte offsets drifted at max_chars=#{max_chars}"
+        end
+
+        assert Enum.map_join(chunks, "", & &1.text) == text
+      end
+    end
+
+    test "multi-byte sentence longer than max_chunk_chars stays whole" do
+      text = "🐳🐳🐳 café déjà 日本語 señor — one very long sentence indeed."
+
+      [chunk] = Chunker.chunk(text, max_chunk_chars: 10)
+      assert chunk.text == text
+      assert String.valid?(chunk.text)
+    end
+
     test "empty text returns empty list" do
       assert Chunker.chunk("", max_chunk_chars: 100) == []
     end

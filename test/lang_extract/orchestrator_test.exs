@@ -231,6 +231,34 @@ defmodule LangExtract.OrchestratorTest do
                Enum.map(spans, & &1.byte_start)
     end
 
+    test "multi-byte extraction in a later chunk round-trips via byte offsets" do
+      source = "Le café ouvrit à l'aube. Le señor Ahab vit la 🐳 baleine."
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        {:ok, body, _conn} = Plug.Conn.read_body(conn)
+        prompt = hd(Jason.decode!(body)["messages"])["content"]
+
+        extractions =
+          if prompt =~ "🐳" do
+            [%{"sighting" => "🐳 baleine", "sighting_attributes" => %{}}]
+          else
+            []
+          end
+
+        Req.Test.json(conn, %{
+          "content" => [
+            %{"type" => "text", "text" => Jason.encode!(%{"extractions" => extractions})}
+          ]
+        })
+      end)
+
+      assert {:ok, {[span], []}} =
+               LangExtract.run(claude_client(), source, template(), max_chunk_chars: 30)
+
+      assert span.status == :exact
+      assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) == "🐳 baleine"
+    end
+
     test "auto-chunks by default (short text fits in one chunk)" do
       stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
 
