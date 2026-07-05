@@ -48,7 +48,9 @@ defmodule LangExtract.Orchestrator do
     |> with_document_events(length(chunks), metadata)
   end
 
-  defp chunk_source(source, opts) do
+  @doc false
+  @spec chunk_source(String.t(), keyword()) :: [Chunker.Chunk.t()]
+  def chunk_source(source, opts) do
     max_chars = Keyword.get(opts, :max_chunk_chars, @default_max_chunk_chars)
     Chunker.chunk(source, max_chunk_chars: max_chars)
   end
@@ -59,10 +61,11 @@ defmodule LangExtract.Orchestrator do
   defp chunk_stream(client, chunks, template, opts) do
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
     timeout = Keyword.get(opts, :task_timeout, :infinity)
+    infer_fun = fn prompt -> client.provider.infer(prompt, Client.infer_opts(client)) end
 
     Task.async_stream(
       chunks,
-      fn chunk -> {chunk, process_chunk(client, chunk, template, opts)} end,
+      fn chunk -> {chunk, process_chunk(chunk, template, opts, infer_fun)} end,
       ordered: false,
       max_concurrency: max_concurrency,
       timeout: timeout,
@@ -95,8 +98,10 @@ defmodule LangExtract.Orchestrator do
 
   # Document telemetry for lazy consumption: :start fires at first demand,
   # :stop when the stream ends — including early halts, with the counts
-  # accumulated so far. Event shapes mirror :telemetry.span/3.
-  defp with_document_events(events, chunk_count, metadata) do
+  # accumulated so far. Event shapes mirror :telemetry.span/3. Shared with
+  # the Runner's stream, which wraps its own delivery mechanism.
+  @doc false
+  def with_document_events(events, chunk_count, metadata) do
     metadata = Map.put(metadata, :telemetry_span_context, make_ref())
 
     Stream.transform(
@@ -170,20 +175,25 @@ defmodule LangExtract.Orchestrator do
     {:ok, {spans, Enum.sort_by(errors, & &1.byte_start)}}
   end
 
-  defp process_chunk(client, chunk, template, opts) do
+  # The per-chunk pipeline, shared with the Runner: prompt → infer_fun →
+  # parse → align, inside the chunk telemetry span. infer_fun is where the
+  # two modes differ — direct provider call here, budget-scheduled
+  # Runner.Request there.
+  @doc false
+  def process_chunk(chunk, template, opts, infer_fun) do
     metadata = %{byte_start: chunk.byte_start, byte_end: chunk.byte_end}
 
     :telemetry.span([:lang_extract, :chunk], metadata, fn ->
-      result = extract_chunk(client, chunk, template, opts)
+      result = extract_chunk(chunk, template, opts, infer_fun)
 
       {result, chunk_measurements(result), Map.put(metadata, :status, result_status(result))}
     end)
   end
 
-  defp extract_chunk(client, chunk, template, opts) do
+  defp extract_chunk(chunk, template, opts, infer_fun) do
     prompt = Prompt.Builder.build(template, chunk.text)
 
-    with {:ok, raw_output} <- client.provider.infer(prompt, Client.infer_opts(client)),
+    with {:ok, raw_output} <- infer_fun.(prompt),
          {:ok, spans} <- Pipeline.extract(chunk.text, raw_output, opts) do
       {:ok, adjust_offsets(spans, chunk.byte_start)}
     else

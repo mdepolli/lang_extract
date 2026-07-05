@@ -48,7 +48,7 @@ defmodule LangExtract.Runner.Request do
 
   defp handle({:error, {:rate_limited, retry_after}}, limiter, client, prompt, s) do
     Limiter.pause(limiter, retry_after || s.backoff)
-    emit_retry(s.attempt, :rate_limited)
+    emit_retry(limiter, s.attempt, :rate_limited)
     attempt(limiter, client, prompt, %{s | attempt: s.attempt + 1})
   end
 
@@ -67,7 +67,7 @@ defmodule LangExtract.Runner.Request do
   end
 
   defp retry_or_give_up(_error, reason, limiter, client, prompt, s) do
-    emit_retry(s.attempt, reason)
+    emit_retry(limiter, s.attempt, reason)
     Process.sleep(backoff_ms(s))
     attempt(limiter, client, prompt, %{s | attempt: s.attempt + 1, spent: s.spent + 1})
   end
@@ -77,7 +77,14 @@ defmodule LangExtract.Runner.Request do
     base + :rand.uniform(max(div(s.backoff, 2), 1))
   end
 
-  defp emit_retry(attempt, reason) do
-    :telemetry.execute([:lang_extract, :chunk, :retry], %{attempt: attempt}, %{reason: reason})
+  # The limiter pid identifies which runner retried — operators with
+  # several runners can attribute retry storms, and tests can filter
+  # events from concurrent suites.
+  defp emit_retry(limiter, attempt, reason) do
+    :telemetry.execute(
+      [:lang_extract, :chunk, :retry],
+      %{attempt: attempt},
+      %{reason: reason, limiter: limiter}
+    )
   end
 end

@@ -45,7 +45,9 @@ defmodule LangExtract.Alignment.AlignerParityTest do
       %{"source" => source, "extractions" => extractions, "results" => results} = @fixture
 
       spans = Aligner.align(source, extractions)
-      assert length(spans) == length(results)
+      # Enum.count, not length: 1.20's type checker can't see through the
+      # heterogeneous fixture-map literal and unions its value types.
+      assert length(spans) == Enum.count(results)
 
       for {{%Span{} = span, expected}, idx} <- Enum.with_index(Enum.zip(spans, results)) do
         expected =

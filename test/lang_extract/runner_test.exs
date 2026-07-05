@@ -67,6 +67,128 @@ defmodule LangExtract.RunnerTest do
     end
   end
 
+  describe "run/4 and stream/4" do
+    @source "First sentence here. Second sentence there."
+
+    defp word_stub do
+      Req.Test.stub(__MODULE__, fn conn ->
+        {:ok, body, _conn} = Plug.Conn.read_body(conn)
+        prompt = hd(Jason.decode!(body)["messages"])["content"]
+        word = if prompt =~ "First", do: "First", else: "Second"
+
+        Req.Test.json(conn, %{
+          "content" => [
+            %{
+              "type" => "text",
+              "text" => Jason.encode!(%{"extractions" => [%{"word" => word}]})
+            }
+          ]
+        })
+      end)
+    end
+
+    defp template, do: LangExtract.template("Extract words.")
+
+    test "stream/4 yields chunk results through the shared budget" do
+      word_stub()
+      runner = start_supervised!({Runner, [client: client()]})
+
+      events =
+        runner
+        |> Runner.stream(@source, template(), max_chunk_chars: 25)
+        |> Enum.to_list()
+
+      assert length(events) == 2
+
+      texts =
+        events
+        |> Enum.flat_map(fn {:ok, result} -> result.spans end)
+        |> Enum.map(& &1.text)
+        |> Enum.sort()
+
+      assert texts == ["First", "Second"]
+    end
+
+    test "run/4 collects and restores document order" do
+      word_stub()
+      runner = start_supervised!({Runner, [client: client()]})
+
+      assert {:ok, {spans, []}} =
+               Runner.run(runner, @source, template(), max_chunk_chars: 25)
+
+      assert Enum.map(spans, & &1.text) == ["First", "Second"]
+      assert [%{byte_start: 0}, %{byte_start: second_start}] = spans
+      assert second_start > 0
+    end
+
+    test "max_in_flight serializes requests even with a wider buffer" do
+      concurrency = :atomics.new(2, [])
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        current = :atomics.add_get(concurrency, 1, 1)
+        previous_max = :atomics.get(concurrency, 2)
+        if current > previous_max, do: :atomics.put(concurrency, 2, current)
+        Process.sleep(20)
+        :atomics.sub(concurrency, 1, 1)
+
+        Req.Test.json(conn, %{
+          "content" => [
+            %{"type" => "text", "text" => Jason.encode!(%{"extractions" => []})}
+          ]
+        })
+      end)
+
+      runner = start_supervised!({Runner, [client: client(), max_in_flight: 1, buffer: 4]})
+
+      assert {:ok, {[], []}} =
+               Runner.run(runner, @source, template(), max_chunk_chars: 25)
+
+      assert :atomics.get(concurrency, 2) == 1
+    end
+
+    test "a failing request retries through the runner's policy" do
+      calls = start_supervised!({Agent, fn -> 0 end})
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        if Agent.get_and_update(calls, fn n -> {n, n + 1} end) == 0 do
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(500, "{}")
+        else
+          Req.Test.json(conn, %{
+            "content" => [
+              %{
+                "type" => "text",
+                "text" => Jason.encode!(%{"extractions" => [%{"word" => "hello"}]})
+              }
+            ]
+          })
+        end
+      end)
+
+      runner =
+        start_supervised!({Runner, [client: client(), retry_backoff_ms: 1]})
+
+      assert {:ok, {[span], []}} = Runner.run(runner, "hello world", template())
+      assert span.text == "hello"
+      assert Agent.get(calls, & &1) == 2
+    end
+
+    test "a chunk that exhausts its retry budget lands in chunk_errors" do
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(500, "{}")
+      end)
+
+      runner =
+        start_supervised!({Runner, [client: client(), chunk_retries: 1, retry_backoff_ms: 1]})
+
+      assert {:ok, {[], [%LangExtract.Pipeline.ChunkError{reason: :server_error}]}} =
+               Runner.run(runner, "hello world", template())
+    end
+  end
+
   defp eventually(fun, attempts \\ 50) do
     case fun.() do
       nil when attempts > 0 ->

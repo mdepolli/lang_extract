@@ -67,7 +67,7 @@ defmodule LangExtract.Runner.RequestTest do
 
     assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
     assert Agent.get(calls, & &1) == 1
-    refute_receive {[:lang_extract, :chunk, :retry], _, _}
+    refute_receive {[:lang_extract, :chunk, :retry], _, %{limiter: ^limiter}}
   end
 
   test "429 pauses the limiter globally and retries without spending budget",
@@ -77,7 +77,8 @@ defmodule LangExtract.Runner.RequestTest do
     assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
     assert Agent.get(calls, & &1) == 2
 
-    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1}, %{reason: :rate_limited}}
+    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
+                    %{reason: :rate_limited, limiter: ^limiter}}
   end
 
   test "429 without retry-after uses one backoff period as the pause",
@@ -94,8 +95,11 @@ defmodule LangExtract.Runner.RequestTest do
     assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
     assert Agent.get(calls, & &1) == 3
 
-    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1}, %{reason: :server_error}}
-    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 2}, %{reason: :server_error}}
+    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
+                    %{reason: :server_error, limiter: ^limiter}}
+
+    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 2},
+                    %{reason: :server_error, limiter: ^limiter}}
   end
 
   test "budget exhaustion returns the last error", %{limiter: limiter, calls: calls} do
@@ -114,7 +118,8 @@ defmodule LangExtract.Runner.RequestTest do
 
     assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
 
-    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1}, %{reason: :transport_error}}
+    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
+                    %{reason: :transport_error, limiter: ^limiter}}
   end
 
   test "4xx returns immediately without retrying", %{limiter: limiter, calls: calls} do
@@ -122,7 +127,7 @@ defmodule LangExtract.Runner.RequestTest do
 
     assert {:error, {:bad_request, _}} = Request.infer(limiter, client(), "prompt", @opts)
     assert Agent.get(calls, & &1) == 1
-    refute_receive {[:lang_extract, :chunk, :retry], _, _}
+    refute_receive {[:lang_extract, :chunk, :retry], _, %{limiter: ^limiter}}
   end
 
   test "in-flight slot is released between attempts", %{limiter: limiter, calls: calls} do

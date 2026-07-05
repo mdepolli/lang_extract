@@ -38,7 +38,10 @@ defmodule LangExtract.Runner do
 
   use Supervisor
 
-  alias LangExtract.{Client, Runner.Limiter}
+  alias LangExtract.Alignment.Span
+  alias LangExtract.{Client, Orchestrator, Template}
+  alias LangExtract.Pipeline.{ChunkError, ChunkResult}
+  alias LangExtract.Runner.{Delivery, Limiter, Request}
 
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
@@ -74,6 +77,70 @@ defmodule LangExtract.Runner do
     # crashed Task.Supervisor orphans budget holders — partial restarts
     # would leak slots, so the whole cell restarts together.
     Supervisor.init(children, strategy: :one_for_all)
+  end
+
+  @doc """
+  Streams per-chunk results through the runner's shared budget.
+
+  Same event shape as `LangExtract.stream/4` — `{:ok, %ChunkResult{}}` and
+  `{:error, %ChunkError{}}` in completion order — but chunk requests are
+  scheduled through the runner's Limiter (rpm + in-flight budget, global
+  429 backoff) and retried per the runner's policy. Task-level failures
+  stay per-chunk. Delivery is bounded: at most `:buffer` results are
+  outstanding, so a slow consumer throttles admission.
+
+  Accepts `run/4`'s chunking and alignment options plus `:buffer`
+  (default: the runner's configured buffer).
+  """
+  @spec stream(Supervisor.supervisor(), String.t(), Template.t(), keyword()) :: Enumerable.t()
+  def stream(runner, source, %Template{} = template, opts \\ []) do
+    %{config: config, limiter: limiter, task_supervisor: task_sup} = resources(runner)
+
+    chunks = Orchestrator.chunk_source(source, opts)
+    buffer = Keyword.get(opts, :buffer, config.buffer)
+
+    retry_opts = [
+      chunk_retries: config.chunk_retries,
+      retry_backoff_ms: config.retry_backoff_ms
+    ]
+
+    process = fn chunk ->
+      Orchestrator.process_chunk(chunk, template, opts, fn prompt ->
+        Request.infer(limiter, config.client, prompt, retry_opts)
+      end)
+    end
+
+    task_sup
+    |> Delivery.stream_events(chunks, buffer, process)
+    |> Orchestrator.with_document_events(length(chunks), %{source_bytes: byte_size(source)})
+  end
+
+  @doc """
+  Runs a full extraction through the runner's shared budget.
+
+  Collects `stream/4` and restores document order. Always returns
+  `{:ok, {spans, chunk_errors}}`: in runner mode every failure is
+  per-chunk (a crashed or timed-out chunk task lands in `chunk_errors`
+  with reason `{:task_exit, reason}`), so there is no
+  abandon-the-document error path.
+  """
+  @spec run(Supervisor.supervisor(), String.t(), Template.t(), keyword()) ::
+          {:ok, {[Span.t()], [ChunkError.t()]}}
+  def run(runner, source, %Template{} = template, opts \\ []) do
+    {results, errors} =
+      runner
+      |> stream(source, template, opts)
+      |> Enum.reduce({[], []}, fn
+        {:ok, %ChunkResult{} = result}, {results, errors} -> {[result | results], errors}
+        {:error, %ChunkError{} = error}, {results, errors} -> {results, [error | errors]}
+      end)
+
+    spans =
+      results
+      |> Enum.sort_by(& &1.byte_start)
+      |> Enum.flat_map(& &1.spans)
+
+    {:ok, {spans, Enum.sort_by(errors, & &1.byte_start)}}
   end
 
   @doc false
