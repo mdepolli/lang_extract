@@ -2,7 +2,9 @@ defmodule LangExtract.Prompt.BuilderTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Extraction
-  alias LangExtract.Prompt.{Builder, ExampleData, Template}
+  alias LangExtract.Prompt.Builder
+  alias LangExtract.Template
+  alias LangExtract.Template.Example
 
   describe "build/2" do
     test "renders description and chunk text with no examples" do
@@ -21,7 +23,7 @@ defmodule LangExtract.Prompt.BuilderTest do
       template = %Template{
         description: "Extract conditions.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Patient has diabetes.",
             extractions: [
               %Extraction{
@@ -64,7 +66,7 @@ defmodule LangExtract.Prompt.BuilderTest do
       template = %Template{
         description: "",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Example text.",
             extractions: [%Extraction{class: "thing", text: "text", attributes: %{}}]
           }

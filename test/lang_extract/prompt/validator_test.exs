@@ -2,14 +2,16 @@ defmodule LangExtract.Prompt.ValidatorTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Extraction
-  alias LangExtract.Prompt.{ExampleData, Template, Validator}
+  alias LangExtract.Prompt.Validator
+  alias LangExtract.Template
+  alias LangExtract.Template.Example
 
   describe "validate/1" do
     test "returns :ok when all examples align exactly" do
       template = %Template{
         description: "Extract conditions.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Patient has hypertension and diabetes.",
             extractions: [
               %Extraction{class: "condition", text: "hypertension", attributes: %{}},
@@ -26,7 +28,7 @@ defmodule LangExtract.Prompt.ValidatorTest do
       template = %Template{
         description: "Extract.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Patient has hypertension.",
             extractions: [
               %Extraction{class: "drug", text: "tylenol", attributes: %{}}
@@ -48,7 +50,7 @@ defmodule LangExtract.Prompt.ValidatorTest do
       template = %Template{
         description: "Extract.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "the quick brown fox jumps",
             extractions: [
               %Extraction{class: "phrase", text: "quick brown dog", attributes: %{}}
@@ -67,7 +69,7 @@ defmodule LangExtract.Prompt.ValidatorTest do
       template = %Template{
         description: "Extract.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "the quick brown fox jumps",
             extractions: [
               # 2 of 3 tokens match — fuzzy at low threshold
@@ -85,14 +87,14 @@ defmodule LangExtract.Prompt.ValidatorTest do
       template = %Template{
         description: "Extract.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Patient has hypertension.",
             extractions: [
               %Extraction{class: "condition", text: "hypertension", attributes: %{}},
               %Extraction{class: "drug", text: "aspirin", attributes: %{}}
             ]
           },
-          %ExampleData{
+          %Example{
             text: "Prescribed lisinopril.",
             extractions: [
               %Extraction{class: "drug", text: "metformin", attributes: %{}}
@@ -121,7 +123,7 @@ defmodule LangExtract.Prompt.ValidatorTest do
     test "returns :ok for example with no extractions" do
       template = %Template{
         description: "Extract.",
-        examples: [%ExampleData{text: "Some text."}]
+        examples: [%Example{text: "Some text."}]
       }
 
       assert :ok = Validator.validate(template)
@@ -131,7 +133,7 @@ defmodule LangExtract.Prompt.ValidatorTest do
       template = %Template{
         description: "Extract.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Some text here.",
             extractions: [
               %Extraction{class: "thing", text: "", attributes: %{}}
@@ -149,7 +151,7 @@ defmodule LangExtract.Prompt.ValidatorTest do
       template = %Template{
         description: "Extract.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Take aspirin daily with aspirin.",
             extractions: [
               %Extraction{class: "drug", text: "aspirin", attributes: %{}},
@@ -168,7 +170,7 @@ defmodule LangExtract.Prompt.ValidatorTest do
       template = %Template{
         description: "Extract.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Patient has diabetes.",
             extractions: [
               %Extraction{class: "condition", text: "diabetes", attributes: %{}}
@@ -184,7 +186,7 @@ defmodule LangExtract.Prompt.ValidatorTest do
       template = %Template{
         description: "Extract.",
         examples: [
-          %ExampleData{
+          %Example{
             text: "Patient has diabetes.",
             extractions: [
               %Extraction{class: "drug", text: "tylenol", attributes: %{}}

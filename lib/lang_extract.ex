@@ -16,7 +16,7 @@ defmodule LangExtract do
   """
 
   alias LangExtract.Alignment.{Aligner, Span}
-  alias LangExtract.{Client, Orchestrator, Pipeline, Prompt, Provider}
+  alias LangExtract.{Client, Extraction, Orchestrator, Pipeline, Prompt, Provider, Template}
   alias Pipeline.ChunkError
 
   @doc """
@@ -87,14 +87,86 @@ defmodule LangExtract do
   ## Examples
 
       client = LangExtract.new(:claude, api_key: "sk-...")
-      template = %LangExtract.Prompt.Template{description: "Extract entities."}
+      template = LangExtract.template("Extract entities.")
       {:ok, {spans, errors}} = LangExtract.run(client, "the quick brown fox", template)
 
   """
-  @spec run(Client.t(), String.t(), Prompt.Template.t(), keyword()) ::
+  @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
           {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, term()}
-  def run(%Client{} = client, source, %Prompt.Template{} = template, opts \\ []) do
+  def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     Orchestrator.run(client, source, template, opts)
+  end
+
+  @doc """
+  Builds a validated extraction template.
+
+  Examples are given as plain maps (string or atom keys, so JSON-loaded
+  task definitions work verbatim) or as ready-made structs. Each example's
+  extraction texts are validated against the example text using the
+  production aligner; misaligned examples raise
+  `LangExtract.Prompt.Validator.ValidationError` — a template that
+  constructs is a template whose examples align. Pass `validate: false`
+  to skip.
+
+  ## Examples
+
+      iex> template =
+      ...>   LangExtract.template("Extract conditions.",
+      ...>     examples: [
+      ...>       %{text: "Patient has diabetes.",
+      ...>         extractions: [%{class: "condition", text: "diabetes"}]}
+      ...>     ]
+      ...>   )
+      iex> [example] = template.examples
+      iex> example.extractions
+      [%LangExtract.Extraction{class: "condition", text: "diabetes", attributes: %{}}]
+
+  """
+  @spec template(String.t(), keyword()) :: Template.t()
+  def template(description, opts \\ []) when is_binary(description) do
+    examples =
+      opts
+      |> Keyword.get(:examples, [])
+      |> Enum.map(&normalize_example/1)
+
+    template = %Template{description: description, examples: examples}
+
+    if Keyword.get(opts, :validate, true) do
+      Prompt.Validator.validate!(template)
+    end
+
+    template
+  end
+
+  defp normalize_example(%Template.Example{} = example), do: example
+
+  defp normalize_example(%{} = map) do
+    %Template.Example{
+      text: fetch_field!(map, :text, "example"),
+      extractions:
+        map
+        |> get_field(:extractions, [])
+        |> Enum.map(&normalize_extraction/1)
+    }
+  end
+
+  defp normalize_extraction(%Extraction{} = extraction), do: extraction
+
+  defp normalize_extraction(%{} = map) do
+    %Extraction{
+      class: fetch_field!(map, :class, "extraction"),
+      text: fetch_field!(map, :text, "extraction"),
+      attributes: get_field(map, :attributes, %{})
+    }
+  end
+
+  defp fetch_field!(map, key, owner) do
+    get_field(map, key, nil) ||
+      raise ArgumentError, "#{owner} is missing required key #{inspect(key)}: #{inspect(map)}"
+  end
+
+  defp get_field(map, key, default) do
+    Map.get(map, key) || Map.get(map, Atom.to_string(key)) || default
   end
 
   @doc """

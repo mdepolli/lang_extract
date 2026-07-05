@@ -1,6 +1,6 @@
 defmodule LangExtract.Prompt.Validator do
   @moduledoc """
-  Validates that few-shot examples in a `LangExtract.Prompt.Template` are self-consistent.
+  Validates that few-shot examples in a `LangExtract.Template` are self-consistent.
 
   Each extraction text should align exactly against its own example's source text.
   Catches typos, hallucinated spans, and copy-paste errors before they reach the LLM.
@@ -13,7 +13,8 @@ defmodule LangExtract.Prompt.Validator do
   """
 
   alias LangExtract.Alignment.Aligner
-  alias LangExtract.{Extraction, Prompt.ExampleData, Prompt.Template}
+  alias LangExtract.{Extraction, Template}
+  alias LangExtract.Template.Example
 
   defmodule Issue do
     @moduledoc """
@@ -78,7 +79,7 @@ defmodule LangExtract.Prompt.Validator do
     end
   end
 
-  defp validate_example(%ExampleData{} = example, example_index, opts) do
+  defp validate_example(%Example{} = example, example_index, opts) do
     texts = Enum.map(example.extractions, & &1.text)
     spans = Aligner.align(example.text, texts, opts)
 

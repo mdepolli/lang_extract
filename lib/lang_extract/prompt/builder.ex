@@ -11,7 +11,7 @@ defmodule LangExtract.Prompt.Builder do
   no alignment cost.
   """
 
-  alias LangExtract.{Prompt.Template, WireFormat}
+  alias LangExtract.{Template, WireFormat}
 
   # YAML-mode output invites paraphrase: models merge interrupted quotes,
   # normalize punctuation, and echo few-shot examples on empty passages.

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`LangExtract.template/2`** — the front door for building templates:
+  accepts plain maps with string or atom keys (JSON-loaded task definitions
+  work verbatim), normalizes into structs, and validates examples against
+  the production aligner at construction — misaligned examples raise. Pass
+  `validate: false` to skip.
+
+### Changed
+
+- **Breaking: `Prompt.Template` is now `LangExtract.Template`; `ExampleData`
+  is now `Template.Example`** — template data is core (same promotion
+  `Extraction` got in 0.4.0), and the example struct is a subordinate type
+  nested in its owner. Construct via `LangExtract.template/2`; the structs
+  remain public for pattern matching.
+
 ## [0.6.0] - 2026-07-05
 
 ### Security

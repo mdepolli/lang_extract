@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   use Mix.Task
 
-  alias LangExtract.{Extraction, Pipeline.ChunkError, Prompt, Serializer}
+  alias LangExtract.{Pipeline.ChunkError, Serializer}
 
   @default_corpus "benchmark/corpus"
   @default_out "benchmark/results/elixir"
@@ -37,7 +37,7 @@ defmodule Mix.Tasks.Benchmark.Run do
     out_dir = opts[:out] || @default_out
 
     task_def = load_task(task_name)
-    template = build_template(task_def)
+    template = LangExtract.template(task_def["description"], examples: task_def["examples"])
     corpus_files = corpus_files!(corpus_dir, opts[:document])
 
     run_dir = create_run_dir!(out_dir, task_name)
@@ -279,24 +279,6 @@ defmodule Mix.Tasks.Benchmark.Run do
       model: @model,
       max_tokens: @max_tokens
     )
-  end
-
-  defp build_template(task_def) do
-    examples =
-      Enum.map(task_def["examples"], fn ex ->
-        extractions =
-          Enum.map(ex["extractions"], fn e ->
-            %Extraction{
-              class: e["class"],
-              text: e["text"],
-              attributes: e["attributes"] || %{}
-            }
-          end)
-
-        %Prompt.ExampleData{text: ex["text"], extractions: extractions}
-      end)
-
-    %Prompt.Template{description: task_def["description"], examples: examples}
   end
 
   defp chunk_error_to_map(%ChunkError{} = err) do

@@ -13,9 +13,8 @@ defmodule LangExtract.Orchestrator do
   # Matches upstream langextract's max_workers default.
   @default_max_concurrency 10
 
-  alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt}
+  alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt, Template}
   alias Pipeline.ChunkError
-  alias Prompt.Template
 
   @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
           {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, term()}

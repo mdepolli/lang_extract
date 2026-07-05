@@ -58,7 +58,7 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     defp template(description \\ "Extract.") do
-      %LangExtract.Prompt.Template{description: description}
+      %LangExtract.Template{description: description}
     end
 
     defp claude_extraction_response(extractions) do
