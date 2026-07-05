@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokens. Decoding is format-agnostic — `WireFormat.normalize/1` accepts
   JSON and YAML responses alike and keeps the YAML repair machinery.
 
+### Fixed
+
+- **Chunk task timeouts now return the documented error tuple** — the
+  `{:error, {:task_exit, reason}}` shape promised by `run/4` was
+  unreachable: `Task.async_stream`'s default `on_timeout: :exit` crashed
+  the calling process instead. `on_timeout: :kill_task` makes a timed-out
+  chunk surface as the documented infrastructure-failure return.
+
 ### Added
 
 - **Telemetry** — `[:lang_extract, :request]`, `[:lang_extract, :chunk]`,

@@ -341,6 +341,16 @@ defmodule LangExtract.OrchestratorTest do
       assert_receive {[:lang_extract, :document, :stop], %{error_count: 1}, _}
     end
 
+    test "chunk task timeout returns {:error, {:task_exit, :timeout}}" do
+      Req.Test.stub(__MODULE__, fn conn ->
+        Process.sleep(200)
+        Req.Test.json(conn, %{"content" => [%{"type" => "text", "text" => "{}"}]})
+      end)
+
+      assert {:error, {:task_exit, :timeout}} =
+               LangExtract.run(claude_client(), "some text", template(), task_timeout: 50)
+    end
+
     test "auto-chunks by default (short text fits in one chunk)" do
       stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
 

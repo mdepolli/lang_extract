@@ -34,7 +34,12 @@ defmodule LangExtract.Orchestrator do
           fn chunk -> {chunk.byte_start, process_chunk(client, chunk, template, opts)} end,
           ordered: false,
           max_concurrency: max_concurrency,
-          timeout: timeout
+          timeout: timeout,
+          # :kill_task turns a chunk timeout into an {:exit, :timeout} stream
+          # element (handled below as {:error, {:task_exit, _}}) instead of
+          # the default, which exits the calling process and makes the
+          # documented infrastructure-failure return unreachable.
+          on_timeout: :kill_task
         )
         |> collect_results()
 
