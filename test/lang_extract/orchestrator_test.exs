@@ -7,6 +7,12 @@ defmodule LangExtract.OrchestratorTest do
 
   @req_options [plug: {Req.Test, __MODULE__}]
 
+  # Module-qualified capture, not an anonymous fn, so telemetry stores it
+  # without the local-handler penalty; the parent pid travels as config.
+  def forward_event(event, measurements, metadata, parent) do
+    send(parent, {event, measurements, metadata})
+  end
+
   describe "LangExtract.new/2" do
     test "creates client with :claude provider" do
       client = LangExtract.new(:claude, api_key: "sk-test")
@@ -270,10 +276,8 @@ defmodule LangExtract.OrchestratorTest do
           [:lang_extract, :document, :stop],
           [:lang_extract, :chunk, :stop]
         ],
-        fn event, measurements, metadata, _config ->
-          send(parent, {event, measurements, metadata})
-        end,
-        nil
+        &__MODULE__.forward_event/4,
+        parent
       )
 
       on_exit(fn -> :telemetry.detach(handler_id) end)
@@ -318,10 +322,8 @@ defmodule LangExtract.OrchestratorTest do
       :telemetry.attach_many(
         handler_id,
         [[:lang_extract, :document, :stop], [:lang_extract, :chunk, :stop]],
-        fn event, measurements, metadata, _config ->
-          send(parent, {event, measurements, metadata})
-        end,
-        nil
+        &__MODULE__.forward_event/4,
+        parent
       )
 
       on_exit(fn -> :telemetry.detach(handler_id) end)

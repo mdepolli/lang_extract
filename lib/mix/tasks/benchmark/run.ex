@@ -148,14 +148,10 @@ defmodule Mix.Tasks.Benchmark.Run do
     table = :ets.new(:benchmark_requests, [:public, :ordered_set])
     handler_id = "benchmark-usage-#{slug}-#{System.unique_integer([:positive])}"
 
-    :telemetry.attach(
-      handler_id,
-      [:lang_extract, :request, :stop],
-      fn _event, measurements, metadata, _config ->
-        :ets.insert(table, {System.unique_integer([:monotonic]), measurements, metadata})
-      end,
-      nil
-    )
+    # Module-qualified capture (not an anonymous fn) so telemetry can store
+    # and dispatch it without the local-handler penalty; the ETS table
+    # travels as the handler config.
+    :telemetry.attach(handler_id, [:lang_extract, :request, :stop], &record_request/4, table)
 
     try do
       {elapsed_us, run_result} = :timer.tc(fun)
@@ -170,6 +166,11 @@ defmodule Mix.Tasks.Benchmark.Run do
       :telemetry.detach(handler_id)
       :ets.delete(table)
     end
+  end
+
+  @doc false
+  def record_request(_event, measurements, metadata, table) do
+    :ets.insert(table, {System.unique_integer([:monotonic]), measurements, metadata})
   end
 
   defp usage_block(requests, elapsed_ms) do

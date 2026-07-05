@@ -14,15 +14,19 @@ defmodule LangExtract.ProviderTest do
       :telemetry.attach_many(
         handler_id,
         [[:lang_extract, :request, :start], [:lang_extract, :request, :stop]],
-        fn [:lang_extract, :request, phase], measurements, metadata, _config ->
-          send(parent, {phase, measurements, metadata})
-        end,
-        nil
+        &__MODULE__.forward_event/4,
+        parent
       )
 
       on_exit(fn -> :telemetry.detach(handler_id) end)
 
       %{model: "test-model-#{System.unique_integer([:positive])}"}
+    end
+
+    # Module-qualified capture, not an anonymous fn, so telemetry stores it
+    # without the local-handler penalty; the parent pid travels as config.
+    def forward_event([:lang_extract, :request, phase], measurements, metadata, parent) do
+      send(parent, {phase, measurements, metadata})
     end
 
     defp req_options, do: [plug: {Req.Test, __MODULE__}]

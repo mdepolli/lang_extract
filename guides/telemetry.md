@@ -36,18 +36,33 @@ semantics) if the wrapped work raises.
 
 ## Example: cost tracking per document
 
+Attach a **module-qualified capture**, not an anonymous function —
+`:telemetry` penalizes local/anonymous handlers (they can't be stored
+efficiently and break on code reload). Any per-attachment state goes in
+`attach`'s 4th argument, the **config**: telemetry stores it and passes it
+back as your handler's 4th argument on every event. That is what lets one
+static handler function back many attachments — here, a metric prefix
+supplied at attach time:
+
 ```elixir
-:telemetry.attach(
-  "my-app-extraction-cost",
-  [:lang_extract, :request, :stop],
-  fn _event, measurements, metadata, _config ->
-    MyApp.Metrics.increment("llm.tokens.output",
-      Map.get(measurements, :output_tokens, 0),
-      tags: [model: metadata.model]
+defmodule MyApp.ExtractionMetrics do
+  def attach(metric_prefix) do
+    :telemetry.attach(
+      "extraction-cost-#{metric_prefix}",
+      [:lang_extract, :request, :stop],
+      &__MODULE__.handle/4,
+      %{prefix: metric_prefix}
     )
-  end,
-  nil
-)
+  end
+
+  # The %{prefix: ...} passed to attach/1 above arrives here as config.
+  def handle(_event, measurements, %{model: model}, %{prefix: prefix}) do
+    MyApp.Metrics.increment("#{prefix}.tokens.output",
+      Map.get(measurements, :output_tokens, 0),
+      tags: [model: model]
+    )
+  end
+end
 ```
 
 For a per-run summary instead of streaming metrics, collect request
