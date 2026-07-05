@@ -133,24 +133,85 @@ defmodule Mix.Tasks.Benchmark.Run do
     source = File.read!(file)
     Mix.shell().info("  #{slug} (#{byte_size(source)} bytes)...")
 
-    {elapsed_us, run_result} = :timer.tc(fn -> extractor.(source, template) end)
+    {elapsed_us, run_result, requests} =
+      with_request_collection(slug, fn -> extractor.(source, template) end)
 
-    document_result(slug, task_name, run_result, div(elapsed_us, 1000))
+    elapsed_ms = div(elapsed_us, 1000)
+    document_result(slug, task_name, run_result, elapsed_ms, usage_block(requests, elapsed_ms))
+  end
+
+  # Documents run sequentially, so a per-document handler window cleanly
+  # scopes the request events to this document. The handler runs in the
+  # chunk task processes; a public ETS table (no process to supervise)
+  # collects concurrent inserts, ordered by a monotonic counter.
+  defp with_request_collection(slug, fun) do
+    table = :ets.new(:benchmark_requests, [:public, :ordered_set])
+    handler_id = "benchmark-usage-#{slug}-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler_id,
+      [:lang_extract, :request, :stop],
+      fn _event, measurements, metadata, _config ->
+        :ets.insert(table, {System.unique_integer([:monotonic]), measurements, metadata})
+      end,
+      nil
+    )
+
+    try do
+      {elapsed_us, run_result} = :timer.tc(fun)
+
+      requests =
+        table
+        |> :ets.tab2list()
+        |> Enum.map(fn {_order, measurements, metadata} -> {measurements, metadata} end)
+
+      {elapsed_us, run_result, requests}
+    after
+      :telemetry.detach(handler_id)
+      :ets.delete(table)
+    end
+  end
+
+  defp usage_block(requests, elapsed_ms) do
+    input = requests |> Enum.map(fn {meas, _meta} -> meas[:input_tokens] || 0 end) |> Enum.sum()
+    output = requests |> Enum.map(fn {meas, _meta} -> meas[:output_tokens] || 0 end) |> Enum.sum()
+
+    %{
+      "input_tokens" => input,
+      "output_tokens" => output,
+      "output_tokens_per_sec" => tokens_per_sec(output, elapsed_ms),
+      "requests" => Enum.map(requests, &request_entry/1)
+    }
+  end
+
+  defp tokens_per_sec(_output, 0), do: nil
+  defp tokens_per_sec(output, elapsed_ms), do: Float.round(output * 1000 / elapsed_ms, 1)
+
+  defp request_entry({measurements, metadata}) do
+    %{
+      "ms" => System.convert_time_unit(measurements.duration, :native, :millisecond),
+      "input_tokens" => measurements[:input_tokens],
+      "output_tokens" => measurements[:output_tokens],
+      "status" => to_string(metadata.status)
+    }
   end
 
   @doc false
-  def document_result(slug, task_name, {:ok, {spans, errors}}, elapsed_ms) do
+  def document_result(slug, task_name, run_result, elapsed_ms, usage \\ nil)
+
+  def document_result(slug, task_name, {:ok, {spans, errors}}, elapsed_ms, usage) do
     %{
       "source" => slug,
       "task" => task_name,
       "library" => "elixir",
       "extractions" => Enum.map(spans, &Serializer.span_to_map/1),
       "timing" => %{"total_ms" => elapsed_ms},
+      "usage" => usage,
       "errors" => Enum.map(errors, &chunk_error_to_map/1)
     }
   end
 
-  def document_result(slug, task_name, {:error, reason}, _elapsed_ms) do
+  def document_result(slug, task_name, {:error, reason}, _elapsed_ms, _usage) do
     failure_result(slug, task_name, inspect(reason))
   end
 
@@ -161,6 +222,7 @@ defmodule Mix.Tasks.Benchmark.Run do
       "library" => "elixir",
       "extractions" => [],
       "timing" => nil,
+      "usage" => nil,
       "errors" => [%{"byte_start" => nil, "byte_end" => nil, "reason" => reason}]
     }
   end

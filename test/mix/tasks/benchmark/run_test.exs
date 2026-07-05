@@ -98,6 +98,63 @@ defmodule Mix.Tasks.Benchmark.RunTest do
       assert beta["errors"] == []
     end
 
+    test "collects request telemetry into the usage block", %{corpus: corpus, out: out} do
+      emitting_extractor = fn source, _template ->
+        # Nonzero elapsed time, so output_tokens_per_sec is computable.
+        Process.sleep(10)
+
+        :telemetry.execute(
+          [:lang_extract, :request, :stop],
+          %{
+            duration: System.convert_time_unit(1500, :millisecond, :native),
+            input_tokens: 100,
+            output_tokens: 40
+          },
+          %{provider: :claude, model: "test", status: 200}
+        )
+
+        :telemetry.execute(
+          [:lang_extract, :request, :stop],
+          %{duration: System.convert_time_unit(800, :millisecond, :native)},
+          %{provider: :claude, model: "test", status: 429}
+        )
+
+        {:ok, {[%Span{@span | text: source |> String.split() |> List.last()}], []}}
+      end
+
+      Run.do_run(run_args(corpus, out, ["--document", "alpha"]), emitting_extractor)
+
+      [run_dir] = out |> Path.join("ner_2*") |> Path.wildcard()
+      result = run_dir |> Path.join("alpha.json") |> File.read!() |> Jason.decode!()
+
+      usage = result["usage"]
+      assert usage["input_tokens"] == 100
+      assert usage["output_tokens"] == 40
+      assert is_float(usage["output_tokens_per_sec"])
+
+      assert [first, second] = usage["requests"]
+      assert first["ms"] == 1500
+      assert first["input_tokens"] == 100
+      assert first["status"] == "200"
+      assert second["ms"] == 800
+      assert second["input_tokens"] == nil
+      assert second["status"] == "429"
+    end
+
+    test "an extractor emitting no telemetry yields a zeroed usage block", %{
+      corpus: corpus,
+      out: out
+    } do
+      Run.do_run(run_args(corpus, out, ["--document", "beta"]), &ok_extractor/2)
+
+      [run_dir] = out |> Path.join("ner_2*") |> Path.wildcard()
+      result = run_dir |> Path.join("beta.json") |> File.read!() |> Jason.decode!()
+
+      assert result["usage"]["input_tokens"] == 0
+      assert result["usage"]["output_tokens"] == 0
+      assert result["usage"]["requests"] == []
+    end
+
     test "--document restricts the run to one corpus file", %{corpus: corpus, out: out} do
       Run.do_run(run_args(corpus, out, ["--document", "beta"]), &ok_extractor/2)
 

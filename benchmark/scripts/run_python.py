@@ -42,6 +42,13 @@ class ClaudeProvider(base_model.BaseLanguageModel):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.max_workers = max_workers
+        # Per-request measurements, drained once per document by the runner.
+        # list.append is atomic under the GIL, safe from pool workers.
+        self.request_log: list[dict] = []
+
+    def drain_request_log(self) -> list[dict]:
+        log, self.request_log = self.request_log, []
+        return log
 
     def _request(self, body: dict) -> dict:
         """POST to the Messages API, retrying transient failures with backoff.
@@ -104,7 +111,22 @@ class ClaudeProvider(base_model.BaseLanguageModel):
         }
         if self.temperature is not None:
             body["temperature"] = self.temperature
-        return self._completion_text(self._request(body))
+
+        # Duration wraps the full retry loop, mirroring the Elixir side
+        # (its telemetry span wraps Req.post including transient retries).
+        start = time.perf_counter()
+        data = self._request(body)
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+        usage = data.get("usage") or {}
+        self.request_log.append({
+            "ms": elapsed_ms,
+            "input_tokens": usage.get("input_tokens"),
+            "output_tokens": usage.get("output_tokens"),
+            "status": "200",
+        })
+
+        return self._completion_text(data)
 
     def infer(self, batch_prompts, **kwargs):
         # Parallelism lives in the provider (upstream convention — see the
@@ -217,6 +239,19 @@ def normalize_extraction(extraction, source_text: str) -> dict:
     }
 
 
+def usage_block(requests: list[dict], elapsed_ms: int) -> dict:
+    input_total = sum(r["input_tokens"] or 0 for r in requests)
+    output_total = sum(r["output_tokens"] or 0 for r in requests)
+    return {
+        "input_tokens": input_total,
+        "output_tokens": output_total,
+        "output_tokens_per_sec": (
+            round(output_total * 1000 / elapsed_ms, 1) if elapsed_ms else None
+        ),
+        "requests": requests,
+    }
+
+
 def run_document(file: Path, task_def: dict, task_name: str,
                  examples: list[ExampleData], model, run_dir: Path,
                  meta: dict) -> None:
@@ -224,6 +259,8 @@ def run_document(file: Path, task_def: dict, task_name: str,
     source_bytes = file.read_bytes()
     source_text = source_bytes.decode("utf-8")
     print(f"  {slug} ({len(source_bytes)} bytes)...", end=" ", flush=True)
+
+    model.drain_request_log()
 
     try:
         start = time.perf_counter()
@@ -254,6 +291,7 @@ def run_document(file: Path, task_def: dict, task_name: str,
             "library": "python",
             "extractions": extractions,
             "timing": {"total_ms": elapsed_ms},
+            "usage": usage_block(model.drain_request_log(), elapsed_ms),
             "errors": [],
         }
 
@@ -265,6 +303,7 @@ def run_document(file: Path, task_def: dict, task_name: str,
             "library": "python",
             "extractions": [],
             "timing": None,
+            "usage": None,
             "errors": [{"byte_start": None, "byte_end": None, "reason": str(e)}],
         }
 
