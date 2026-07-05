@@ -99,6 +99,39 @@ defmodule LangExtract do
   end
 
   @doc """
+  Streams per-chunk extraction results as each chunk completes.
+
+  Returns a lazy stream of `{:ok, %Pipeline.ChunkResult{}}` and
+  `{:error, %Pipeline.ChunkError{}}` events in **completion order**, not
+  document order — consumers who need latency don't wait for slow chunks;
+  consumers who need order sort by the byte ranges every event carries.
+  Nothing runs until the stream is consumed, and a slow consumer naturally
+  limits how many chunk requests are in flight.
+
+  Failure semantics differ from `run/4` deliberately: every failure stays
+  per-chunk. A chunk whose task times out is reported as
+  `{:error, %ChunkError{reason: {:task_exit, :timeout}}}` with its byte
+  range, and the remaining chunks keep flowing — where `run/4` abandons
+  the document and returns `{:error, {:task_exit, reason}}`.
+
+  Takes the same options as `run/4`.
+
+  ## Examples
+
+      client
+      |> LangExtract.stream(document, template)
+      |> Enum.each(fn
+        {:ok, chunk_result} -> handle_spans(chunk_result.spans)
+        {:error, chunk_error} -> log_failure(chunk_error)
+      end)
+
+  """
+  @spec stream(Client.t(), String.t(), Template.t(), keyword()) :: Enumerable.t()
+  def stream(%Client{} = client, source, %Template{} = template, opts \\ []) do
+    Orchestrator.stream(client, source, template, opts)
+  end
+
+  @doc """
   Builds a validated extraction template.
 
   Examples are given as plain maps (string or atom keys, so JSON-loaded
