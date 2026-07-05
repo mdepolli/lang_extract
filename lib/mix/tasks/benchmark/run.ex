@@ -18,7 +18,15 @@ defmodule Mix.Tasks.Benchmark.Run do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
+    do_run(args, &live_extract/2)
+  end
 
+  # Seam for tests: the extractor receives (source, template) and returns
+  # LangExtract.run/4's shape, so everything around the API call — arg
+  # parsing, corpus discovery, run-dir creation, result files, symlink
+  # rotation — is exercisable without network access.
+  @doc false
+  def do_run(args, extractor) do
     {opts, _, _} =
       OptionParser.parse(args,
         strict: [task: :string, corpus: :string, out: :string, document: :string]
@@ -29,7 +37,6 @@ defmodule Mix.Tasks.Benchmark.Run do
     out_dir = opts[:out] || @default_out
 
     task_def = load_task(task_name)
-    client = build_client()
     template = build_template(task_def)
     corpus_files = corpus_files!(corpus_dir, opts[:document])
 
@@ -40,12 +47,19 @@ defmodule Mix.Tasks.Benchmark.Run do
     meta = run_meta()
 
     Enum.each(corpus_files, fn file ->
-      run_document(file, client, template, task_name, run_dir, meta)
+      run_document(file, extractor, template, task_name, run_dir, meta)
     end)
 
     update_latest_symlink(out_dir, task_name, run_dir)
 
     Mix.shell().info("\nResults written to #{run_dir}/")
+  end
+
+  defp live_extract(source, template) do
+    LangExtract.run(build_client(), source, template,
+      max_chunk_chars: @max_chunk_chars,
+      max_concurrency: 2
+    )
   end
 
   defp corpus_files!(corpus_dir, nil) do
@@ -79,12 +93,12 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   # One document's failure must not abandon the rest of the corpus run —
   # every document gets a result file, error or not.
-  defp run_document(file, client, template, task_name, run_dir, meta) do
+  defp run_document(file, extractor, template, task_name, run_dir, meta) do
     slug = Path.basename(file, ".txt")
 
     result =
       try do
-        extract_document(file, slug, client, template, task_name)
+        extract_document(file, slug, extractor, template, task_name)
       rescue
         e -> failure_result(slug, task_name, Exception.message(e))
       end
@@ -115,17 +129,11 @@ defmodule Mix.Tasks.Benchmark.Run do
     end
   end
 
-  defp extract_document(file, slug, client, template, task_name) do
+  defp extract_document(file, slug, extractor, template, task_name) do
     source = File.read!(file)
     Mix.shell().info("  #{slug} (#{byte_size(source)} bytes)...")
 
-    {elapsed_us, run_result} =
-      :timer.tc(fn ->
-        LangExtract.run(client, source, template,
-          max_chunk_chars: @max_chunk_chars,
-          max_concurrency: 2
-        )
-      end)
+    {elapsed_us, run_result} = :timer.tc(fn -> extractor.(source, template) end)
 
     document_result(slug, task_name, run_result, div(elapsed_us, 1000))
   end
