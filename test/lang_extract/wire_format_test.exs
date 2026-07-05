@@ -474,6 +474,28 @@ defmodule LangExtract.WireFormatTest do
     end
   end
 
+  describe "normalize/1 with JSON responses" do
+    test "parses a fenced JSON response in dynamic-key format" do
+      raw = ~s(```json\n{"extractions": [{"person": "Ahab", "person_attributes": {}}]}\n```)
+
+      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(raw)
+      assert entry["class"] == "person"
+      assert entry["text"] == "Ahab"
+    end
+
+    test "parses JSON that the YAML parser rejects (tab inside a string)" do
+      raw = ~s({"extractions": [{"note": "a\\tb", "note_attributes": {}}]})
+
+      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(raw)
+      assert entry["class"] == "note"
+      assert entry["text"] == "a\tb"
+    end
+
+    test "JSON without extractions key passes through for Parser to reject" do
+      assert {:ok, %{"other" => 1}} = WireFormat.normalize(~s({"other": 1}))
+    end
+  end
+
   # Strips the ```json ... ``` fences and decodes the JSON body.
   defp decode_fenced(fenced) do
     fenced

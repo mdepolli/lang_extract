@@ -33,28 +33,38 @@ defmodule LangExtract.WireFormat do
   def normalize(raw) when is_binary(raw) do
     cleaned = raw |> strip_think_tags() |> strip_fences()
 
+    # JSON is the wire format, so the strict, fast parser goes first; the
+    # YAML parser is the tolerance path for models that answer in YAML.
     # Valid YAML must never be rewritten (the quoting repairs corrupt legal
     # constructs like multi-line plain scalars) — repair only on failure.
-    with :error <- parse(cleaned),
-         :error <- cleaned |> quote_yaml_values() |> parse() do
+    with :error <- parse_json(cleaned),
+         :error <- parse_yaml(cleaned),
+         :error <- cleaned |> quote_yaml_values() |> parse_yaml() do
       {:error, {:invalid_format, raw}}
     end
   end
 
-  defp parse(yaml) do
-    case YamlElixir.read_from_string(yaml) do
-      {:ok, %{"extractions" => entries} = decoded} when is_list(entries) ->
-        normalized = Enum.map(entries, &normalize_entry/1)
-        {:ok, %{decoded | "extractions" => normalized}}
-
-      # Valid YAML without "extractions" key — let Parser return :missing_extractions
-      {:ok, %{} = decoded} when decoded != %{} ->
-        {:ok, decoded}
-
-      _ ->
-        :error
+  defp parse_json(json) do
+    case Jason.decode(json) do
+      {:ok, decoded} -> validate_decoded(decoded)
+      {:error, _} -> :error
     end
   end
+
+  defp parse_yaml(yaml) do
+    case YamlElixir.read_from_string(yaml) do
+      {:ok, decoded} -> validate_decoded(decoded)
+      _ -> :error
+    end
+  end
+
+  defp validate_decoded(%{"extractions" => entries} = decoded) when is_list(entries) do
+    {:ok, %{decoded | "extractions" => Enum.map(entries, &normalize_entry/1)}}
+  end
+
+  # Valid document without "extractions" key — let Parser return :missing_extractions
+  defp validate_decoded(%{} = decoded) when decoded != %{}, do: {:ok, decoded}
+  defp validate_decoded(_decoded), do: :error
 
   @yaml_value_re ~r/^(\s+- [\w-]+: )(.+)$/m
   # Block scalar headers (|, |-, >2+, ...) introduce the indented lines that
