@@ -195,6 +195,42 @@ defmodule LangExtract.OrchestratorTest do
       end
     end
 
+    test "spans return in document order even when chunks complete out of order" do
+      source = "First sentence here. Second sentence there."
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        {:ok, body, _conn} = Plug.Conn.read_body(conn)
+        prompt = hd(Jason.decode!(body)["messages"])["content"]
+
+        # Delay the first chunk so the second one completes before it;
+        # the unordered stream must still yield document order.
+        extractions =
+          if prompt =~ "First" do
+            Process.sleep(150)
+            [%{"word" => "First", "word_attributes" => %{}}]
+          else
+            [%{"word" => "Second", "word_attributes" => %{}}]
+          end
+
+        Req.Test.json(conn, %{
+          "content" => [
+            %{"type" => "text", "text" => Jason.encode!(%{"extractions" => extractions})}
+          ]
+        })
+      end)
+
+      assert {:ok, {spans, []}} =
+               LangExtract.run(claude_client(), source, template("Extract words."),
+                 max_chunk_chars: 25,
+                 max_concurrency: 2
+               )
+
+      assert Enum.map(spans, & &1.text) == ["First", "Second"]
+
+      assert spans |> Enum.map(& &1.byte_start) |> Enum.sort() ==
+               Enum.map(spans, & &1.byte_start)
+    end
+
     test "auto-chunks by default (short text fits in one chunk)" do
       stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
 

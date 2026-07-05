@@ -10,6 +10,8 @@ defmodule LangExtract.Orchestrator do
   """
 
   @default_max_chunk_chars 1000
+  # Matches upstream langextract's max_workers default.
+  @default_max_concurrency 10
 
   alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt}
   alias Pipeline.ChunkError
@@ -19,14 +21,14 @@ defmodule LangExtract.Orchestrator do
           {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, term()}
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     max_chars = Keyword.get(opts, :max_chunk_chars, @default_max_chunk_chars)
-    max_concurrency = Keyword.get(opts, :max_concurrency, 3)
+    max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
     timeout = Keyword.get(opts, :task_timeout, :infinity)
 
     source
     |> Chunker.chunk(max_chunk_chars: max_chars)
     |> Task.async_stream(
-      fn chunk -> process_chunk(client, chunk, template, opts) end,
-      ordered: true,
+      fn chunk -> {chunk.byte_start, process_chunk(client, chunk, template, opts)} end,
+      ordered: false,
       max_concurrency: max_concurrency,
       timeout: timeout
     )
@@ -35,10 +37,10 @@ defmodule LangExtract.Orchestrator do
 
   defp collect_results(stream) do
     Enum.reduce_while(stream, {[], []}, fn
-      {:ok, {:ok, chunk_spans}}, {spans_acc, errors_acc} ->
-        {:cont, {[chunk_spans | spans_acc], errors_acc}}
+      {:ok, {chunk_start, {:ok, chunk_spans}}}, {spans_acc, errors_acc} ->
+        {:cont, {[{chunk_start, chunk_spans} | spans_acc], errors_acc}}
 
-      {:ok, {:error, %ChunkError{} = error}}, {spans_acc, errors_acc} ->
+      {:ok, {_chunk_start, {:error, %ChunkError{} = error}}}, {spans_acc, errors_acc} ->
         {:cont, {spans_acc, [error | errors_acc]}}
 
       {:exit, reason}, _acc ->
@@ -49,9 +51,16 @@ defmodule LangExtract.Orchestrator do
 
   defp finalize_results({:error, _} = error), do: error
 
-  defp finalize_results({spans, errors}) do
-    spans = spans |> Enum.reverse() |> List.flatten()
-    {:ok, {spans, Enum.reverse(errors)}}
+  # The stream is unordered — with ordered: true one slow chunk gates every
+  # later launch, capping in-flight work at delivered + max_concurrency.
+  # Document order is restored here by chunk position instead.
+  defp finalize_results({tagged_spans, errors}) do
+    spans =
+      tagged_spans
+      |> Enum.sort_by(fn {chunk_start, _spans} -> chunk_start end)
+      |> Enum.flat_map(fn {_chunk_start, spans} -> spans end)
+
+    {:ok, {spans, Enum.sort_by(errors, & &1.byte_start)}}
   end
 
   defp process_chunk(client, chunk, template, opts) do

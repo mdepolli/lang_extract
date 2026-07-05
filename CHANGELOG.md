@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with upstream on repeated mentions with matched counts is 90.9%, on par
   with unique mentions. `exact_algorithm: :first_occurrence` restores the
   old behavior.
+- **Chunk stream no longer blocks on the slowest chunk** — the orchestrator's
+  `Task.async_stream` now runs `ordered: false` (document order is restored
+  by sorting chunk results on their byte offsets), so one slow chunk — e.g. a
+  429 riding Req's retry backoff — no longer gates every later chunk launch.
+  The default `:max_concurrency` also rises from 3 to 10, matching upstream
+  langextract's `max_workers` default.
 - **Minimum Elixir raised to 1.15** — plug 1.20 (test dependency, pulled in by
   a security patch) requires Elixir 1.15, and CI can no longer verify 1.14.
 
