@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pairs, and a trailing bare `A:` answer primer, mirroring langextract's
   `QAPromptGenerator`. Measured effect: ~20% fewer output tokens (reduced
   adaptive-thinking spend), no alignment cost.
+- **`req` constraint tightened to `~> 0.6`** — the previous `~> 0.5`
+  admitted pre-1.0 minors the test suite has never run against.
+- **`WireFormat.normalize/1` parses JSON first** — the strict, fast parser
+  handles the (now default) JSON responses; the YAML parser and its repair
+  pass remain as the tolerance path for models that answer in YAML.
 - **Wire format is now JSON (was YAML)** — `WireFormat.format_extractions/1`
   emits fenced dynamic-key JSON, matching upstream's default; the `ymlr`
   dependency is dropped. Decided by a corpus A/B under the new scaffold:
