@@ -270,4 +270,27 @@ defmodule LangExtract.Alignment.AlignerTest do
                Aligner.align(source, ["alpha beta gamma"], accept_lesser: false)
     end
   end
+
+  describe ":exact_algorithm option" do
+    test ":dp (default) grounds repeated mentions to successive occurrences" do
+      source = "hello world again hello world"
+
+      assert [
+               %Span{byte_start: 0, byte_end: 11, status: :exact},
+               %Span{byte_start: 18, byte_end: 29, status: :exact}
+             ] = Aligner.align(source, ["hello world", "hello world"])
+    end
+
+    test ":first_occurrence restores legacy first-match-wins grounding" do
+      source = "hello world again hello world"
+
+      assert [
+               %Span{byte_start: 0, byte_end: 11, status: :exact},
+               %Span{byte_start: 0, byte_end: 11, status: :exact}
+             ] =
+               Aligner.align(source, ["hello world", "hello world"],
+                 exact_algorithm: :first_occurrence
+               )
+    end
+  end
 end
