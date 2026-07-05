@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`LangExtract.stream/4`** — lazy stream of per-chunk results
+  (`{:ok, %Pipeline.ChunkResult{}}` | `{:error, %Pipeline.ChunkError{}}`)
+  in completion order, so first spans arrive while later chunks are still
+  extracting. `run/4` is now a collect-and-sort consumer of the same
+  pipeline — one code path, contract unchanged. Stream mode keeps every
+  failure per-chunk (a timed-out chunk is an error event with its byte
+  range; survivors keep flowing), where `run/4` retains its
+  abandon-the-document `{:error, {:task_exit, reason}}` contract.
+  Document telemetry fires at consumption: `:start` on first demand,
+  `:stop` at stream end, including early halts.
 - **`LangExtract.template/2`** — the front door for building templates:
   accepts plain maps with string or atom keys (JSON-loaded task definitions
   work verbatim), normalizes into structs, and validates examples against

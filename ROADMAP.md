@@ -3,13 +3,14 @@
 Features from the [original Python library](https://github.com/google/langextract)
 and natural extensions that haven't been implemented yet.
 
-## Production Pipeline (planned: 0.7.0 / 0.8.0)
+## Production Pipeline
 
-- **Streaming results** — `LangExtract.stream/4`: lazy stream of per-chunk
-  results in completion order, built on the unordered chunk pipeline.
+- ~~**Streaming results**~~ — shipped: `LangExtract.stream/4` (0.7.0).
 - **Supervised runner** — caller-owned `LangExtract.Runner` with a shared
   request budget (RPM token bucket + in-flight cap), global 429 backoff,
-  per-chunk retry budgets, and graceful drain on shutdown.
+  per-chunk retry budgets, and graceful drain on shutdown. Bounded
+  delivery is a normative constraint: admission gated on the
+  undelivered-results buffer.
 
 ## Extraction Quality
 

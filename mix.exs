@@ -104,7 +104,8 @@ defmodule LangExtract.MixProject do
           LangExtract.Chunker.Chunk,
           LangExtract.Pipeline,
           LangExtract.Pipeline.Parser,
-          LangExtract.Pipeline.ChunkError
+          LangExtract.Pipeline.ChunkError,
+          LangExtract.Pipeline.ChunkResult
         ],
         Alignment: [
           LangExtract.Alignment.Aligner,

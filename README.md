@@ -160,6 +160,31 @@ for span <- spans, span.byte_start != nil do
 end
 ```
 
+## Streaming
+
+`stream/4` yields each chunk's outcome the moment it completes — first
+results appear while the rest of the document is still being extracted:
+
+```elixir
+client
+|> LangExtract.stream(document, template)
+|> Enum.each(fn
+  {:ok, chunk_result} -> send(live_view, {:spans, chunk_result.spans})
+  {:error, chunk_error} -> send(live_view, {:chunk_failed, chunk_error})
+end)
+```
+
+Events arrive in **completion order**, not document order; every event
+carries its chunk's byte range, so consumers who need order sort and
+consumers who need latency don't wait. The stream is lazy — nothing runs
+until consumed, and a slow consumer naturally limits in-flight requests.
+
+Failure semantics differ from `run/4` deliberately: in stream mode every
+failure stays per-chunk. A timed-out chunk arrives as
+`{:error, %ChunkError{reason: {:task_exit, :timeout}}}` with its byte range
+and the surviving chunks keep flowing, where `run/4` abandons the document
+with `{:error, {:task_exit, reason}}`.
+
 ## Chunking
 
 For documents that exceed LLM token limits, pass `:max_chunk_chars` to split the

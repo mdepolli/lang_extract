@@ -33,6 +33,9 @@ semantics) if the wrapped work raises.
 - **Chunk `status` is only `:ok` or `:error`** — failure detail stays in
   the returned `ChunkError`, deliberately out of event metadata, so
   handlers can log freely without risking raw LLM payloads in logs.
+- **With `stream/4`, document events follow consumption**: `:start` fires
+  at first demand (not at stream construction) and `:stop` when the stream
+  ends — including early halts, with the counts accumulated so far.
 
 ## Example: cost tracking per document
 
