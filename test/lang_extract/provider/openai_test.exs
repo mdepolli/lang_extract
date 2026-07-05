@@ -160,7 +160,7 @@ defmodule LangExtract.Provider.OpenAITest do
 
     test "maps HTTP 429 to rate_limited" do
       response = %Req.Response{status: 429, body: %{}}
-      assert {:error, :rate_limited} = OpenAI.parse_response({:ok, response})
+      assert {:error, {:rate_limited, nil}} = OpenAI.parse_response({:ok, response})
     end
 
     test "maps HTTP 500 to server_error" do

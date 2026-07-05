@@ -167,8 +167,10 @@ defmodule LangExtract.Provider do
     {:error, :unauthorized}
   end
 
-  def map_response({:ok, %Req.Response{status: 429}}, _) do
-    {:error, :rate_limited}
+  # retry-after is enriched at the source: the runner's global backoff
+  # needs the server's deadline, and it only exists on this response.
+  def map_response({:ok, %Req.Response{status: 429} = response}, _) do
+    {:error, {:rate_limited, retry_after_ms(response)}}
   end
 
   def map_response({:ok, %Req.Response{status: status}}, _) when status >= 500 do
@@ -181,5 +183,18 @@ defmodule LangExtract.Provider do
 
   def map_response({:error, exception}, _) do
     {:error, {:request_error, exception}}
+  end
+
+  defp retry_after_ms(response) do
+    case Req.Response.get_header(response, "retry-after") do
+      [seconds | _] ->
+        case Integer.parse(seconds) do
+          {s, ""} -> s * 1000
+          _ -> nil
+        end
+
+      [] ->
+        nil
+    end
   end
 end

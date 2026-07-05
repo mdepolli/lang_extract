@@ -106,7 +106,7 @@ defmodule LangExtract.ProviderTest do
         |> Plug.Conn.resp(429, Jason.encode!(%{}))
       end)
 
-      assert {:error, :rate_limited} =
+      assert {:error, {:rate_limited, nil}} =
                Claude.infer("prompt",
                  api_key: "sk-test",
                  model: model,
@@ -117,6 +117,22 @@ defmodule LangExtract.ProviderTest do
       assert metadata.status == 429
       refute Map.has_key?(measurements, :input_tokens)
       refute Map.has_key?(measurements, :output_tokens)
+    end
+
+    test "429 with retry-after carries the deadline in milliseconds", %{model: model} do
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "7")
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(429, "{}")
+      end)
+
+      assert {:error, {:rate_limited, 7000}} =
+               Claude.infer("prompt",
+                 api_key: "sk-test",
+                 model: model,
+                 req_options: [plug: {Req.Test, __MODULE__}, retry: false]
+               )
     end
 
     test "transport errors emit stop with :transport_error status", %{model: model} do
