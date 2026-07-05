@@ -7,8 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-05
+
+### Added
+
+- **Alignment tuning options** — `:min_density` (LCS token-density floor,
+  default 1/3), `:accept_lesser` (toggle prefix matching), and
+  `:exact_algorithm` (`:dp` | `:first_occurrence`), accepted by
+  `LangExtract.run/4`, `extract/3`, and `align/3`.
+- **"Alignment and Spans" hexdocs guide** — span semantics, byte-vs-character
+  offsets (`binary_part`, not `String.slice`), the four aligner phases, and
+  tuning. The hexdocs sidebar now groups modules by layer, and the
+  `align`/`extract` examples run as doctests.
+
 ### Changed
 
+- **Aligner ported to upstream langextract v1.6.0 semantics** — the fuzzy
+  phase's frequency-overlap sliding window is replaced by upstream's
+  difflib-style lesser prefix match plus an LCS dynamic program over
+  lightly stemmed tokens, gated by coverage (`:fuzzy_threshold`) and density
+  (`:min_density`). Behavior is pinned by differential fixtures generated
+  from the upstream aligner. On the dialogue benchmark this took the exact
+  rate from 77.5% to 93.7% — identical to Python's 93.7% on the same corpus.
+- **Every prompt now demands verbatim spans** — `Prompt.Builder` appends a
+  standing instruction requiring extractions to be exact source substrings
+  and an empty `extractions: []` on contentless passages. Benchmarked:
+  without it, dialogue runs produced dozens of few-shot echoes and stitched
+  paraphrases that could not be aligned.
 - **Repeated mentions now ground to successive occurrences** — the aligner
   gained a phase-0 monotonic occurrence DP (port of upstream #485): over the
   extraction list in model output order, it selects at most one exact
@@ -306,7 +331,8 @@ byte positions in the source.
 - **Req-inspired API** — `new/2` + `run/3,4` instead of a single function with
   many keyword arguments.
 
-[Unreleased]: https://github.com/mdepolli/lang_extract/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mdepolli/lang_extract/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mdepolli/lang_extract/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mdepolli/lang_extract/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mdepolli/lang_extract/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/mdepolli/lang_extract/compare/v0.2.1...v0.2.2
