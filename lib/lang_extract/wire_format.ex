@@ -2,8 +2,12 @@ defmodule LangExtract.WireFormat do
   @moduledoc """
   Port between external LLM format and internal domain.
 
-  Serializes `%Extraction{}` structs to dynamic-key YAML for prompts,
-  and normalizes raw LLM output back to canonical format for the parser.
+  Serializes `%Extraction{}` structs to fenced dynamic-key JSON for prompts
+  (matching upstream langextract's default — decided by the 2026-07-05
+  format A/B, see benchmark/BASELINE.md), and normalizes raw LLM output
+  back to canonical format for the parser. The decode half is
+  format-agnostic: JSON is a YAML subset, so it parses YAML responses and
+  keeps the YAML repair machinery as tolerance for malformed output.
 
   Both directions of the wire format live here on purpose — they share the
   dynamic-key `_attributes` contract. `Prompt.Builder` uses the encode half;
@@ -17,9 +21,8 @@ defmodule LangExtract.WireFormat do
   @spec format_extractions([Extraction.t()]) :: String.t()
   def format_extractions(extractions) do
     items = Enum.map(extractions, &serialize_extraction/1)
-    payload = %{"extractions" => items}
-    yaml = Ymlr.document!(payload)
-    "```yaml\n#{yaml}```"
+    json = Jason.encode!(%{"extractions" => items}, pretty: true)
+    "```json\n#{json}\n```"
   end
 
   defp serialize_extraction(%Extraction{class: class, text: text, attributes: attributes}) do

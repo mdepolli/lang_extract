@@ -39,13 +39,13 @@ defmodule LangExtract.Prompt.BuilderTest do
       assert result =~ "Extract conditions."
       assert result =~ "Examples"
       assert result =~ "Q: Patient has diabetes."
-      assert result =~ "condition: diabetes"
+      assert result =~ ~s("condition": "diabetes")
       assert result =~ "condition_attributes"
       # Upstream QAPromptGenerator framing: final question, bare answer primer.
       assert result =~ "Q: Patient has asthma."
       assert String.ends_with?(String.trim(result), "A:")
       # The answer fence comes from WireFormat — exactly one per example.
-      assert length(String.split(result, "```yaml")) == 2
+      assert length(String.split(result, "```json")) == 2
     end
 
     test "includes verbatim extraction instructions before the passage" do
@@ -54,7 +54,7 @@ defmodule LangExtract.Prompt.BuilderTest do
       result = Builder.build(template, "The passage.")
 
       assert result =~ "verbatim"
-      assert result =~ "extractions: []"
+      assert result =~ ~s(output {"extractions": []})
 
       [_pre, post] = String.split(result, "verbatim", parts: 2)
       assert post =~ "The passage."

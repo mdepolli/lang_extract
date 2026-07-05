@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Prompts adopt upstream's Q/A scaffold** — `Examples` heading, `Q:`/`A:`
+  pairs, and a trailing bare `A:` answer primer, mirroring langextract's
+  `QAPromptGenerator`. Measured effect: ~20% fewer output tokens (reduced
+  adaptive-thinking spend), no alignment cost.
+- **Wire format is now JSON (was YAML)** — `WireFormat.format_extractions/1`
+  emits fenced dynamic-key JSON, matching upstream's default; the `ymlr`
+  dependency is dropped. Decided by a corpus A/B under the new scaffold:
+  zero chunk errors across 440 quote-dense dialogue chunks, better dialogue
+  alignment (17 fuzzy / 0 not_found vs 68 / 2), and 25% fewer ner output
+  tokens. Decoding is format-agnostic — `WireFormat.normalize/1` accepts
+  JSON and YAML responses alike and keeps the YAML repair machinery.
+
+### Added
+
+- **Telemetry** — `[:lang_extract, :request]`, `[:lang_extract, :chunk]`,
+  and `[:lang_extract, :document]` spans (`:telemetry` is now an explicit
+  dependency). Request `:stop` events carry input/output token counts
+  normalized across all three providers; the benchmark runners record them
+  as per-document `usage` blocks with per-request latency.
+
 ## [0.5.0] - 2026-07-05
 
 ### Added

@@ -5,7 +5,7 @@ defmodule LangExtract.WireFormatTest do
   alias LangExtract.WireFormat
 
   describe "format_extractions/1" do
-    test "serializes a single extraction to dynamic-key YAML with fences" do
+    test "serializes a single extraction to dynamic-key JSON with fences" do
       extraction = %Extraction{
         class: "medical_condition",
         text: "hypertension",
@@ -14,10 +14,10 @@ defmodule LangExtract.WireFormatTest do
 
       result = WireFormat.format_extractions([extraction])
 
-      assert String.starts_with?(result, "```yaml\n")
+      assert String.starts_with?(result, "```json\n")
       assert String.ends_with?(result, "\n```")
 
-      decoded = decode_fenced_yaml(result)
+      decoded = decode_fenced(result)
       [item] = decoded["extractions"]
 
       assert item["medical_condition"] == "hypertension"
@@ -34,7 +34,7 @@ defmodule LangExtract.WireFormatTest do
       ]
 
       result = WireFormat.format_extractions(extractions)
-      decoded = decode_fenced_yaml(result)
+      decoded = decode_fenced(result)
 
       assert length(decoded["extractions"]) == 2
 
@@ -48,7 +48,7 @@ defmodule LangExtract.WireFormatTest do
       extraction = %Extraction{class: "symptom", text: "headache", attributes: %{}}
 
       result = WireFormat.format_extractions([extraction])
-      decoded = decode_fenced_yaml(result)
+      decoded = decode_fenced(result)
 
       [item] = decoded["extractions"]
       assert item["symptom"] == "headache"
@@ -57,7 +57,7 @@ defmodule LangExtract.WireFormatTest do
 
     test "serializes empty extraction list" do
       result = WireFormat.format_extractions([])
-      decoded = decode_fenced_yaml(result)
+      decoded = decode_fenced(result)
 
       assert decoded == %{"extractions" => []}
     end
@@ -66,7 +66,7 @@ defmodule LangExtract.WireFormatTest do
       extraction = %Extraction{class: "thing", text: "stuff", attributes: nil}
 
       result = WireFormat.format_extractions([extraction])
-      decoded = decode_fenced_yaml(result)
+      decoded = decode_fenced(result)
 
       [item] = decoded["extractions"]
       assert item["thing"] == "stuff"
@@ -87,7 +87,7 @@ defmodule LangExtract.WireFormatTest do
       }
 
       result = WireFormat.format_extractions([extraction])
-      decoded = decode_fenced_yaml(result)
+      decoded = decode_fenced(result)
 
       [item] = decoded["extractions"]
       location = item["finding_attributes"]["location"]
@@ -474,11 +474,11 @@ defmodule LangExtract.WireFormatTest do
     end
   end
 
-  # Strips the ```yaml ... ``` fences and decodes the YAML body.
-  defp decode_fenced_yaml(fenced) do
+  # Strips the ```json ... ``` fences and decodes the JSON body.
+  defp decode_fenced(fenced) do
     fenced
-    |> String.replace_prefix("```yaml\n", "")
+    |> String.replace_prefix("```json\n", "")
     |> String.replace_suffix("\n```", "")
-    |> YamlElixir.read_from_string!()
+    |> Jason.decode!()
   end
 end

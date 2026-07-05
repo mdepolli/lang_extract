@@ -44,8 +44,8 @@ defmodule LangExtract do
   enriched spans with class and attributes.
 
   Accepts both canonical and dynamic-key format (where each entry uses
-  the class name as the key). Strips markdown fences and think tags
-  before parsing YAML.
+  the class name as the key), in JSON or YAML. Strips markdown fences
+  and think tags before parsing.
 
   ## Options
 
@@ -53,8 +53,8 @@ defmodule LangExtract do
 
   ## Examples
 
-      iex> yaml = "extractions:\\n- class: word\\n  text: fox"
-      iex> {:ok, [span]} = LangExtract.extract("the quick brown fox", yaml)
+      iex> raw = ~s({"extractions": [{"class": "word", "text": "fox"}]})
+      iex> {:ok, [span]} = LangExtract.extract("the quick brown fox", raw)
       iex> span.status
       :exact
 
