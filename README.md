@@ -18,19 +18,17 @@ granularity, and the output format:
 ```elixir
 client = LangExtract.new(:claude, api_key: System.get_env("ANTHROPIC_API_KEY"))
 
-template = %LangExtract.Prompt.Template{
-  description: "Extract literary works, people, and locations from the text.",
-  examples: [
-    %LangExtract.Prompt.ExampleData{
-      text: "Dickens wrote Oliver Twist while living in London.",
-      extractions: [
-        %LangExtract.Extraction{class: "person", text: "Dickens"},
-        %LangExtract.Extraction{class: "work", text: "Oliver Twist", attributes: %{"type" => "novel"}},
-        %LangExtract.Extraction{class: "location", text: "London"}
-      ]
-    }
-  ]
-}
+template =
+  LangExtract.template("Extract literary works, people, and locations from the text.",
+    examples: [
+      %{text: "Dickens wrote Oliver Twist while living in London.",
+        extractions: [
+          %{class: "person", text: "Dickens"},
+          %{class: "work", text: "Oliver Twist", attributes: %{"type" => "novel"}},
+          %{class: "location", text: "London"}
+        ]}
+    ]
+  )
 
 {:ok, {spans, _errors}} = LangExtract.run(client, "Romeo and Juliet was written by William Shakespeare.", template)
 
@@ -109,31 +107,26 @@ the examples also teach the wire format. A description alone would leave the
 model to invent all of that.
 
 Each extraction's `text` must appear verbatim in its example's `text`: the
-examples double as alignment ground truth, and the validator (below) checks
-this before you spend tokens.
+examples double as alignment ground truth, and `LangExtract.template/2`
+checks this at construction — a template that builds is a template whose
+examples align. (Pass `validate: false` to skip the check.)
 
 ```elixir
-template = %LangExtract.Prompt.Template{
-  description: "Extract medical conditions and medications from clinical text.",
-  examples: [
-    %LangExtract.Prompt.ExampleData{
-      text: "Patient was diagnosed with diabetes and prescribed metformin.",
-      extractions: [
-        %LangExtract.Extraction{
-          class: "condition",
-          text: "diabetes",
-          attributes: %{"chronicity" => "chronic"}
-        },
-        %LangExtract.Extraction{
-          class: "medication",
-          text: "metformin",
-          attributes: %{}
-        }
-      ]
-    }
-  ]
-}
+template =
+  LangExtract.template("Extract medical conditions and medications from clinical text.",
+    examples: [
+      %{text: "Patient was diagnosed with diabetes and prescribed metformin.",
+        extractions: [
+          %{class: "condition", text: "diabetes", attributes: %{"chronicity" => "chronic"}},
+          %{class: "medication", text: "metformin"}
+        ]}
+    ]
+  )
 ```
+
+Examples accept string keys too, so a template loaded from JSON passes
+through verbatim. The underlying structs (`LangExtract.Template`,
+`Template.Example`) are public for pattern matching and introspection.
 
 ### 3. Run extraction
 
@@ -184,8 +177,9 @@ not individual chunks.
 
 ## Prompt Validation
 
-Validate that your few-shot examples actually align with their own source text
-before burning LLM tokens:
+`LangExtract.template/2` validates at construction, so most code never calls
+the validator directly. It stays public for templates built with
+`validate: false` or assembled as structs by hand:
 
 ```elixir
 # Returns :ok or {:error, [issues]}
@@ -195,8 +189,8 @@ before burning LLM tokens:
 :ok = LangExtract.Prompt.Validator.validate!(template)
 ```
 
-The validator reports what it finds. You decide what to do — log, raise, or
-ignore. No built-in severity levels.
+Validation uses the production aligner, so a passing template predicts how
+the same extractions align at runtime.
 
 ## Alignment Without an LLM
 
@@ -307,7 +301,7 @@ phases:
 lib/lang_extract/
 ├── alignment/              # Tokenizer, Token, Aligner, Span
 ├── pipeline/               # Parser, ChunkError
-├── prompt/                 # Template, ExampleData, Builder, Validator
+├── prompt/                 # Builder, Validator
 ├── provider/               # Claude, OpenAI, Gemini implementations
 ├── client.ex               # Configured LLM client struct
 ├── extraction.ex           # Core extraction struct

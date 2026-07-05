@@ -88,11 +88,11 @@ defmodule LangExtract.MixProject do
           LangExtract,
           LangExtract.Client,
           LangExtract.Extraction,
+          LangExtract.Template,
+          LangExtract.Template.Example,
           LangExtract.WireFormat
         ],
         Prompt: [
-          LangExtract.Prompt.Template,
-          LangExtract.Prompt.ExampleData,
           LangExtract.Prompt.Builder,
           LangExtract.Prompt.Validator,
           LangExtract.Prompt.Validator.Issue,

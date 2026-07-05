@@ -3,9 +3,10 @@ defmodule LangExtract do
   Extracts structured data from text with source grounding.
   Maps extraction strings back to exact byte positions in source text.
 
-  This module is the main entry point: `new/2` builds a client, `run/4`
-  executes the full pipeline, and `align/3` / `extract/3` expose the
-  lower-level steps. Beyond the facade:
+  This module is the main entry point: `new/2` builds a client,
+  `template/2` builds a validated task definition, `run/4` executes the
+  full pipeline, and `align/3` / `extract/3` expose the lower-level steps.
+  Beyond the facade:
 
     * `LangExtract.Prompt.Validator` — pre-flight check that few-shot
       examples align against their own source text
