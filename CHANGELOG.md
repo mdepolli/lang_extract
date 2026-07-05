@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Serializer.from_map/1` validates extraction entries** — entries
+  missing `"text"` or carrying a non-string `"class"` now return the
+  promised `{:error, :invalid_data}` instead of producing malformed spans.
+  Class-less spans (from `align/3`) still round-trip.
 - **Chunk task timeouts now return the documented error tuple** — the
   `{:error, {:task_exit, reason}}` shape promised by `run/4` was
   unreachable: `Task.async_stream`'s default `on_timeout: :exit` crashed
