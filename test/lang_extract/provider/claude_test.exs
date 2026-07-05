@@ -1,5 +1,8 @@
 defmodule LangExtract.Provider.ClaudeTest do
-  use ExUnit.Case, async: true
+  # async: false - these tests exercise the env-var fallback by mutating
+  # global API-key vars; running concurrently with any env-reading test
+  # would be flaky by design.
+  use ExUnit.Case, async: false
 
   alias LangExtract.Provider.Claude
 
