@@ -265,6 +265,12 @@ Provider-specific options:
 | --------- | ------------ | ------- | ----------------------------------------------------------------------------- |
 | `:openai` | `:json_mode` | `true`  | Enable JSON mode. Set `false` for compatible endpoints that don't support it. |
 
+## Telemetry
+
+LangExtract emits `:telemetry` spans at document, chunk, and request level —
+request events carry input/output token counts for cost tracking. See the
+[Telemetry guide](guides/telemetry.md) for the event reference and examples.
+
 ## How It Works
 
 The pipeline has five stages:

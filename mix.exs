@@ -79,6 +79,7 @@ defmodule LangExtract.MixProject do
       extras: [
         "README.md",
         "guides/alignment.md",
+        "guides/telemetry.md",
         "CHANGELOG.md"
       ],
       groups_for_modules: [

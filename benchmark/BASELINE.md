@@ -1,5 +1,30 @@
 # Benchmark Baselines
 
+## Production baseline — 2026-07-05 (Q/A scaffold + JSON wire format)
+
+The citable baseline for the 0.6.0-era pipeline: clean runs at `9eb65d23`
+(`dialogue_20260705_174137`, `ner_20260705_175723`), compared against the
+Python instrumented baseline (`0dff5479`), both at concurrency 2.
+
+|                        | Dialogue E / P      | NER E / P           |
+| ---------------------- | ------------------- | ------------------- |
+| Chunk errors           | 0 / 0               | 0 / 0               |
+| Extractions            | 1,301 / 1,232       | 2,010 / 2,056       |
+| exact / fuzzy / nf     | 1283/**18/0** · 1165/66/1 | 1915/46/49 · 2010/45/1 |
+| Match rate / status agreement | 83% / 95.7%  | **88%** / 93.6%     |
+| Offsets identical      | 94.7%               | 68.6%               |
+| Output tokens          | 129,816 / 130,009   | 117,789 / 86,017    |
+| Avg time/doc           | 78.8s / 66.4s       | 84.2s / 49.7s       |
+
+Relative to the pre-scaffold, pre-switch pipeline (instrumented baseline
+below): ner output tokens fell **233k → 118k (−49%)** and wall clock
+106.3s → 84.2s; dialogue fuzzy spans fell 76 → 18 with zero not_found —
+the JSON switch improved verbatim discipline. Costs of the switch:
+input tokens up ~8–16% (scaffold + fence overhead; output is the
+expensive direction, so net cost still drops) and dialogue output +2%
+net. Residual vs Python: 1.37× ner output tokens — below single-run
+attribution; park unless it matters in practice.
+
 ## Instrumented baseline — 2026-07-05 (Phase 0, pre-streaming)
 
 All four runs at `27db4343` (clean, phase-0-instrumentation branch), both
