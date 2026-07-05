@@ -13,6 +13,135 @@ defmodule LangExtract.OrchestratorTest do
     send(parent, {event, measurements, metadata})
   end
 
+  describe "LangExtract.stream/4" do
+    alias LangExtract.Pipeline.ChunkResult
+
+    @two_chunk_source "First sentence here. Second sentence there."
+
+    defp counting_stub(parent) do
+      Req.Test.stub(__MODULE__, fn conn ->
+        {:ok, body, _conn} = Plug.Conn.read_body(conn)
+        prompt = hd(Jason.decode!(body)["messages"])["content"]
+        send(parent, {:request_made, prompt})
+
+        # First chunk is slow, so the second completes first.
+        if prompt =~ "First", do: Process.sleep(150)
+
+        word = if prompt =~ "First", do: "First", else: "Second"
+
+        Req.Test.json(conn, %{
+          "content" => [
+            %{
+              "type" => "text",
+              "text" => Jason.encode!(%{"extractions" => [%{"word" => word}]})
+            }
+          ]
+        })
+      end)
+    end
+
+    test "is lazy: building the stream makes no requests" do
+      counting_stub(self())
+
+      stream =
+        LangExtract.stream(claude_client(), @two_chunk_source, template(), max_chunk_chars: 25)
+
+      refute_receive {:request_made, _}, 100
+
+      assert length(Enum.to_list(stream)) == 2
+      assert_receive {:request_made, _}
+    end
+
+    test "yields events in completion order with byte ranges" do
+      counting_stub(self())
+
+      events =
+        claude_client()
+        |> LangExtract.stream(@two_chunk_source, template(),
+          max_chunk_chars: 25,
+          max_concurrency: 2
+        )
+        |> Enum.to_list()
+
+      # The slow first chunk arrives last; byte ranges identify the chunks.
+      assert [{:ok, %ChunkResult{} = second}, {:ok, %ChunkResult{} = first}] = events
+      assert [%{text: "Second"}] = second.spans
+      assert [%{text: "First"}] = first.spans
+      assert first.byte_start == 0
+      assert second.byte_start > 0
+    end
+
+    test "run/4 output equals the collected-and-sorted stream (order restoration)" do
+      counting_stub(self())
+      opts = [max_chunk_chars: 25, max_concurrency: 2]
+
+      assert {:ok, {run_spans, []}} =
+               LangExtract.run(claude_client(), @two_chunk_source, template(), opts)
+
+      stream_spans =
+        claude_client()
+        |> LangExtract.stream(@two_chunk_source, template(), opts)
+        |> Enum.map(fn {:ok, %ChunkResult{} = result} -> result end)
+        |> Enum.sort_by(& &1.byte_start)
+        |> Enum.flat_map(& &1.spans)
+
+      assert stream_spans == run_spans
+    end
+
+    test "a timed-out chunk is a per-chunk error; survivors keep flowing" do
+      counting_stub(self())
+
+      events =
+        claude_client()
+        |> LangExtract.stream(@two_chunk_source, template(),
+          max_chunk_chars: 25,
+          max_concurrency: 2,
+          task_timeout: 60
+        )
+        |> Enum.to_list()
+
+      assert [{:ok, %ChunkResult{spans: [%{text: "Second"}]}}, {:error, %ChunkError{} = error}] =
+               events
+
+      assert error.reason == {:task_exit, :timeout}
+      assert error.byte_start == 0
+    end
+
+    test "emits document telemetry at consumption, including on early halt" do
+      handler_id = "stream-doc-telemetry-#{inspect(self())}"
+      parent = self()
+
+      :telemetry.attach_many(
+        handler_id,
+        [[:lang_extract, :document, :start], [:lang_extract, :document, :stop]],
+        &__MODULE__.forward_event/4,
+        parent
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      counting_stub(self())
+
+      stream =
+        LangExtract.stream(claude_client(), @two_chunk_source, template(),
+          max_chunk_chars: 25,
+          max_concurrency: 2
+        )
+
+      refute_receive {[:lang_extract, :document, :start], _, _}, 50
+
+      assert [_one] = Enum.take(stream, 1)
+
+      assert_receive {[:lang_extract, :document, :start], start_meas, _}
+      assert is_integer(start_meas.system_time)
+
+      assert_receive {[:lang_extract, :document, :stop], stop_meas, _}
+      assert stop_meas.chunk_count == 2
+      assert stop_meas.span_count == 1
+      assert is_integer(stop_meas.duration)
+    end
+  end
+
   describe "LangExtract.new/2" do
     test "creates client with :claude provider" do
       client = LangExtract.new(:claude, api_key: "sk-test")
@@ -313,6 +442,52 @@ defmodule LangExtract.OrchestratorTest do
       assert is_integer(chunk_meta.byte_start) and is_integer(chunk_meta.byte_end)
 
       assert_receive {[:lang_extract, :chunk, :stop], _, _}
+    end
+
+    test "run/4 emits the full pre-streaming event census" do
+      handler_id = "invariance-telemetry-#{inspect(self())}"
+      parent = self()
+
+      :telemetry.attach_many(
+        handler_id,
+        [
+          [:lang_extract, :document, :start],
+          [:lang_extract, :document, :stop],
+          [:lang_extract, :chunk, :start],
+          [:lang_extract, :chunk, :stop],
+          [:lang_extract, :request, :start],
+          [:lang_extract, :request, :stop]
+        ],
+        &__MODULE__.forward_event/4,
+        parent
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      counting_stub(self())
+
+      assert {:ok, {_spans, []}} =
+               LangExtract.run(claude_client(), @two_chunk_source, template(),
+                 max_chunk_chars: 25,
+                 max_concurrency: 2
+               )
+
+      # One document span with the span-shaped + domain measurement keys.
+      assert_receive {[:lang_extract, :document, :start], %{system_time: _}, _}
+      assert_receive {[:lang_extract, :document, :stop], doc_stop, _}
+
+      assert doc_stop |> Map.keys() |> Enum.sort() ==
+               [:chunk_count, :duration, :error_count, :monotonic_time, :span_count]
+
+      # Two chunks: a start and a stop span each, plus a request span each.
+      for _ <- 1..2 do
+        assert_receive {[:lang_extract, :chunk, :start], _, _}
+        assert_receive {[:lang_extract, :chunk, :stop], %{duration: _, span_count: _}, _}
+        assert_receive {[:lang_extract, :request, :start], _, _}
+        assert_receive {[:lang_extract, :request, :stop], %{duration: _}, _}
+      end
+
+      refute_receive {[:lang_extract, :document, _], _, _}
     end
 
     test "failed chunk emits :error status and counts into document error_count" do
