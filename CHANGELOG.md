@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`LangExtract.Runner`** — a caller-owned, supervised extraction runner
+  with a shared request budget. Place it in your supervision tree with a
+  client, `:rpm`, `:max_in_flight`, and `:chunk_retries`; `Runner.run/4`
+  and `Runner.stream/4` mirror the standalone APIs but schedule every
+  chunk request through one Limiter (token-bucket RPM + in-flight cap),
+  so concurrent callers cannot jointly exceed the budget and a single
+  429 pauses all admission until the server's `retry-after` deadline.
+  The runner owns its retry policy (Req's transient retry is disabled
+  inside it): 429 waits never consume the per-chunk retry budget,
+  5xx/transport failures take jittered backoff and do, other errors
+  fail fast. Stream delivery is bounded — at most `:buffer` undelivered
+  results — so a slow consumer throttles admission instead of growing a
+  mailbox. In runner mode every failure is per-chunk; there is no
+  abandon-the-document error path. New telemetry:
+  `[:lang_extract, :limiter, :wait]` (duration + blocking reason) and
+  `[:lang_extract, :chunk, :retry]` (attempt, reason, limiter).
 - **`LangExtract.stream/4`** — lazy stream of per-chunk results
   (`{:ok, %Pipeline.ChunkResult{}}` | `{:error, %Pipeline.ChunkError{}}`)
   in completion order, so first spans arrive while later chunks are still
@@ -27,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking: 429 errors carry the retry-after deadline** —
+  `{:error, :rate_limited}` is now `{:error, {:rate_limited, ms | nil}}`;
+  the runner's global backoff needs the server's deadline and it only
+  exists on that response. Update any code matching on `:rate_limited`.
 - **Breaking: `Prompt.Template` is now `LangExtract.Template`; `ExampleData`
   is now `Template.Example`** — template data is core (same promotion
   `Extraction` got in 0.4.0), and the example struct is a subordinate type
