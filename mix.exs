@@ -9,6 +9,7 @@ defmodule LangExtract.MixProject do
       app: :lang_extract,
       version: @version,
       elixir: "~> 1.15",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       test_coverage: [
         ignore_modules: [
@@ -24,6 +25,9 @@ defmodule LangExtract.MixProject do
       source_url: @source_url
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_env), do: ["lib"]
 
   def application do
     [

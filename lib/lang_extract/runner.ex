@@ -34,6 +34,9 @@ defmodule LangExtract.Runner do
     * `:retry_backoff_ms` — base backoff for consumed retries (default `200`)
     * `:buffer` — bound on undelivered stream results (default:
       `max_in_flight`); a slow consumer halts admission at this bound
+    * `:drain_timeout` — grace period in ms for in-flight requests to
+      finish when the runner shuts down (default `5_000`); chunks never
+      started are reported as `%ChunkError{reason: :drained}`
   """
 
   use Supervisor
@@ -59,7 +62,8 @@ defmodule LangExtract.Runner do
       client: disable_req_retry(client),
       chunk_retries: Keyword.get(opts, :chunk_retries, 3),
       retry_backoff_ms: Keyword.get(opts, :retry_backoff_ms, 200),
-      buffer: Keyword.get(opts, :buffer, max_in_flight)
+      buffer: Keyword.get(opts, :buffer, max_in_flight),
+      drain_timeout: Keyword.get(opts, :drain_timeout, 5_000)
     }
 
     children = [
@@ -111,7 +115,7 @@ defmodule LangExtract.Runner do
     end
 
     task_sup
-    |> Delivery.stream_events(chunks, buffer, process)
+    |> Delivery.stream_events(chunks, process, buffer: buffer, shutdown: config.drain_timeout)
     |> Orchestrator.with_document_events(length(chunks), %{source_bytes: byte_size(source)})
   end
 
@@ -141,6 +145,25 @@ defmodule LangExtract.Runner do
       |> Enum.flat_map(& &1.spans)
 
     {:ok, {spans, Enum.sort_by(errors, & &1.byte_start)}}
+  end
+
+  @doc """
+  Streams a whole corpus through the runner's shared budget.
+
+  Takes an enumerable of `{id, source}` pairs and yields `{id, event}` in
+  the same event shape as `stream/4`. Documents are processed in order,
+  each with its own document telemetry span; chunk-level concurrency
+  within a document follows the runner's budget and buffer. Lazy — a
+  document's extraction starts only when the stream reaches it.
+  """
+  @spec stream_corpus(Supervisor.supervisor(), Enumerable.t(), Template.t(), keyword()) ::
+          Enumerable.t()
+  def stream_corpus(runner, docs, %Template{} = template, opts \\ []) do
+    Stream.flat_map(docs, fn {id, source} ->
+      runner
+      |> stream(source, template, opts)
+      |> Stream.map(&{id, &1})
+    end)
   end
 
   @doc false

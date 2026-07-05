@@ -29,7 +29,7 @@ defmodule LangExtract.Runner.DeliveryTest do
 
     events =
       sup
-      |> Delivery.stream_events(chunks(8), 2, process)
+      |> Delivery.stream_events(chunks(8), process, buffer: 2)
       # slow consumer: admission must stay bounded regardless
       |> Enum.map(fn event ->
         Process.sleep(5)
@@ -45,7 +45,7 @@ defmodule LangExtract.Runner.DeliveryTest do
 
     starts =
       sup
-      |> Delivery.stream_events(chunks(10), 3, process)
+      |> Delivery.stream_events(chunks(10), process, buffer: 3)
       |> Enum.map(fn {:ok, %ChunkResult{} = result} -> result.byte_start end)
       |> Enum.sort()
 
@@ -58,7 +58,7 @@ defmodule LangExtract.Runner.DeliveryTest do
       _chunk -> {:ok, []}
     end
 
-    events = sup |> Delivery.stream_events(chunks(3), 3, process) |> Enum.to_list()
+    events = sup |> Delivery.stream_events(chunks(3), process, buffer: 3) |> Enum.to_list()
 
     assert [{:error, %ChunkError{byte_start: 100, reason: {:task_exit, {%RuntimeError{}, _}}}}] =
              Enum.filter(events, &match?({:error, _}, &1))
@@ -71,7 +71,7 @@ defmodule LangExtract.Runner.DeliveryTest do
     process = fn _chunk -> {:error, error} end
 
     assert [{:error, ^error}] =
-             sup |> Delivery.stream_events(chunks(1), 1, process) |> Enum.to_list()
+             sup |> Delivery.stream_events(chunks(1), process, buffer: 1) |> Enum.to_list()
   end
 
   test "halting early kills all outstanding tasks", %{sup: sup} do
@@ -80,7 +80,7 @@ defmodule LangExtract.Runner.DeliveryTest do
       _chunk -> Process.sleep(60_000)
     end
 
-    assert [_one] = sup |> Delivery.stream_events(chunks(6), 3, process) |> Enum.take(1)
+    assert [_one] = sup |> Delivery.stream_events(chunks(6), process, buffer: 3) |> Enum.take(1)
 
     Process.sleep(50)
     assert Task.Supervisor.children(sup) == []
