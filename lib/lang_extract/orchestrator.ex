@@ -183,7 +183,7 @@ defmodule LangExtract.Orchestrator do
   defp extract_chunk(client, chunk, template, opts) do
     prompt = Prompt.Builder.build(template, chunk.text)
 
-    with {:ok, raw_output} <- client.provider.infer(prompt, infer_opts(client)),
+    with {:ok, raw_output} <- client.provider.infer(prompt, Client.infer_opts(client)),
          {:ok, spans} <- Pipeline.extract(chunk.text, raw_output, opts) do
       {:ok, adjust_offsets(spans, chunk.byte_start)}
     else
@@ -204,10 +204,6 @@ defmodule LangExtract.Orchestrator do
   # event metadata so handlers can log freely.
   defp result_status({:ok, _spans}), do: :ok
   defp result_status({:error, _chunk_error}), do: :error
-
-  defp infer_opts(%Client{} = client) do
-    Keyword.put(client.options, :http_client, client.http_client)
-  end
 
   defp adjust_offsets(spans, byte_offset) do
     Enum.map(spans, fn
