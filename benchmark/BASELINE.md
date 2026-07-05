@@ -65,9 +65,16 @@ Cross-library agreement (1,714 matched pairs, 85% match rate):
   divergence (smart-quote possessives); the rest are model-attributed
   entities absent from their chunk (concentrated in Moby-Dick's
   quotation-heavy front matter).
-- Timing: Elixir ran ~1.8× slower per doc in both ner runs (dialogue was
-  even) — unexplained, single-run observations; re-measure before treating
-  as real.
+- Timing: Elixir runs ~1.7× slower per doc on ner (dialogue was even).
+  Reproduced across three runs (109.3s, 105.9s pre-port, 102.1s in the
+  2026-07-05 re-measure at `b982eed3` after the unordered-stream fix). Two
+  hypotheses eliminated: stream-ordering starvation (unordered stream, same
+  concurrency 2 → no change) and chunk counts (both chunkers cut ~the same
+  pieces: 53/15/5 vs 55/16/6 on moby-dick/romeo/carol). Remaining suspect:
+  per-request generation time — prompt/output format (YAML + verbatim
+  instruction vs JSON) shifting output length or adaptive-thinking spend.
+  Undiagnosable until the runners record the API `usage` block; neither
+  does today.
 
 | Provenance         | Elixir                          | Python                          |
 | ------------------ | ------------------------------- | ------------------------------- |
