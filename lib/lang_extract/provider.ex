@@ -65,9 +65,16 @@ defmodule LangExtract.Provider do
   # LLM completions routinely exceed Req's 15s receive_timeout default, and
   # transient failures (429/5xx/transport) would otherwise permanently drop
   # a chunk since the orchestrator doesn't retry.
+  #
+  # redirect: false — Req strips only the standard authorization header on
+  # cross-host redirects; custom auth headers (Claude's x-api-key) would be
+  # forwarded to the redirect target. LLM APIs never legitimately redirect
+  # these POSTs, so a 3xx surfaces as {:api_error, 3xx, body} instead.
+  # Callers who genuinely need redirects can re-enable via :req_options.
   @http_defaults [
     receive_timeout: 120_000,
-    retry: :transient
+    retry: :transient,
+    redirect: false
   ]
 
   @doc """

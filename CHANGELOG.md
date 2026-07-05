@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2026-07-05
 
+### Security
+
+- **Providers no longer follow HTTP redirects** — Req strips only the
+  standard `authorization` header on cross-host redirects, so Claude's
+  `x-api-key` would have been forwarded to a redirect target. LLM APIs
+  never legitimately redirect these POSTs; a 3xx now surfaces as
+  `{:error, {:api_error, status, body}}`. Re-enable via
+  `req_options: [redirect: true]` if you proxy through something that
+  redirects.
+
 ### Changed
 
 - **Prompts adopt upstream's Q/A scaffold** — `Examples` heading, `Q:`/`A:`

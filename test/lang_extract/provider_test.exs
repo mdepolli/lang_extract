@@ -134,6 +134,23 @@ defmodule LangExtract.ProviderTest do
       assert is_integer(measurements.duration)
     end
 
+    test "redirects are not followed: 3xx surfaces as api_error", %{model: model} do
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "https://evil.example.com/v1/messages")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      assert {:error, {:api_error, 302, _body}} =
+               Claude.infer("prompt",
+                 api_key: "sk-test",
+                 model: model,
+                 req_options: req_options()
+               )
+
+      assert_receive {:stop, _measurements, %{model: ^model, status: 302}}
+    end
+
     test "a response without a usage block omits token measurements", %{model: model} do
       Req.Test.stub(__MODULE__, fn conn ->
         Req.Test.json(conn, %{"content" => [%{"type" => "text", "text" => "hi"}]})
