@@ -137,6 +137,10 @@ def compare_task(
     offset_exact_agreements = 0
     elixir_times: list[int] = []
     python_times: list[int] = []
+    usage = {
+        "elixir": {"input": 0, "output": 0, "request_ms": [], "docs": 0},
+        "python": {"input": 0, "output": 0, "request_ms": [], "docs": 0},
+    }
     failures = {"elixir": 0, "python": 0}
     chunk_errors = {"elixir": 0, "python": 0}
     missing = {"elixir": 0, "python": 0}
@@ -209,6 +213,17 @@ def compare_task(
         elixir_times.append(e_entry["timing"]["total_ms"])
         python_times.append(p_entry["timing"]["total_ms"])
 
+        # Usage blocks exist only in post-Phase-0 runs; older results skip.
+        for side, entry in (("elixir", e_entry), ("python", p_entry)):
+            doc_usage = entry.get("usage")
+            if doc_usage:
+                usage[side]["input"] += doc_usage.get("input_tokens") or 0
+                usage[side]["output"] += doc_usage.get("output_tokens") or 0
+                usage[side]["request_ms"] += [
+                    r["ms"] for r in doc_usage.get("requests", []) if r.get("ms") is not None
+                ]
+                usage[side]["docs"] += 1
+
         per_doc.append({
             "source": source,
             "elixir_count": len(e_ext),
@@ -251,7 +266,31 @@ def compare_task(
         "avg_time_python_ms": round(sum(python_times) / len(python_times))
         if python_times
         else 0,
+        "usage": {
+            side: usage_summary(usage[side], total_ms)
+            for side, total_ms in (
+                ("elixir", sum(elixir_times)),
+                ("python", sum(python_times)),
+            )
+        },
         "per_document": per_doc,
+    }
+
+
+def usage_summary(side_usage: dict, total_wall_ms: int) -> dict | None:
+    """Aggregate one library's usage; None when no result carried usage."""
+    if side_usage["docs"] == 0:
+        return None
+    request_ms = side_usage["request_ms"]
+    return {
+        "documents_with_usage": side_usage["docs"],
+        "input_tokens": side_usage["input"],
+        "output_tokens": side_usage["output"],
+        "output_tokens_per_sec": round(side_usage["output"] * 1000 / total_wall_ms, 1)
+        if total_wall_ms
+        else None,
+        "request_count": len(request_ms),
+        "mean_request_ms": round(sum(request_ms) / len(request_ms)) if request_ms else None,
     }
 
 
@@ -281,6 +320,16 @@ def print_summary(s: dict):
     e_time = f"{s['avg_time_elixir_ms'] / 1000:.1f}s" if s["avg_time_elixir_ms"] else "n/a"
     p_time = f"{s['avg_time_python_ms'] / 1000:.1f}s" if s["avg_time_python_ms"] else "n/a"
     print(f"{'Avg time/doc:':22s} {e_time:>12s} {p_time:>12s}")
+
+    e_usage, p_usage = s["usage"]["elixir"], s["usage"]["python"]
+    if e_usage or p_usage:
+        def cell(u, key, fmt="{:,}"):
+            return fmt.format(u[key]) if u and u[key] is not None else "n/a"
+
+        print(f"{'Input tokens:':22s} {cell(e_usage, 'input_tokens'):>12s} {cell(p_usage, 'input_tokens'):>12s}")
+        print(f"{'Output tokens:':22s} {cell(e_usage, 'output_tokens'):>12s} {cell(p_usage, 'output_tokens'):>12s}")
+        print(f"{'Output tokens/sec:':22s} {cell(e_usage, 'output_tokens_per_sec', '{}'):>12s} {cell(p_usage, 'output_tokens_per_sec', '{}'):>12s}")
+        print(f"{'Mean request:':22s} {cell(e_usage, 'mean_request_ms'):>11s}ms {cell(p_usage, 'mean_request_ms'):>11s}ms")
 
 
 def first_meta(results: dict[str, dict[str, dict]]) -> dict:

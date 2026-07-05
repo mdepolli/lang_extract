@@ -130,6 +130,35 @@ defmodule LangExtract.SerializerTest do
 
       assert {:error, :invalid_data} = Serializer.from_map(map)
     end
+
+    test "returns error for extraction entry without text" do
+      map = %{
+        "text" => @source,
+        "extractions" => [%{"class" => "animal", "status" => "exact"}]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for non-string class" do
+      map = %{
+        "text" => @source,
+        "extractions" => [%{"text" => "fox", "class" => 123, "status" => "exact"}]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "accepts a class-less span (align/3 round-trip)" do
+      map = %{
+        "text" => @source,
+        "extractions" => [%{"text" => "fox", "status" => "exact"}]
+      }
+
+      assert {:ok, {@source, [span]}} = Serializer.from_map(map)
+      assert span.class == nil
+      assert span.text == "fox"
+    end
   end
 
   describe "save_jsonl/2 and load_jsonl/1" do

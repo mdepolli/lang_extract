@@ -24,16 +24,35 @@ defmodule LangExtract.Orchestrator do
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
     timeout = Keyword.get(opts, :task_timeout, :infinity)
 
-    source
-    |> Chunker.chunk(max_chunk_chars: max_chars)
-    |> Task.async_stream(
-      fn chunk -> {chunk.byte_start, process_chunk(client, chunk, template, opts)} end,
-      ordered: false,
-      max_concurrency: max_concurrency,
-      timeout: timeout
-    )
-    |> collect_results()
+    chunks = Chunker.chunk(source, max_chunk_chars: max_chars)
+    metadata = %{source_bytes: byte_size(source)}
+
+    :telemetry.span([:lang_extract, :document], metadata, fn ->
+      result =
+        chunks
+        |> Task.async_stream(
+          fn chunk -> {chunk.byte_start, process_chunk(client, chunk, template, opts)} end,
+          ordered: false,
+          max_concurrency: max_concurrency,
+          timeout: timeout,
+          # :kill_task turns a chunk timeout into an {:exit, :timeout} stream
+          # element (handled below as {:error, {:task_exit, _}}) instead of
+          # the default, which exits the calling process and makes the
+          # documented infrastructure-failure return unreachable.
+          on_timeout: :kill_task
+        )
+        |> collect_results()
+
+      measurements = Map.put(document_measurements(result), :chunk_count, length(chunks))
+      {result, measurements, metadata}
+    end)
   end
+
+  defp document_measurements({:ok, {spans, errors}}) do
+    %{span_count: length(spans), error_count: length(errors)}
+  end
+
+  defp document_measurements({:error, _reason}), do: %{}
 
   defp collect_results(stream) do
     Enum.reduce_while(stream, {[], []}, fn
@@ -64,6 +83,16 @@ defmodule LangExtract.Orchestrator do
   end
 
   defp process_chunk(client, chunk, template, opts) do
+    metadata = %{byte_start: chunk.byte_start, byte_end: chunk.byte_end}
+
+    :telemetry.span([:lang_extract, :chunk], metadata, fn ->
+      result = extract_chunk(client, chunk, template, opts)
+
+      {result, chunk_measurements(result), Map.put(metadata, :status, result_status(result))}
+    end)
+  end
+
+  defp extract_chunk(client, chunk, template, opts) do
     prompt = Prompt.Builder.build(template, chunk.text)
 
     with {:ok, raw_output} <- client.provider.infer(prompt, infer_opts(client)),
@@ -79,6 +108,14 @@ defmodule LangExtract.Orchestrator do
          }}
     end
   end
+
+  defp chunk_measurements({:ok, spans}), do: %{span_count: length(spans)}
+  defp chunk_measurements({:error, _chunk_error}), do: %{span_count: 0}
+
+  # The ChunkError reason can embed the raw LLM payload; keep it out of
+  # event metadata so handlers can log freely.
+  defp result_status({:ok, _spans}), do: :ok
+  defp result_status({:error, _chunk_error}), do: :error
 
   defp infer_opts(%Client{} = client) do
     Keyword.put(client.options, :http_client, client.http_client)

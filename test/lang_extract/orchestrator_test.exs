@@ -7,6 +7,12 @@ defmodule LangExtract.OrchestratorTest do
 
   @req_options [plug: {Req.Test, __MODULE__}]
 
+  # Module-qualified capture, not an anonymous fn, so telemetry stores it
+  # without the local-handler penalty; the parent pid travels as config.
+  def forward_event(event, measurements, metadata, parent) do
+    send(parent, {event, measurements, metadata})
+  end
+
   describe "LangExtract.new/2" do
     test "creates client with :claude provider" do
       client = LangExtract.new(:claude, api_key: "sk-test")
@@ -257,6 +263,92 @@ defmodule LangExtract.OrchestratorTest do
 
       assert span.status == :exact
       assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) == "🐳 baleine"
+    end
+
+    test "emits document and chunk telemetry spans" do
+      handler_id = "orchestrator-telemetry-#{inspect(self())}"
+      parent = self()
+
+      :telemetry.attach_many(
+        handler_id,
+        [
+          [:lang_extract, :document, :start],
+          [:lang_extract, :document, :stop],
+          [:lang_extract, :chunk, :stop]
+        ],
+        &__MODULE__.forward_event/4,
+        parent
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      source = "First sentence here. Second sentence there."
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        Req.Test.json(conn, %{
+          "content" => [
+            %{"type" => "text", "text" => Jason.encode!(%{"extractions" => []})}
+          ]
+        })
+      end)
+
+      assert {:ok, {[], []}} =
+               LangExtract.run(claude_client(), source, template(), max_chunk_chars: 25)
+
+      source_bytes = byte_size(source)
+
+      assert_receive {[:lang_extract, :document, :start], _, %{source_bytes: ^source_bytes}}
+
+      assert_receive {[:lang_extract, :document, :stop], measurements,
+                      %{source_bytes: ^source_bytes}}
+
+      assert measurements.chunk_count == 2
+      assert measurements.span_count == 0
+      assert measurements.error_count == 0
+      assert is_integer(measurements.duration)
+
+      assert_receive {[:lang_extract, :chunk, :stop], chunk_meas, chunk_meta}
+      assert chunk_meas.span_count == 0
+      assert chunk_meta.status == :ok
+      assert is_integer(chunk_meta.byte_start) and is_integer(chunk_meta.byte_end)
+
+      assert_receive {[:lang_extract, :chunk, :stop], _, _}
+    end
+
+    test "failed chunk emits :error status and counts into document error_count" do
+      handler_id = "orchestrator-telemetry-err-#{inspect(self())}"
+      parent = self()
+
+      :telemetry.attach_many(
+        handler_id,
+        [[:lang_extract, :document, :stop], [:lang_extract, :chunk, :stop]],
+        &__MODULE__.forward_event/4,
+        parent
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        Req.Test.json(conn, %{
+          "content" => [%{"type" => "text", "text" => "not parseable at all"}]
+        })
+      end)
+
+      assert {:ok, {[], [%ChunkError{}]}} =
+               LangExtract.run(claude_client(), "some text", template())
+
+      assert_receive {[:lang_extract, :chunk, :stop], %{span_count: 0}, %{status: :error}}
+      assert_receive {[:lang_extract, :document, :stop], %{error_count: 1}, _}
+    end
+
+    test "chunk task timeout returns {:error, {:task_exit, :timeout}}" do
+      Req.Test.stub(__MODULE__, fn conn ->
+        Process.sleep(200)
+        Req.Test.json(conn, %{"content" => [%{"type" => "text", "text" => "{}"}]})
+      end)
+
+      assert {:error, {:task_exit, :timeout}} =
+               LangExtract.run(claude_client(), "some text", template(), task_timeout: 50)
     end
 
     test "auto-chunks by default (short text fits in one chunk)" do

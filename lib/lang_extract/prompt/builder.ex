@@ -1,6 +1,14 @@
 defmodule LangExtract.Prompt.Builder do
   @moduledoc """
   Renders Q&A-formatted prompts from a template for LLM extraction.
+
+  The framing mirrors upstream langextract's `QAPromptGenerator`: an
+  `Examples` heading, `Q:`/`A:` pairs (answers are code-fenced by
+  `WireFormat.format_extractions/1`), and a trailing bare `A:` that primes
+  the model to emit the artifact directly. Measured on the ner benchmark
+  (2026-07-05 probe series, BASELINE.md): this scaffold cuts output tokens
+  ~20% versus bare concatenation by reducing adaptive-thinking spend, with
+  no alignment cost.
   """
 
   alias LangExtract.{Prompt.Template, WireFormat}
@@ -12,7 +20,7 @@ defmodule LangExtract.Prompt.Builder do
                 Extract only text that appears verbatim in the passage below, exactly as
                 written, including punctuation and quotation marks. Never merge separate
                 fragments, complete text from memory, or copy from the examples. If the
-                passage contains nothing to extract, output an empty list: extractions: []
+                passage contains nothing to extract, output {"extractions": []}
                 """
                 |> String.trim()
 
@@ -22,7 +30,8 @@ defmodule LangExtract.Prompt.Builder do
       non_empty(template.description),
       format_examples(template.examples),
       @instructions,
-      chunk_text
+      "Q: " <> chunk_text,
+      "A:"
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n\n")
@@ -32,10 +41,13 @@ defmodule LangExtract.Prompt.Builder do
   defp format_examples([]), do: nil
 
   defp format_examples(examples) do
-    Enum.map_join(examples, "\n\n", fn example ->
-      formatted = WireFormat.format_extractions(example.extractions)
-      "#{example.text}\n#{formatted}"
-    end)
+    rendered =
+      Enum.map_join(examples, "\n\n", fn example ->
+        formatted = WireFormat.format_extractions(example.extractions)
+        "Q: #{example.text}\nA: #{formatted}"
+      end)
+
+    "Examples\n\n" <> rendered
   end
 
   defp non_empty(""), do: nil

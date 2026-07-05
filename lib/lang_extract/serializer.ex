@@ -109,12 +109,15 @@ defmodule LangExtract.Serializer do
     end
   end
 
-  defp map_to_span(map) when is_map(map) do
-    with {:ok, status} <- parse_status(map["status"]) do
+  # class stays optional: align/3 produces class-less spans, and their
+  # serialized form must round-trip.
+  defp map_to_span(%{"text" => text} = map) when is_binary(text) do
+    with {:ok, status} <- parse_status(map["status"]),
+         :ok <- validate_optional_string(map["class"]) do
       {:ok,
        %Span{
          class: map["class"],
-         text: map["text"],
+         text: text,
          byte_start: map["byte_start"],
          byte_end: map["byte_end"],
          status: status,
@@ -124,6 +127,9 @@ defmodule LangExtract.Serializer do
   end
 
   defp map_to_span(_), do: {:error, :invalid_data}
+
+  defp validate_optional_string(value) when is_binary(value) or is_nil(value), do: :ok
+  defp validate_optional_string(_value), do: {:error, :invalid_data}
 
   defp parse_status("exact"), do: {:ok, :exact}
   defp parse_status("fuzzy"), do: {:ok, :fuzzy}

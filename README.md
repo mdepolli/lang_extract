@@ -51,7 +51,7 @@ Add `lang_extract` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lang_extract, "~> 0.5.0"}
+    {:lang_extract, "~> 0.6.0"}
   ]
 end
 ```
@@ -104,7 +104,7 @@ The extractions inside each example are the answer key for its sample text.
 They pin down everything the description leaves open: the class vocabulary
 (`"condition"`, not `"diagnosis"`), the span granularity (`"diabetes"`, not
 `"diagnosed with diabetes"`), which attributes to attach, and the exact
-output shape — the class name becomes the YAML key in the model's reply, so
+output shape — the class name becomes the JSON key in the model's reply, so
 the examples also teach the wire format. A description alone would leave the
 model to invent all of that.
 
@@ -212,8 +212,9 @@ spans = LangExtract.align("the quick brown fox", ["quick brown", "fox"])
 Or parse raw LLM output and align in one step:
 
 ```elixir
-yaml = "extractions:\n- class: animal\n  text: fox"
-{:ok, spans} = LangExtract.extract("the quick brown fox", yaml)
+# JSON is the wire format; YAML responses are also accepted
+raw = ~s({"extractions": [{"class": "animal", "text": "fox"}]})
+{:ok, spans} = LangExtract.extract("the quick brown fox", raw)
 ```
 
 Both canonical format (`class`/`text`/`attributes` keys) and dynamic-key format
@@ -263,6 +264,12 @@ Provider-specific options:
 | Provider  | Option       | Default | Description                                                                   |
 | --------- | ------------ | ------- | ----------------------------------------------------------------------------- |
 | `:openai` | `:json_mode` | `true`  | Enable JSON mode. Set `false` for compatible endpoints that don't support it. |
+
+## Telemetry
+
+LangExtract emits `:telemetry` spans at document, chunk, and request level —
+request events carry input/output token counts for cost tracking. See the
+[Telemetry guide](guides/telemetry.md) for the event reference and examples.
 
 ## How It Works
 

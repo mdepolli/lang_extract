@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-05
+
+### Security
+
+- **Providers no longer follow HTTP redirects** — Req strips only the
+  standard `authorization` header on cross-host redirects, so Claude's
+  `x-api-key` would have been forwarded to a redirect target. LLM APIs
+  never legitimately redirect these POSTs; a 3xx now surfaces as
+  `{:error, {:api_error, status, body}}`. Re-enable via
+  `req_options: [redirect: true]` if you proxy through something that
+  redirects.
+
+### Changed
+
+- **Prompts adopt upstream's Q/A scaffold** — `Examples` heading, `Q:`/`A:`
+  pairs, and a trailing bare `A:` answer primer, mirroring langextract's
+  `QAPromptGenerator`. Measured effect: ~20% fewer output tokens (reduced
+  adaptive-thinking spend), no alignment cost.
+- **`req` constraint tightened to `~> 0.6`** — the previous `~> 0.5`
+  admitted pre-1.0 minors the test suite has never run against.
+- **`WireFormat.normalize/1` parses JSON first** — the strict, fast parser
+  handles the (now default) JSON responses; the YAML parser and its repair
+  pass remain as the tolerance path for models that answer in YAML.
+- **Wire format is now JSON (was YAML)** — `WireFormat.format_extractions/1`
+  emits fenced dynamic-key JSON, matching upstream's default; the `ymlr`
+  dependency is dropped. Decided by a corpus A/B under the new scaffold:
+  zero chunk errors across 440 quote-dense dialogue chunks, better dialogue
+  alignment (17 fuzzy / 0 not_found vs 68 / 2), and 25% fewer ner output
+  tokens. Decoding is format-agnostic — `WireFormat.normalize/1` accepts
+  JSON and YAML responses alike and keeps the YAML repair machinery.
+
+### Fixed
+
+- **`Serializer.from_map/1` validates extraction entries** — entries
+  missing `"text"` or carrying a non-string `"class"` now return the
+  promised `{:error, :invalid_data}` instead of producing malformed spans.
+  Class-less spans (from `align/3`) still round-trip.
+- **Chunk task timeouts now return the documented error tuple** — the
+  `{:error, {:task_exit, reason}}` shape promised by `run/4` was
+  unreachable: `Task.async_stream`'s default `on_timeout: :exit` crashed
+  the calling process instead. `on_timeout: :kill_task` makes a timed-out
+  chunk surface as the documented infrastructure-failure return.
+
+### Added
+
+- **Telemetry** — `[:lang_extract, :request]`, `[:lang_extract, :chunk]`,
+  and `[:lang_extract, :document]` spans (`:telemetry` is now an explicit
+  dependency). Request `:stop` events carry input/output token counts
+  normalized across all three providers; the benchmark runners record them
+  as per-document `usage` blocks with per-request latency.
+
 ## [0.5.0] - 2026-07-05
 
 ### Added
@@ -331,7 +382,8 @@ byte positions in the source.
 - **Req-inspired API** — `new/2` + `run/3,4` instead of a single function with
   many keyword arguments.
 
-[Unreleased]: https://github.com/mdepolli/lang_extract/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mdepolli/lang_extract/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mdepolli/lang_extract/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mdepolli/lang_extract/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mdepolli/lang_extract/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mdepolli/lang_extract/compare/v0.2.2...v0.3.0

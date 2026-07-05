@@ -1,5 +1,113 @@
 # Benchmark Baselines
 
+## Production baseline — 2026-07-05 (Q/A scaffold + JSON wire format)
+
+The citable baseline for the 0.6.0-era pipeline: clean runs at `9eb65d23`
+(`dialogue_20260705_174137`, `ner_20260705_175723`), compared against the
+Python instrumented baseline (`0dff5479`), both at concurrency 2.
+
+|                        | Dialogue E / P      | NER E / P           |
+| ---------------------- | ------------------- | ------------------- |
+| Chunk errors           | 0 / 0               | 0 / 0               |
+| Extractions            | 1,301 / 1,232       | 2,010 / 2,056       |
+| exact / fuzzy / nf     | 1283/**18/0** · 1165/66/1 | 1915/46/49 · 2010/45/1 |
+| Match rate / status agreement | 83% / 95.7%  | **88%** / 93.6%     |
+| Offsets identical      | 94.7%               | 68.6%               |
+| Output tokens          | 129,816 / 130,009   | 117,789 / 86,017    |
+| Avg time/doc           | 78.8s / 66.4s       | 84.2s / 49.7s       |
+
+Relative to the pre-scaffold, pre-switch pipeline (instrumented baseline
+below): ner output tokens fell **233k → 118k (−49%)** and wall clock
+106.3s → 84.2s; dialogue fuzzy spans fell 76 → 18 with zero not_found —
+the JSON switch improved verbatim discipline. Costs of the switch:
+input tokens up ~8–16% (scaffold + fence overhead; output is the
+expensive direction, so net cost still drops) and dialogue output +2%
+net. Residual vs Python: 1.37× ner output tokens — below single-run
+attribution; park unless it matters in practice.
+
+## Instrumented baseline — 2026-07-05 (Phase 0, pre-streaming)
+
+All four runs at `27db4343` (clean, phase-0-instrumentation branch), both
+libraries pinned to concurrency 2, first runs carrying `usage` blocks
+(token counts + per-request latency). This is the controlled baseline the
+Phase 1 streaming refactor measures against.
+
+|                     | Dialogue E / P      | NER E / P           |
+| ------------------- | ------------------- | ------------------- |
+| Avg time/doc        | 64.4s / 66.4s       | 106.3s / 49.7s      |
+| Input tokens        | 267,356 / 255,244   | 384,157 / 415,404   |
+| Output tokens       | 127,530 / 130,009   | **233,072 / 86,017**|
+| Output tokens/sec   | 165.0 / 163.2       | **182.8 / 144.3**   |
+| Mean request        | 3,513ms / 3,359ms   | 5,815ms / 2,572ms   |
+| Chunk errors        | 0 / 0               | 2 / 0               |
+
+**The ner timing gap is resolved: output volume, not pipeline speed.**
+Elixir generates 2.7× the output tokens for the same extraction count and
+does so at *higher* throughput (182.8 vs 144.3 tok/s) — the 2.3× mean-
+request gap is fully accounted for by token volume. Per-extraction output
+(≈118 tokens Elixir, ≈42 Python, vs ≈12–15 visible) shows both sides are
+dominated by adaptive-thinking spend; our YAML + verbatim-instruction
+prompt elicits ~3× the thinking of Python's JSON prompt on entity-dense
+chunks. Dialogue is the control: near-identical token profiles and even
+timing. Follow-up (optional, prompt-tuning territory): capture the
+thinking/visible split by comparing response text size to `output_tokens`.
+
+Run directories: `dialogue_20260705_062044`/`_062045`,
+`ner_20260705_063408`/`_063409` (elixir/python respectively).
+
+### Format A/B (2026-07-05, corpus-scale, under the Q/A scaffold)
+
+Arm A (fenced YAML, clean at `c840dbc5`: `dialogue_20260705_155859`,
+`ner_20260705_161416`) vs arm B (fenced JSON, dirty probe:
+`dialogue_20260705_163429`, `ner_20260705_165037`):
+
+|                        | A: YAML (dial / ner) | B: JSON (dial / ner) |
+| ---------------------- | -------------------- | -------------------- |
+| Chunk errors           | 0 / 0                | 0 / 0                |
+| Extractions            | 1,389 / 2,033        | 1,331 / 1,970        |
+| exact / fuzzy / nf     | 1319/68/2 · 1943/46/44 | 1314/**17/0** · 1894/32/44 |
+| Output tokens          | 109,674 / 149,548    | 124,657 / **111,888** |
+| Avg time/doc           | 76s / 95s            | 80s / **82s**        |
+
+**Verdict: JSON adopted as the wire format.** The historical JSON-breakage
+on dialogue quotes did not reproduce under fences + scaffold (0 errors in
+440 quote-dense chunks — it was a framing artifact); dialogue alignment is
+*better* under JSON; ner costs 25% fewer tokens. The one trade-off: +14%
+dialogue output tokens from JSON string-escaping (Python pays the same).
+Arm B ran dirty as probes must — the citable post-switch baseline is the
+next clean-stamped run pair.
+
+### Prompt-probe series (2026-07-05, single-document, moby-dick ner)
+
+Five dirty-tree probes (~$1.50 total; not citable, ±10% single-run noise)
+plus a free request-body diff, chasing the 2× thinking spend:
+
+| Variant                          | Output tokens | Tok/ext | Errors |
+| -------------------------------- | ------------- | ------- | ------ |
+| Baseline (YAML + instruction)    | 30,200        | 117     | 0      |
+| No verbatim instruction          | 27,721        | 103     | 0      |
+| JSON output                      | 32,764        | 170     | 3      |
+| Q/A scaffold (`A:` primer)       | 24,068        | 90      | 0      |
+| Full mimicry (Q/A + JSON)        | 27,868        | 103     | 0      |
+| Q/A + fenced YAML answers        | **21,631**    | **85**  | 0      |
+| Python reference                 | 14,529        | 58      | 0      |
+
+Findings: transport exonerated (request bodies byte-identical in
+structure); verbatim instruction exonerated (and its removal did NOT
+degrade alignment on this doc — baseline moby has 23 not_found
+intrinsically). **The lever is the `Q:`/`A:` scaffold with trailing
+answer primer (~20%)** — adopted in Prompt.Builder. Attribution
+correction: example answers were *always* code-fenced (by
+`WireFormat.format_extractions`); the "Q/A + fences" row double-fenced,
+so its extra −8% over the scaffold row is within single-run noise, not a
+fence effect. The JSON probe row also under-mimicked upstream (unfenced
+JSON), so the format question remains open pending a corpus A/B under
+the adopted scaffold: fenced YAML vs fenced JSON, judged on chunk
+errors, alignment parity, extraction counts, and token cost. Residual
+~1.5× vs Python is below the single-run noise floor to attribute
+further; if pursued beyond the A/B: capture response content-block
+sizes to split visible output from thinking spend directly.
+
 Definitive parity runs between LangExtract (Elixir) and upstream
 [google/langextract](https://github.com/google/langextract) (Python), 12
 Project Gutenberg documents per task. This snapshot exists because
@@ -70,11 +178,9 @@ Cross-library agreement (1,714 matched pairs, 85% match rate):
   2026-07-05 re-measure at `b982eed3` after the unordered-stream fix). Two
   hypotheses eliminated: stream-ordering starvation (unordered stream, same
   concurrency 2 → no change) and chunk counts (both chunkers cut ~the same
-  pieces: 53/15/5 vs 55/16/6 on moby-dick/romeo/carol). Remaining suspect:
-  per-request generation time — prompt/output format (YAML + verbatim
-  instruction vs JSON) shifting output length or adaptive-thinking spend.
-  Undiagnosable until the runners record the API `usage` block; neither
-  does today.
+  pieces: 53/15/5 vs 55/16/6 on moby-dick/romeo/carol).
+  **Resolved by the 2026-07-05 instrumented baseline (above): output
+  volume — prompt-elicited thinking spend — not pipeline speed.**
 
 | Provenance         | Elixir                          | Python                          |
 | ------------------ | ------------------------------- | ------------------------------- |

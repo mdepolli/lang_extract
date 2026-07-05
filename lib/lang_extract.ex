@@ -44,8 +44,8 @@ defmodule LangExtract do
   enriched spans with class and attributes.
 
   Accepts both canonical and dynamic-key format (where each entry uses
-  the class name as the key). Strips markdown fences and think tags
-  before parsing YAML.
+  the class name as the key), in JSON or YAML. Strips markdown fences
+  and think tags before parsing.
 
   ## Options
 
@@ -53,8 +53,8 @@ defmodule LangExtract do
 
   ## Examples
 
-      iex> yaml = "extractions:\\n- class: word\\n  text: fox"
-      iex> {:ok, [span]} = LangExtract.extract("the quick brown fox", yaml)
+      iex> raw = ~s({"extractions": [{"class": "word", "text": "fox"}]})
+      iex> {:ok, [span]} = LangExtract.extract("the quick brown fox", raw)
       iex> span.status
       :exact
 
@@ -74,7 +74,15 @@ defmodule LangExtract do
 
   ## Options
 
-    * `:fuzzy_threshold` - minimum overlap ratio for fuzzy match (default `0.75`)
+    * `:max_chunk_chars` - chunk size in characters (default `1000`)
+    * `:max_concurrency` - parallel chunk requests (default `10`)
+    * `:task_timeout` - per-chunk task timeout (default `:infinity`)
+    * `:fuzzy_threshold` - minimum LCS coverage for fuzzy match (default `0.75`)
+    * `:min_density` - minimum matched-token density of a fuzzy span (default `1/3`)
+    * `:accept_lesser` - allow prefix-fragment grounding (default `true`)
+    * `:exact_algorithm` - `:dp` (occurrence DP, default) or `:first_occurrence`
+
+  See the "Alignment and Spans" guide for what the alignment options tune.
 
   ## Examples
 
@@ -91,6 +99,11 @@ defmodule LangExtract do
 
   @doc """
   Creates a configured LLM client for extraction.
+
+  Raises `ArgumentError` on an unknown provider or unbuildable HTTP client
+  (e.g. missing API key). The raise is deliberate: misconfiguration here is
+  a programmer error caught at client construction, while runtime failures
+  during extraction (`run/4`, `extract/3`) return tagged tuples.
 
   ## Examples
 

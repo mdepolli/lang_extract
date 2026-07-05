@@ -2,8 +2,12 @@ defmodule LangExtract.WireFormat do
   @moduledoc """
   Port between external LLM format and internal domain.
 
-  Serializes `%Extraction{}` structs to dynamic-key YAML for prompts,
-  and normalizes raw LLM output back to canonical format for the parser.
+  Serializes `%Extraction{}` structs to fenced dynamic-key JSON for prompts
+  (matching upstream langextract's default — decided by the 2026-07-05
+  format A/B, see benchmark/BASELINE.md), and normalizes raw LLM output
+  back to canonical format for the parser. The decode half is
+  format-agnostic: JSON is a YAML subset, so it parses YAML responses and
+  keeps the YAML repair machinery as tolerance for malformed output.
 
   Both directions of the wire format live here on purpose — they share the
   dynamic-key `_attributes` contract. `Prompt.Builder` uses the encode half;
@@ -17,9 +21,8 @@ defmodule LangExtract.WireFormat do
   @spec format_extractions([Extraction.t()]) :: String.t()
   def format_extractions(extractions) do
     items = Enum.map(extractions, &serialize_extraction/1)
-    payload = %{"extractions" => items}
-    yaml = Ymlr.document!(payload)
-    "```yaml\n#{yaml}```"
+    json = Jason.encode!(%{"extractions" => items}, pretty: true)
+    "```json\n#{json}\n```"
   end
 
   defp serialize_extraction(%Extraction{class: class, text: text, attributes: attributes}) do
@@ -30,28 +33,38 @@ defmodule LangExtract.WireFormat do
   def normalize(raw) when is_binary(raw) do
     cleaned = raw |> strip_think_tags() |> strip_fences()
 
+    # JSON is the wire format, so the strict, fast parser goes first; the
+    # YAML parser is the tolerance path for models that answer in YAML.
     # Valid YAML must never be rewritten (the quoting repairs corrupt legal
     # constructs like multi-line plain scalars) — repair only on failure.
-    with :error <- parse(cleaned),
-         :error <- cleaned |> quote_yaml_values() |> parse() do
+    with :error <- parse_json(cleaned),
+         :error <- parse_yaml(cleaned),
+         :error <- cleaned |> quote_yaml_values() |> parse_yaml() do
       {:error, {:invalid_format, raw}}
     end
   end
 
-  defp parse(yaml) do
-    case YamlElixir.read_from_string(yaml) do
-      {:ok, %{"extractions" => entries} = decoded} when is_list(entries) ->
-        normalized = Enum.map(entries, &normalize_entry/1)
-        {:ok, %{decoded | "extractions" => normalized}}
-
-      # Valid YAML without "extractions" key — let Parser return :missing_extractions
-      {:ok, %{} = decoded} when decoded != %{} ->
-        {:ok, decoded}
-
-      _ ->
-        :error
+  defp parse_json(json) do
+    case Jason.decode(json) do
+      {:ok, decoded} -> validate_decoded(decoded)
+      {:error, _} -> :error
     end
   end
+
+  defp parse_yaml(yaml) do
+    case YamlElixir.read_from_string(yaml) do
+      {:ok, decoded} -> validate_decoded(decoded)
+      _ -> :error
+    end
+  end
+
+  defp validate_decoded(%{"extractions" => entries} = decoded) when is_list(entries) do
+    {:ok, %{decoded | "extractions" => Enum.map(entries, &normalize_entry/1)}}
+  end
+
+  # Valid document without "extractions" key — let Parser return :missing_extractions
+  defp validate_decoded(%{} = decoded) when decoded != %{}, do: {:ok, decoded}
+  defp validate_decoded(_decoded), do: :error
 
   @yaml_value_re ~r/^(\s+- [\w-]+: )(.+)$/m
   # Block scalar headers (|, |-, >2+, ...) introduce the indented lines that

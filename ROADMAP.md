@@ -3,38 +3,41 @@
 Features from the [original Python library](https://github.com/google/langextract)
 and natural extensions that haven't been implemented yet.
 
+## Production Pipeline (planned: 0.7.0 / 0.8.0)
+
+- **Streaming results** — `LangExtract.stream/4`: lazy stream of per-chunk
+  results in completion order, built on the unordered chunk pipeline.
+- **Supervised runner** — caller-owned `LangExtract.Runner` with a shared
+  request budget (RPM token bucket + in-flight cap), global 429 backoff,
+  per-chunk retry budgets, and graceful drain on shutdown.
+
 ## Extraction Quality
 
 - **Multi-pass extraction** — Run the pipeline N times and merge results with
   first-pass-wins overlap resolution. Improves recall by catching extractions
   that one pass might miss.
-- **Variable fuzzy window sizes** — The original tests multiple window sizes
-  during fuzzy matching for better recall. We use a fixed window equal to the
-  extraction token count.
-- **Light plural stemming** — The original normalizes tokens by stripping
-  trailing "s" during fuzzy matching. We only downcase.
-- **`MATCH_LESSER` status** — A partial-contiguous-match status that preempts
-  the fuzzy phase when a prefix/subset of the extraction tokens appears
-  contiguously. Currently our aligner falls through to fuzzy for any non-exact
-  match.
 - **Cross-chunk deduplication** — When chunking, the same entity might be
   extracted from adjacent chunks at sentence boundaries. The original merges
   non-overlapping extractions with a first-pass-wins strategy.
+- **Contraction tokenization parity** — We keep contractions whole ("don't"
+  is one token); upstream splits them, letting its lesser phase ground the
+  fragment. Documented divergence (see `@known_divergences` in
+  `aligner_parity_test.exs`); revisit only if it shows up in real workloads.
 
 ## Multi-Document & Batch Processing
 
-- **Batch inference** — Process multiple documents in a single `run` call with
-  shared chunking and parallel provider calls.
+- **Batch inference** — Process multiple documents in a single call with
+  shared chunking and parallel provider calls (subsumed by the Runner's
+  `stream_corpus` if 0.8.0 lands as designed).
 - **`AnnotatedDocument` wrapper** — A struct tying together document ID, source
   text, and extraction results for multi-document workflows.
-- **Streaming results** — Emit completed documents as soon as all their chunks
-  finish, rather than waiting for everything.
 
 ## Provider Features
 
 - **Ollama provider** — Local inference with no API key required.
 - **Gemini structured output** — Pass `response_schema` for constrained
-  decoding via Gemini's native JSON schema support.
+  decoding via Gemini's native JSON schema support (upstream #483 added
+  user-provided output schemas for Gemini and OpenAI).
 - **Gemini Vertex AI auth** — Project/location-based auth for enterprise use.
 - **Schema generation from examples** — Introspect few-shot examples to
   automatically build a JSON Schema for providers that support it.
@@ -42,9 +45,10 @@ and natural extensions that haven't been implemented yet.
 
 ## Format & I/O
 
-- **URL text fetching** — Download and extract text from URLs.
+- **URL text fetching** — Download and extract text from URLs (needs an
+  explicit opt-in design; fetching arbitrary URLs is an SSRF surface).
 - **CSV dataset loading** — Batch-load documents from CSV files.
-- **Template loading from files** — Load `PromptTemplate` from YAML/JSON files
+- **Template loading from files** — Load `PromptTemplate` from JSON/YAML files
   instead of constructing structs in code.
 
 ## Tokenization
@@ -62,19 +66,17 @@ and natural extensions that haven't been implemented yet.
 
 ## Benchmark
 
-- **Update `compare.py`** — The comparison script still reads the old JSONL format.
-  Needs updating to read per-document JSON files from timestamped run directories.
-- **Alignment quality comparison tooling** — Python produces more `exact` matches
-  than Elixir for the same extractions. Tooling to quantify the gap per-document
-  would help prioritize aligner improvements. Note: the 0.4.0 linear-scan exact
-  matcher fixed a class of contiguous matches Myers missed — re-measure before
-  investing here.
+- **Structured-fields task** — A third benchmark axis on synthetic resumes:
+  attribute-heavy, schema-like extraction, the profile closest to production
+  document-processing use. Replaces the retired literary_devices task.
+- **Thinking/visible token split** — Compare response text size against
+  `output_tokens` to measure adaptive-thinking spend directly; would close
+  the residual ~1.4× ner output-token gap vs Python (see BASELINE.md).
 
-## Tech Debt
+## Removed since last revision
 
-- **`LangExtract.align/3` smoke test** — The public API delegate has no direct
-  test. The underlying `Aligner.align/3` is tested, but a smoke test for the
-  top-level function would catch delegation bugs.
-- **Smart quote normalization in aligner** — LLMs output smart quotes (`'`) where
-  sources have ASCII apostrophes (`'`). The fuzzy aligner handles this but a
-  normalization pass before exact matching would improve `exact` vs `fuzzy` ratios.
+Shipped or obsoleted: plural stemming, `MATCH_LESSER`, and variable fuzzy
+windows (0.5.0 aligner parity port); `compare.py` rewrite and alignment
+comparison tooling (benchmark overhaul, parity achieved); `align/3` smoke
+test (covered by doctests); smart-quote normalization pass (superseded by
+the parity policy — we match upstream behavior rather than exceeding it).

@@ -41,9 +41,14 @@ defmodule LangExtract.Provider.Claude do
   @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def infer(prompt, opts) do
     with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
-      req
-      |> Req.post(request_opts)
-      |> parse_response()
+      %{model: model} = Provider.common_opts(opts, @defaults)
+
+      Provider.request(
+        req,
+        request_opts,
+        %{provider: :claude, model: model},
+        &parse_response/1
+      )
     end
   end
 
