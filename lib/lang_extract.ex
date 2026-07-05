@@ -100,6 +100,11 @@ defmodule LangExtract do
   @doc """
   Creates a configured LLM client for extraction.
 
+  Raises `ArgumentError` on an unknown provider or unbuildable HTTP client
+  (e.g. missing API key). The raise is deliberate: misconfiguration here is
+  a programmer error caught at client construction, while runtime failures
+  during extraction (`run/4`, `extract/3`) return tagged tuples.
+
   ## Examples
 
       client = LangExtract.new(:claude, api_key: "sk-...")
