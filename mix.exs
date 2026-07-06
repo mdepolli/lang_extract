@@ -41,7 +41,7 @@ defmodule LangExtract.MixProject do
       {:jason, "~> 1.4"},
 
       # HTTP client
-      {:req, "~> 0.6"},
+      {:req, "~> 0.6.0"},
 
       # Observability (already transitive via Finch; explicit because we emit)
       {:telemetry, "~> 1.0"},

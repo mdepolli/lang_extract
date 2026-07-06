@@ -11,6 +11,23 @@ defmodule LangExtract.Runner.Delivery do
   Task crashes become per-chunk events via the monitor `:DOWN` reason;
   halting the stream early kills all outstanding tasks.
 
+  ## Why hand-rolled
+
+  Without drain, this module should collapse into
+  `Task.Supervisor.async_stream_nolink(..., max_concurrency: buffer,
+  ordered: false, zip_input_on_exit: true)` — the bounded/unordered/
+  crash-to-event core duplicates it. Drain is what it can't express:
+  reporting never-started chunks requires detecting the dead supervisor
+  at admission time. Layering that detection on top was also considered
+  and rejected: a `Stream.transform` can't catch the supervisor-down
+  exit (it erupts between elements, inside the inner enumerable's
+  reduction), so the wrapper needs continuation-driving via
+  `Enumerable.reduce` plus OTP exit-shape matching plus reconstructing
+  the never-started set by diffing observed byte ranges — more fragile
+  than this explicit loop, and dependent on uncontracted stdlib event
+  ordering. If drain semantics are ever dropped, delete this module in
+  favor of `async_stream_nolink`.
+
   ## Drain
 
   When the runner shuts down mid-stream (deploy, supervisor restart),
