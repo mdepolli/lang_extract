@@ -19,13 +19,44 @@ children = [
 ]
 ```
 
-Then from anywhere in the app:
+`MyApp.Extractor` is **not a module you define** — it's just an atom used
+as the runner's registered process name, the same idiom as naming a
+`Registry` or a Finch pool. Any atom works; module-shaped names are
+convention because they can't collide. With the name registered, call the
+runner from anywhere in the app:
 
 ```elixir
 Runner.run(MyApp.Extractor, source, template)
 Runner.stream(MyApp.Extractor, source, template)
 Runner.stream_corpus(MyApp.Extractor, [{id, source}, ...], template)
 ```
+
+If you prefer the name to be a real module — for `MyApp.Extractor.run/2`
+ergonomics and one place to hold the template — a thin wrapper works:
+
+```elixir
+defmodule MyApp.Extractor do
+  alias LangExtract.Runner
+
+  def child_spec(_opts) do
+    Runner.child_spec(
+      name: __MODULE__,
+      client: LangExtract.new(:claude, api_key: System.fetch_env!("ANTHROPIC_API_KEY")),
+      max_in_flight: 20,
+      rpm: 2_000
+    )
+  end
+
+  def run(source), do: Runner.run(__MODULE__, source, template())
+  def stream(source), do: Runner.stream(__MODULE__, source, template())
+
+  defp template do
+    LangExtract.template("Extract ...", examples: [...])
+  end
+end
+```
+
+and `application.ex` shrinks to `children = [MyApp.Extractor]`.
 
 Everything scheduled through one runner shares one budget: two LiveView
 processes extracting simultaneously cannot jointly exceed `rpm` or
