@@ -22,16 +22,34 @@ defmodule LangExtract.Test.FakeAnthropic do
   to supervise, nothing outlives the test.
   """
 
-  @doc "Installs the scripted stub under `owner` and returns the probe handle."
-  def install(owner, script) when is_list(script) do
+  @doc """
+  Installs the scripted stub under `owner` and returns the probe handle.
+
+  Options:
+
+    * `:notify` — a pid sent `{:fake_anthropic_request, n}` as each request
+      arrives, before its script step runs. Lets tests synchronize on
+      "request N is on the wire" instead of sleeping.
+  """
+  def install(owner, script, opts \\ []) when is_list(script) do
     probe = %{
       calls: :atomics.new(1, []),
       gauge: :atomics.new(2, []),
-      times: :ets.new(:fake_anthropic_times, [:public, :ordered_set])
+      times: :ets.new(:fake_anthropic_times, [:public, :ordered_set]),
+      notify: Keyword.get(opts, :notify)
     }
 
     Req.Test.stub(owner, fn conn -> serve(conn, script, probe) end)
     probe
+  end
+
+  @doc """
+  A 200 extraction response for the given dynamic-key extractions — the
+  shared builder for tests whose stubs need prompt-conditional logic that
+  the call-numbered script model can't express.
+  """
+  def respond_ok(conn, extractions) do
+    respond(conn, {:ok, extractions})
   end
 
   @doc "Total requests received."
@@ -48,6 +66,7 @@ defmodule LangExtract.Test.FakeAnthropic do
   defp serve(conn, script, probe) do
     n = :atomics.add_get(probe.calls, 1, 1)
     track_arrival(probe, n)
+    if probe.notify, do: send(probe.notify, {:fake_anthropic_request, n})
 
     current = :atomics.add_get(probe.gauge, 1, 1)
     previous_max = :atomics.get(probe.gauge, 2)

@@ -2,6 +2,7 @@ defmodule LangExtract.RunnerTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Runner
+  alias LangExtract.Test.FakeAnthropic
 
   defp client do
     LangExtract.new(:claude,
@@ -75,15 +76,7 @@ defmodule LangExtract.RunnerTest do
         {:ok, body, _conn} = Plug.Conn.read_body(conn)
         prompt = hd(Jason.decode!(body)["messages"])["content"]
         word = if prompt =~ "First", do: "First", else: "Second"
-
-        Req.Test.json(conn, %{
-          "content" => [
-            %{
-              "type" => "text",
-              "text" => Jason.encode!(%{"extractions" => [%{"word" => word}]})
-            }
-          ]
-        })
+        FakeAnthropic.respond_ok(conn, [%{"word" => word}])
       end)
     end
 

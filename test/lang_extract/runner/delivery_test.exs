@@ -82,7 +82,20 @@ defmodule LangExtract.Runner.DeliveryTest do
 
     assert [_one] = sup |> Delivery.stream_events(chunks(6), process, buffer: 3) |> Enum.take(1)
 
-    Process.sleep(50)
-    assert Task.Supervisor.children(sup) == []
+    wait_until(fn -> Task.Supervisor.children(sup) == [] end)
+  end
+
+  defp wait_until(fun, attempts \\ 100) do
+    cond do
+      fun.() ->
+        :ok
+
+      attempts == 0 ->
+        flunk("condition never became true")
+
+      true ->
+        Process.sleep(5)
+        wait_until(fun, attempts - 1)
+    end
   end
 end

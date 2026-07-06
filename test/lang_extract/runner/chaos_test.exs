@@ -82,7 +82,7 @@ defmodule LangExtract.Runner.ChaosTest do
   end
 
   test "shutdown mid-corpus: in-flight chunks finish, unstarted chunks drain" do
-    FakeAnthropic.install(__MODULE__, [{:delay, 60, {:ok, []}}])
+    FakeAnthropic.install(__MODULE__, [{:delay, 60, {:ok, []}}], notify: self())
 
     six_sentences = String.duplicate("A sentence goes right here. ", 6)
     expected = length(LangExtract.Chunker.chunk(six_sentences, max_chunk_chars: 25))
@@ -102,8 +102,9 @@ defmodule LangExtract.Runner.ChaosTest do
         |> Enum.to_list()
       end)
 
-    # Let the first pair of chunks get onto the wire, then pull the plug.
-    Process.sleep(30)
+    # Both initial chunks are on the wire (stub signals arrival); pull the plug.
+    assert_receive {:fake_anthropic_request, _}, 1_000
+    assert_receive {:fake_anthropic_request, _}, 1_000
     :ok = stop_supervised(runner_id)
 
     events = Task.await(consumer)

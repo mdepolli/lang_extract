@@ -4,6 +4,7 @@ defmodule LangExtract.OrchestratorTest do
   alias LangExtract.Alignment.Span
   alias LangExtract.Client
   alias LangExtract.Pipeline.ChunkError
+  alias LangExtract.Test.FakeAnthropic
 
   @req_options [plug: {Req.Test, __MODULE__}]
 
@@ -28,15 +29,7 @@ defmodule LangExtract.OrchestratorTest do
         if prompt =~ "First", do: Process.sleep(150)
 
         word = if prompt =~ "First", do: "First", else: "Second"
-
-        Req.Test.json(conn, %{
-          "content" => [
-            %{
-              "type" => "text",
-              "text" => Jason.encode!(%{"extractions" => [%{"word" => word}]})
-            }
-          ]
-        })
+        FakeAnthropic.respond_ok(conn, [%{"word" => word}])
       end)
     end
 
