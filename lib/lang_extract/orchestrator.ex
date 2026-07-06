@@ -20,21 +20,43 @@ defmodule LangExtract.Orchestrator do
   alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt, Template}
   alias Pipeline.{ChunkError, ChunkResult}
 
+  # run/4 is literally a consumer of stream/4 — one code path, no drift.
+  # Halting on a task-exit error kills outstanding tasks through the
+  # stream's own cleanup and preserves the documented abandon-the-document
+  # contract; document telemetry comes from the stream's events.
   @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
           {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, term()}
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
-    chunks = chunk_source(source, opts)
-    metadata = %{source_bytes: byte_size(source)}
+    client
+    |> stream(source, template, opts)
+    |> Enum.reduce_while({[], []}, fn
+      {:ok, %ChunkResult{} = result}, {results, errors} ->
+        {:cont, {[result | results], errors}}
 
-    :telemetry.span([:lang_extract, :document], metadata, fn ->
-      result =
-        client
-        |> chunk_stream(chunks, template, opts)
-        |> collect_results()
+      {:error, %ChunkError{reason: {:task_exit, reason}}}, _acc ->
+        {:halt, {:error, {:task_exit, reason}}}
 
-      measurements = Map.put(document_measurements(result), :chunk_count, length(chunks))
-      {result, measurements, metadata}
+      {:error, %ChunkError{} = error}, {results, errors} ->
+        {:cont, {results, [error | errors]}}
     end)
+    |> case do
+      {:error, _} = error -> error
+      {results, errors} -> {:ok, assemble_results(results, errors)}
+    end
+  end
+
+  # Document order restored from unordered per-chunk events — shared by
+  # Runner.run/4, whose collect differs only in never halting.
+  @doc false
+  @spec assemble_results([ChunkResult.t()], [ChunkError.t()]) ::
+          {[Span.t()], [ChunkError.t()]}
+  def assemble_results(results, errors) do
+    spans =
+      results
+      |> Enum.sort_by(& &1.byte_start)
+      |> Enum.flat_map(& &1.spans)
+
+    {spans, Enum.sort_by(errors, & &1.byte_start)}
   end
 
   @spec stream(Client.t(), String.t(), Template.t(), keyword()) :: Enumerable.t()
@@ -140,39 +162,6 @@ defmodule LangExtract.Orchestrator do
 
   defp count_event(counts, {:error, %ChunkError{}}) do
     %{counts | error_count: counts.error_count + 1}
-  end
-
-  defp document_measurements({:ok, {spans, errors}}) do
-    %{span_count: length(spans), error_count: length(errors)}
-  end
-
-  defp document_measurements({:error, _reason}), do: %{}
-
-  defp collect_results(stream) do
-    Enum.reduce_while(stream, {[], []}, fn
-      {:ok, {chunk, {:ok, chunk_spans}}}, {spans_acc, errors_acc} ->
-        {:cont, {[{chunk.byte_start, chunk_spans} | spans_acc], errors_acc}}
-
-      {:ok, {_chunk, {:error, %ChunkError{} = error}}}, {spans_acc, errors_acc} ->
-        {:cont, {spans_acc, [error | errors_acc]}}
-
-      {:exit, {_chunk, reason}}, _acc ->
-        {:halt, {:error, {:task_exit, reason}}}
-    end)
-    |> finalize_results()
-  end
-
-  defp finalize_results({:error, _} = error), do: error
-
-  # The chunk stream is unordered; document order is restored here by chunk
-  # position.
-  defp finalize_results({tagged_spans, errors}) do
-    spans =
-      tagged_spans
-      |> Enum.sort_by(fn {chunk_start, _spans} -> chunk_start end)
-      |> Enum.flat_map(fn {_chunk_start, spans} -> spans end)
-
-    {:ok, {spans, Enum.sort_by(errors, & &1.byte_start)}}
   end
 
   # The per-chunk pipeline, shared with the Runner: prompt → infer_fun →

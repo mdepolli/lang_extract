@@ -143,12 +143,7 @@ defmodule LangExtract.Runner do
         {:error, %ChunkError{} = error}, {results, errors} -> {results, [error | errors]}
       end)
 
-    spans =
-      results
-      |> Enum.sort_by(& &1.byte_start)
-      |> Enum.flat_map(& &1.spans)
-
-    {:ok, {spans, Enum.sort_by(errors, & &1.byte_start)}}
+    {:ok, Orchestrator.assemble_results(results, errors)}
   end
 
   @doc """
@@ -163,6 +158,11 @@ defmodule LangExtract.Runner do
   @spec stream_corpus(Supervisor.supervisor(), Enumerable.t(), Template.t(), keyword()) ::
           Enumerable.t()
   def stream_corpus(runner, docs, %Template{} = template, opts \\ []) do
+    # Runner resources are deliberately re-resolved per document (inside
+    # stream/4), not hoisted: the limiter/task-supervisor pids go stale if
+    # the one_for_all cell restarts mid-corpus, and per-document resolution
+    # lets the corpus continue on the fresh children instead of draining
+    # every remaining document. Two messages per multi-second document.
     Stream.flat_map(docs, fn {id, source} ->
       runner
       |> stream(source, template, opts)
