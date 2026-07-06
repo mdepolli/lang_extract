@@ -151,7 +151,12 @@ defmodule Mix.Tasks.Benchmark.Run do
     # Module-qualified capture (not an anonymous fn) so telemetry can store
     # and dispatch it without the local-handler penalty; the ETS table
     # travels as the handler config.
-    :telemetry.attach(handler_id, [:lang_extract, :request, :stop], &record_request/4, table)
+    :telemetry.attach(
+      handler_id,
+      [:lang_extract, :request, :stop],
+      &__MODULE__.record_request/4,
+      table
+    )
 
     try do
       {elapsed_us, run_result} = :timer.tc(fun)

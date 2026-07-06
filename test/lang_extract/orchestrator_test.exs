@@ -388,7 +388,7 @@ defmodule LangExtract.OrchestratorTest do
       end)
 
       assert {:ok, {[span], []}} =
-               LangExtract.run(claude_client(), source, template(), max_chunk_chars: 30)
+               LangExtract.run(claude_client(), source, template(), max_chunk_chars: 40)
 
       assert span.status == :exact
       assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) == "🐳 baleine"

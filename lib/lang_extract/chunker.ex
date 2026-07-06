@@ -32,7 +32,48 @@ defmodule LangExtract.Chunker do
 
     text
     |> find_sentences()
+    |> Enum.flat_map(&split_oversized(&1, max_chars))
     |> pack_sentences(max_chars)
+  end
+
+  # A sentence longer than the budget is hard-split at token boundaries
+  # (mirroring upstream's ChunkIterator) — otherwise boundary-free text
+  # (logs, minified content) becomes one whole-document chunk and defeats
+  # the size guarantee. Fragments concatenate back to the sentence exactly,
+  # so pack_sentences' byte accounting is unaffected. A single token longer
+  # than the budget stays whole: token boundaries are never violated.
+  defp split_oversized(sentence, max_chars) do
+    if String.length(sentence) <= max_chars do
+      [sentence]
+    else
+      sentence
+      |> Tokenizer.tokenize()
+      |> split_tokens(max_chars)
+    end
+  end
+
+  defp split_tokens(tokens, max_chars) do
+    {fragments, current, _len} =
+      Enum.reduce(tokens, {[], [], 0}, fn token, {fragments, current, len} ->
+        token_len = String.length(token.text)
+
+        cond do
+          current == [] ->
+            {fragments, [token.text], token_len}
+
+          len + token_len <= max_chars ->
+            {fragments, [token.text | current], len + token_len}
+
+          true ->
+            {[join_fragment(current) | fragments], [token.text], token_len}
+        end
+      end)
+
+    Enum.reverse([join_fragment(current) | fragments])
+  end
+
+  defp join_fragment(reversed_texts) do
+    reversed_texts |> Enum.reverse() |> IO.iodata_to_binary()
   end
 
   defp pack_sentences(sentences, max_chars) do

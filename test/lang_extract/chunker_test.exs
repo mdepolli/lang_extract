@@ -43,12 +43,46 @@ defmodule LangExtract.ChunkerTest do
       end
     end
 
-    test "multi-byte sentence longer than max_chunk_chars stays whole" do
+    test "oversized multi-byte sentence hard-splits at token boundaries" do
       text = "🐳🐳🐳 café déjà 日本語 señor — one very long sentence indeed."
 
-      [chunk] = Chunker.chunk(text, max_chunk_chars: 10)
+      chunks = Chunker.chunk(text, max_chunk_chars: 10)
+
+      assert length(chunks) > 1
+
+      for chunk <- chunks do
+        assert String.valid?(chunk.text)
+
+        assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
+                 chunk.text
+      end
+
+      assert Enum.map_join(chunks, "", & &1.text) == text
+    end
+
+    test "boundary-free text is hard-split within the budget" do
+      # No sentence boundaries at all — the log/minified-content case.
+      text = Enum.map_join(1..60, " ", &"word#{&1}")
+
+      chunks = Chunker.chunk(text, max_chunk_chars: 50)
+
+      assert length(chunks) > 5
+
+      for chunk <- chunks do
+        assert String.length(chunk.text) <= 50
+
+        assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
+                 chunk.text
+      end
+
+      assert Enum.map_join(chunks, "", & &1.text) == text
+    end
+
+    test "a single token longer than the budget stays whole" do
+      text = String.duplicate("x", 60)
+
+      [chunk] = Chunker.chunk(text, max_chunk_chars: 25)
       assert chunk.text == text
-      assert String.valid?(chunk.text)
     end
 
     test "empty text returns empty list" do
@@ -64,11 +98,13 @@ defmodule LangExtract.ChunkerTest do
       end
     end
 
-    test "single sentence no newlines emitted as oversized chunk" do
+    test "single sentence without punctuation is hard-split within the budget" do
       text = "this is a long run on sentence without any punctuation at all"
       chunks = Chunker.chunk(text, max_chunk_chars: 20)
-      assert length(chunks) == 1
-      assert hd(chunks).text == text
+
+      assert length(chunks) > 1
+      assert Enum.all?(chunks, &(String.length(&1.text) <= 20))
+      assert Enum.map_join(chunks, "", & &1.text) == text
     end
 
     test "chunks cover entire source text" do
