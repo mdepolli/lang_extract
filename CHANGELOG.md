@@ -47,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Runner 429 retries are bounded** — absent a `retry-after` header the
+  global pause now escalates exponentially (capped at 30s), and after
+  `:rate_limit_retries` 429s on one chunk (default 10) the chunk fails
+  with the rate-limit error instead of retrying forever. `retry-after`,
+  when present, still sets the pause; rate-limit waits still never
+  consume `chunk_retries`.
 - **Breaking: decoding is JSON-only — YAML support removed entirely** —
   `WireFormat.normalize/1` no longer falls back to a YAML parser, the YAML
   repair machinery is deleted, and the `yaml_elixir`/`yamerl` dependencies

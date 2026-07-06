@@ -31,6 +31,8 @@ defmodule LangExtract.Runner do
     * `:rpm` — requests-per-minute budget (default `:infinity`)
     * `:chunk_retries` — retry budget per chunk for 5xx/transport failures
       (default `3`); 429 waits never consume it
+    * `:rate_limit_retries` — cap on 429 retries per chunk (default `10`);
+      past it the chunk fails with the rate-limit error
     * `:retry_backoff_ms` — base backoff for consumed retries (default `200`)
     * `:buffer` — bound on undelivered stream results (default:
       `max_in_flight`); a slow consumer halts admission at this bound
@@ -62,6 +64,7 @@ defmodule LangExtract.Runner do
       client: disable_req_retry(client),
       chunk_retries: Keyword.get(opts, :chunk_retries, 3),
       retry_backoff_ms: Keyword.get(opts, :retry_backoff_ms, 200),
+      rate_limit_retries: Keyword.get(opts, :rate_limit_retries, 10),
       buffer: Keyword.get(opts, :buffer, max_in_flight),
       drain_timeout: Keyword.get(opts, :drain_timeout, 5_000)
     }
@@ -105,7 +108,8 @@ defmodule LangExtract.Runner do
 
     retry_opts = [
       chunk_retries: config.chunk_retries,
-      retry_backoff_ms: config.retry_backoff_ms
+      retry_backoff_ms: config.retry_backoff_ms,
+      rate_limit_retries: config.rate_limit_retries
     ]
 
     process = fn chunk ->

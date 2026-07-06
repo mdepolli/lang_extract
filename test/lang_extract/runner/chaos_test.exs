@@ -54,6 +54,19 @@ defmodule LangExtract.Runner.ChaosTest do
     assert FakeAnthropic.max_concurrency(probe) <= 2
   end
 
+  test "a permanently throttled endpoint fails the chunk instead of looping" do
+    probe = FakeAnthropic.install(__MODULE__, [{:status, 429, []}])
+
+    runner =
+      start_supervised!({Runner, [client: client(), retry_backoff_ms: 1, rate_limit_retries: 2]})
+
+    assert {:ok, {[], [%ChunkError{reason: {:rate_limited, nil}}]}} =
+             Runner.run(runner, "hello world", template())
+
+    # initial + 2 capped retries, then the chunk gave up.
+    assert FakeAnthropic.calls(probe) == 3
+  end
+
   test "malformed payloads become per-chunk errors while neighbors succeed" do
     FakeAnthropic.install(__MODULE__, [
       {:text, "not json {{{"},

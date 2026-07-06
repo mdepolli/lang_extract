@@ -89,6 +89,24 @@ defmodule LangExtract.Runner.RequestTest do
     assert Agent.get(calls, & &1) == 2
   end
 
+  test "persistent 429s hit the rate-limit cap with escalating pauses",
+       %{limiter: limiter, calls: calls} do
+    scripted_stub(calls, [{:status, 429, []}])
+    started = System.monotonic_time(:millisecond)
+
+    assert {:error, {:rate_limited, nil}} =
+             Request.infer(limiter, client(), "prompt",
+               chunk_retries: 3,
+               retry_backoff_ms: 20,
+               rate_limit_retries: 2
+             )
+
+    # initial attempt + 2 capped retries
+    assert Agent.get(calls, & &1) == 3
+    # escalating fallback pauses: 20ms then 40ms
+    assert System.monotonic_time(:millisecond) - started >= 55
+  end
+
   test "5xx retries with budget and succeeds within it", %{limiter: limiter, calls: calls} do
     scripted_stub(calls, [{:status, 500, []}, {:status, 503, []}, :ok])
 
