@@ -6,11 +6,9 @@ and natural extensions that haven't been implemented yet.
 ## Production Pipeline
 
 - ~~**Streaming results**~~ — shipped: `LangExtract.stream/4` (0.7.0).
-- **Supervised runner** — caller-owned `LangExtract.Runner` with a shared
-  request budget (RPM token bucket + in-flight cap), global 429 backoff,
-  per-chunk retry budgets, and graceful drain on shutdown. Bounded
-  delivery is a normative constraint: admission gated on the
-  undelivered-results buffer.
+- ~~**Supervised runner**~~ — shipped: `LangExtract.Runner` with shared
+  budget, global 429 backoff, runner-owned retries, bounded delivery,
+  and graceful drain (0.7.0).
 
 ## Extraction Quality
 

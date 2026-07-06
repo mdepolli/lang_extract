@@ -85,6 +85,7 @@ defmodule LangExtract.MixProject do
         "README.md",
         "guides/alignment.md",
         "guides/telemetry.md",
+        "guides/production.md",
         "CHANGELOG.md"
       ],
       groups_for_modules: [
@@ -122,6 +123,12 @@ defmodule LangExtract.MixProject do
           LangExtract.Provider.Claude,
           LangExtract.Provider.OpenAI,
           LangExtract.Provider.Gemini
+        ],
+        Runner: [
+          LangExtract.Runner,
+          LangExtract.Runner.Limiter,
+          LangExtract.Runner.Request,
+          LangExtract.Runner.Delivery
         ],
         Serialization: [LangExtract.Serializer]
       ]

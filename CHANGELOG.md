@@ -21,8 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   5xx/transport failures take jittered backoff and do, other errors
   fail fast. Stream delivery is bounded — at most `:buffer` undelivered
   results — so a slow consumer throttles admission instead of growing a
-  mailbox. In runner mode every failure is per-chunk; there is no
-  abandon-the-document error path. New telemetry:
+  mailbox. `Runner.stream_corpus/4` runs an enumerable of `{id, source}`
+  pairs through the same budget. Shutdown drains gracefully: in-flight
+  requests get `:drain_timeout` to finish and deliver; unstarted chunks
+  come back as `%ChunkError{reason: :drained}`. In runner mode every
+  failure is per-chunk; there is no abandon-the-document error path.
+  New guide: "Running in Production". New telemetry:
   `[:lang_extract, :limiter, :wait]` (duration + blocking reason) and
   `[:lang_extract, :chunk, :retry]` (attempt, reason, limiter).
 - **`LangExtract.stream/4`** — lazy stream of per-chunk results

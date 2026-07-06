@@ -284,6 +284,34 @@ Provider-specific options:
 | --------- | ------------ | ------- | ----------------------------------------------------------------------------- |
 | `:openai` | `:json_mode` | `true`  | Enable JSON mode. Set `false` for compatible endpoints that don't support it. |
 
+## Production: the supervised Runner
+
+For applications extracting continuously, `LangExtract.Runner` puts a
+shared request budget in your supervision tree:
+
+```elixir
+# application.ex
+{LangExtract.Runner,
+ name: MyApp.Extractor,
+ client: LangExtract.new(:claude, api_key: key),
+ max_in_flight: 20,
+ rpm: 2_000}
+
+# anywhere in the app — same shapes as run/4 and stream/4:
+Runner.run(MyApp.Extractor, source, template)
+Runner.stream(MyApp.Extractor, source, template)
+Runner.stream_corpus(MyApp.Extractor, [{id, source}, ...], template)
+```
+
+Concurrent callers share the budget; one 429 pauses all admission until
+the server's `retry-after` deadline; retries follow the runner's policy
+(429 waits are free, 5xx/transport consume a per-chunk budget); stream
+delivery is bounded so slow consumers throttle admission; and shutdown
+drains gracefully — in-flight requests finish, unstarted chunks come back
+as `%ChunkError{reason: :drained}`. See the
+[production guide](guides/production.md) for sizing and the full
+failure-semantics table.
+
 ## Telemetry
 
 LangExtract emits `:telemetry` spans at document, chunk, and request level —
