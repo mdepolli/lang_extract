@@ -47,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Oversized sentences hard-split at token boundaries** — text without
+  sentence boundaries (logs, minified content) previously became one
+  whole-document chunk, defeating `:max_chunk_chars`. Sentences past the
+  budget now pre-split into token-boundary fragments (byte offsets exact;
+  a single token longer than the budget stays whole), matching upstream's
+  `ChunkIterator` — verified chunk-count parity on a boundary-free fixture.
 - **Runner 429 retries are bounded** — absent a `retry-after` header the
   global pause now escalates exponentially (capped at 30s), and after
   `:rate_limit_retries` 429s on one chunk (default 10) the chunk fails
