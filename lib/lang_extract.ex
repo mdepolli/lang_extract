@@ -45,7 +45,7 @@ defmodule LangExtract do
   enriched spans with class and attributes.
 
   Accepts both canonical and dynamic-key format (where each entry uses
-  the class name as the key), in JSON or YAML. Strips markdown fences
+  the class name as the key). JSON only (since 0.7.0). Strips markdown fences
   and think tags before parsing.
 
   ## Options

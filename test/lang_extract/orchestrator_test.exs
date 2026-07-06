@@ -464,30 +464,56 @@ defmodule LangExtract.OrchestratorTest do
 
       on_exit(fn -> :telemetry.detach(handler_id) end)
 
-      counting_stub(self())
+      stub_claude(claude_extraction_response([]))
+
+      # Concurrent async suites emit these events too, so every assertion
+      # filters to this run: a source with a unique byte size (documents),
+      # chunk offsets past anything other suites use (chunks), and a
+      # dedicated model name (requests).
+      census_source = String.duplicate("A census sentence stands right about here. ", 25)
+      source_bytes = byte_size(census_source)
+
+      census_client =
+        LangExtract.new(:claude,
+          api_key: "sk-test",
+          model: "census-model",
+          req_options: @req_options
+        )
 
       assert {:ok, {_spans, []}} =
-               LangExtract.run(claude_client(), @two_chunk_source, template(),
-                 max_chunk_chars: 25,
+               LangExtract.run(census_client, census_source, template(),
+                 max_chunk_chars: 600,
                  max_concurrency: 2
                )
 
       # One document span with the span-shaped + domain measurement keys.
-      assert_receive {[:lang_extract, :document, :start], %{system_time: _}, _}
-      assert_receive {[:lang_extract, :document, :stop], doc_stop, _}
+      assert_receive {[:lang_extract, :document, :start], %{system_time: _},
+                      %{source_bytes: ^source_bytes}}
+
+      assert_receive {[:lang_extract, :document, :stop], doc_stop, %{source_bytes: ^source_bytes}}
 
       assert doc_stop |> Map.keys() |> Enum.sort() ==
                [:chunk_count, :duration, :error_count, :monotonic_time, :span_count]
 
-      # Two chunks: a start and a stop span each, plus a request span each.
-      for _ <- 1..2 do
-        assert_receive {[:lang_extract, :chunk, :start], _, _}
-        assert_receive {[:lang_extract, :chunk, :stop], %{duration: _, span_count: _}, _}
-        assert_receive {[:lang_extract, :request, :start], _, _}
-        assert_receive {[:lang_extract, :request, :stop], %{duration: _}, _}
+      chunk_count = doc_stop.chunk_count
+      assert chunk_count >= 2
+
+      # Every chunk: a start and a stop span, plus a request span.
+      for _ <- 1..chunk_count do
+        assert_receive {[:lang_extract, :chunk, :start], _, %{byte_end: chunk_end}}
+                       when chunk_end > 500
+
+        assert_receive {[:lang_extract, :chunk, :stop], %{duration: _, span_count: _},
+                        %{byte_end: stop_end}}
+                       when stop_end > 500
+
+        assert_receive {[:lang_extract, :request, :start], _, %{model: "census-model"}}
+
+        assert_receive {[:lang_extract, :request, :stop], %{duration: _},
+                        %{model: "census-model"}}
       end
 
-      refute_receive {[:lang_extract, :document, _], _, _}
+      refute_receive {[:lang_extract, :document, _], _, %{source_bytes: ^source_bytes}}
     end
 
     test "failed chunk emits :error status and counts into document error_count" do
@@ -598,28 +624,6 @@ defmodule LangExtract.OrchestratorTest do
                LangExtract.run(claude_client(), "First sentence. Second sentence.", template(),
                  max_chunk_chars: 20
                )
-    end
-
-    test "handles YAML-formatted LLM response" do
-      yaml_response = """
-      extractions:
-      - word: fox
-        word_attributes:
-          type: noun
-      """
-
-      Req.Test.stub(__MODULE__, fn conn ->
-        Req.Test.json(conn, %{
-          "content" => [%{"type" => "text", "text" => yaml_response}]
-        })
-      end)
-
-      assert {:ok, {[span], []}} =
-               LangExtract.run(claude_client(), "the quick brown fox", template())
-
-      assert span.class == "word"
-      assert span.text == "fox"
-      assert span.status == :exact
     end
 
     test "multiple extractions aligned independently" do

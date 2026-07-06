@@ -37,10 +37,8 @@ defmodule LangExtract.MixProject do
 
   defp deps do
     [
-      # Core. JSON is the wire format (0.6.0+); yaml_elixir stays for
-      # decode tolerance only — YAML responses are still accepted.
+      # Core
       {:jason, "~> 1.4"},
-      {:yaml_elixir, "~> 2.12"},
 
       # HTTP client
       {:req, "~> 0.6"},

@@ -5,9 +5,9 @@ defmodule LangExtract.WireFormat do
   Serializes `%Extraction{}` structs to fenced dynamic-key JSON for prompts
   (matching upstream langextract's default — decided by the 2026-07-05
   format A/B, see benchmark/BASELINE.md), and normalizes raw LLM output
-  back to canonical format for the parser. The decode half is
-  format-agnostic: JSON is a YAML subset, so it parses YAML responses and
-  keeps the YAML repair machinery as tolerance for malformed output.
+  back to canonical format for the parser. Decoding is JSON-only (since
+  0.7.0; the YAML tolerance path and its repair machinery were removed
+  once JSON became the wire format).
 
   Both directions of the wire format live here on purpose — they share the
   dynamic-key `_attributes` contract. `Prompt.Builder` uses the encode half;
@@ -33,13 +33,7 @@ defmodule LangExtract.WireFormat do
   def normalize(raw) when is_binary(raw) do
     cleaned = raw |> strip_think_tags() |> strip_fences()
 
-    # JSON is the wire format, so the strict, fast parser goes first; the
-    # YAML parser is the tolerance path for models that answer in YAML.
-    # Valid YAML must never be rewritten (the quoting repairs corrupt legal
-    # constructs like multi-line plain scalars) — repair only on failure.
-    with :error <- parse_json(cleaned),
-         :error <- parse_yaml(cleaned),
-         :error <- cleaned |> quote_yaml_values() |> parse_yaml() do
+    with :error <- parse_json(cleaned) do
       {:error, {:invalid_format, raw}}
     end
   end
@@ -51,13 +45,6 @@ defmodule LangExtract.WireFormat do
     end
   end
 
-  defp parse_yaml(yaml) do
-    case YamlElixir.read_from_string(yaml) do
-      {:ok, decoded} -> validate_decoded(decoded)
-      _ -> :error
-    end
-  end
-
   defp validate_decoded(%{"extractions" => entries} = decoded) when is_list(entries) do
     {:ok, %{decoded | "extractions" => Enum.map(entries, &normalize_entry/1)}}
   end
@@ -65,93 +52,6 @@ defmodule LangExtract.WireFormat do
   # Valid document without "extractions" key — let Parser return :missing_extractions
   defp validate_decoded(%{} = decoded) when decoded != %{}, do: {:ok, decoded}
   defp validate_decoded(_decoded), do: :error
-
-  @yaml_value_re ~r/^(\s+- [\w-]+: )(.+)$/m
-  # Block scalar headers (|, |-, >2+, ...) introduce the indented lines that
-  # follow — quoting one as a value orphans its block and breaks the parse.
-  @block_scalar_re ~r/^[|>][0-9+-]{0,2}$/
-
-  # Only reached when the document already failed to parse, so rewriting
-  # aggressively is safe: fold stray plain-scalar continuation lines into
-  # their value line, then requote every value from scratch.
-  defp quote_yaml_values(yaml) do
-    yaml
-    |> join_plain_continuations()
-    |> requote_values()
-  end
-
-  defp requote_values(yaml) do
-    Regex.replace(@yaml_value_re, yaml, fn full, prefix, value ->
-      if value =~ @block_scalar_re do
-        full
-      else
-        prefix <> requote(value)
-      end
-    end)
-  end
-
-  # Strips one layer of (possibly unterminated or mis-escaped) model quoting,
-  # then requotes with everything inside escaped. Sources carry smart quotes,
-  # so an ASCII quote at the value boundary is model syntax, not span content.
-  defp requote(value) do
-    value
-    |> strip_outer_quotes()
-    |> String.replace("\\\"", "\"")
-    |> then(&("\"" <> String.replace(&1, "\"", "\\\"") <> "\""))
-  end
-
-  defp strip_outer_quotes(value) do
-    trimmed = String.trim_trailing(value)
-
-    cond do
-      byte_size(trimmed) > 1 and String.starts_with?(trimmed, "\"") and
-          String.ends_with?(trimmed, "\"") ->
-        binary_part(trimmed, 1, byte_size(trimmed) - 2)
-
-      String.starts_with?(trimmed, "\"") ->
-        binary_part(trimmed, 1, byte_size(trimmed) - 1)
-
-      true ->
-        trimmed
-    end
-  end
-
-  @item_value_re ~r/^\s*- [\w-]+: (.+)$/
-  @key_line_re ~r/^\s*(?:- )?[\w-]+:(?: |$)/
-
-  # The model sometimes continues a plain scalar on deeper-indented lines
-  # (verse dialogue); fold those into the value line so requoting covers
-  # the whole scalar. Block scalar content is never touched.
-  defp join_plain_continuations(yaml) do
-    yaml
-    |> String.split("\n")
-    |> Enum.reduce([], &join_line/2)
-    |> Enum.reverse()
-    |> Enum.join("\n")
-  end
-
-  defp join_line(line, []), do: [line]
-
-  defp join_line(line, [prev | rest] = acc) do
-    if continuation?(line, prev) do
-      [prev <> " " <> String.trim(line) | rest]
-    else
-      [line | acc]
-    end
-  end
-
-  defp continuation?(line, prev) do
-    String.trim(line) != "" and
-      not Regex.match?(@key_line_re, line) and
-      plain_item_value?(prev)
-  end
-
-  defp plain_item_value?(prev) do
-    case Regex.run(@item_value_re, prev) do
-      [_, value] -> not Regex.match?(@block_scalar_re, value)
-      nil -> false
-    end
-  end
 
   @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
   @fence_pattern ~r/```(?:json|yaml)?\s*(.*?)\s*```/s

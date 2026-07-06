@@ -47,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking: decoding is JSON-only — YAML support removed entirely** —
+  `WireFormat.normalize/1` no longer falls back to a YAML parser, the YAML
+  repair machinery is deleted, and the `yaml_elixir`/`yamerl` dependencies
+  are dropped. JSON has been the wire format since 0.6.0 and two of three
+  providers constrain JSON at the API level; the tolerance path's
+  justification ended with the format switch (audit simplicity finding).
+  If you re-parse stored raw responses from the 0.4–0.5 YAML era through
+  `extract/3`, convert them to JSON first.
 - **Breaking: 429 errors carry the retry-after deadline** —
   `{:error, :rate_limited}` is now `{:error, {:rate_limited, ms | nil}}`;
   the runner's global backoff needs the server's deadline and it only

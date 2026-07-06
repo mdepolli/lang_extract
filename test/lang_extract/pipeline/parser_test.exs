@@ -104,15 +104,15 @@ defmodule LangExtract.Pipeline.ParserTest do
     test "parses, aligns, and merges class/attributes onto spans" do
       source = "But soft! What light through yonder window breaks?"
 
-      yaml = """
-      extractions:
-      - quote: soft
-        quote_attributes:
-          tone: gentle
-      - object: window
-      """
+      raw =
+        Jason.encode!(%{
+          "extractions" => [
+            %{"quote" => "soft", "quote_attributes" => %{"tone" => "gentle"}},
+            %{"object" => "window"}
+          ]
+        })
 
-      assert {:ok, spans} = LangExtract.extract(source, yaml)
+      assert {:ok, spans} = LangExtract.extract(source, raw)
       assert length(spans) == 2
 
       [soft, window] = spans
@@ -137,14 +137,14 @@ defmodule LangExtract.Pipeline.ParserTest do
     end
 
     test "merges class/attributes onto not_found spans" do
-      yaml = """
-      extractions:
-      - thing: nonexistent phrase
-        thing_attributes:
-          a: 1
-      """
+      raw =
+        Jason.encode!(%{
+          "extractions" => [
+            %{"thing" => "nonexistent phrase", "thing_attributes" => %{"a" => 1}}
+          ]
+        })
 
-      assert {:ok, [span]} = LangExtract.extract("hello world", yaml)
+      assert {:ok, [span]} = LangExtract.extract("hello world", raw)
       assert span.status == :not_found
       assert span.class == "thing"
       assert span.attributes == %{"a" => 1}
@@ -155,22 +155,25 @@ defmodule LangExtract.Pipeline.ParserTest do
                LangExtract.extract("source", "bad input")
     end
 
-    test "propagates missing_extractions for valid YAML without extractions key" do
+    test "propagates missing_extractions for valid JSON without extractions key" do
       assert {:error, :missing_extractions} =
-               LangExtract.extract("source", "wrong_key:\n- a: 1")
+               LangExtract.extract("source", ~s({"wrong_key": [{"a": 1}]}))
     end
 
     test "handles dynamic-key format from LLM output" do
       source = "The patient was diagnosed with hypertension."
 
-      yaml = """
-      extractions:
-      - medical_condition: hypertension
-        medical_condition_attributes:
-          chronicity: chronic
-      """
+      raw =
+        Jason.encode!(%{
+          "extractions" => [
+            %{
+              "medical_condition" => "hypertension",
+              "medical_condition_attributes" => %{"chronicity" => "chronic"}
+            }
+          ]
+        })
 
-      assert {:ok, [span]} = LangExtract.extract(source, yaml)
+      assert {:ok, [span]} = LangExtract.extract(source, raw)
       assert span.class == "medical_condition"
       assert span.text == "hypertension"
       assert span.attributes == %{"chronicity" => "chronic"}

@@ -99,13 +99,16 @@ defmodule LangExtract.WireFormatTest do
   end
 
   describe "normalize/1" do
-    test "converts dynamic-key YAML to canonical format" do
-      input = """
-      extractions:
-      - medical_condition: hypertension
-        medical_condition_attributes:
-          chronicity: chronic
-      """
+    test "converts dynamic-key entries to canonical format" do
+      input =
+        Jason.encode!(%{
+          "extractions" => [
+            %{
+              "medical_condition" => "hypertension",
+              "medical_condition_attributes" => %{"chronicity" => "chronic"}
+            }
+          ]
+        })
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -120,13 +123,11 @@ defmodule LangExtract.WireFormatTest do
              }
     end
 
-    test "passes through already-canonical YAML unchanged" do
-      input = """
-      extractions:
-      - class: drug
-        text: aspirin
-        attributes: {}
-      """
+    test "passes through already-canonical entries unchanged" do
+      input =
+        Jason.encode!(%{
+          "extractions" => [%{"class" => "drug", "text" => "aspirin", "attributes" => %{}}]
+        })
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -138,13 +139,17 @@ defmodule LangExtract.WireFormatTest do
     end
 
     test "passes through canonical entry with extra keys untouched" do
-      input = """
-      extractions:
-      - class: drug
-        text: aspirin
-        attributes: {}
-        html_attributes: "data-id='5'"
-      """
+      input =
+        Jason.encode!(%{
+          "extractions" => [
+            %{
+              "class" => "drug",
+              "text" => "aspirin",
+              "attributes" => %{},
+              "html_attributes" => "data-id='5'"
+            }
+          ]
+        })
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -161,12 +166,10 @@ defmodule LangExtract.WireFormatTest do
     end
 
     test "strips <think> tags before parsing" do
-      input = """
-      <think>Let me reason about this carefully.</think>
-      extractions:
-      - drug: aspirin
-        drug_attributes: {}
-      """
+      payload =
+        Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "drug_attributes" => %{}}]})
+
+      input = "<think>Let me reason about this carefully.</think>\n" <> payload
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -184,13 +187,10 @@ defmodule LangExtract.WireFormatTest do
     end
 
     test "strips multiple <think> blocks" do
-      input = """
-      <think>first reasoning</think>
-      extractions:
-      - symptom: fever
-        symptom_attributes: {}
-      <think>second thought</think>
-      """
+      payload =
+        Jason.encode!(%{"extractions" => [%{"symptom" => "fever", "symptom_attributes" => %{}}]})
+
+      input = "<think>first reasoning</think>\n" <> payload <> "\n<think>second thought</think>"
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -201,14 +201,11 @@ defmodule LangExtract.WireFormatTest do
              }
     end
 
-    test "strips markdown fences with yaml language tag" do
-      input = """
-      ```yaml
-      extractions:
-      - drug: ibuprofen
-        drug_attributes: {}
-      ```
-      """
+    test "strips fences regardless of language tag" do
+      inner =
+        Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
+
+      input = "```yaml\n#{inner}\n```"
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -235,13 +232,10 @@ defmodule LangExtract.WireFormatTest do
     end
 
     test "strips markdown fences without language tag" do
-      input = """
-      ```
-      extractions:
-      - drug: ibuprofen
-        drug_attributes: {}
-      ```
-      """
+      inner2 =
+        Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
+
+      input = "```\n#{inner2}\n```"
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -252,50 +246,18 @@ defmodule LangExtract.WireFormatTest do
              }
     end
 
-    test "returns error for non-YAML content" do
+    test "returns error for unparseable content" do
       assert {:error, {:invalid_format, "just plain text"}} =
                WireFormat.normalize("just plain text")
     end
 
-    test "passes through valid YAML without extractions key" do
-      assert {:ok, %{"wrong_key" => []}} =
-               WireFormat.normalize("wrong_key: []")
-    end
-
-    test "quotes unquoted YAML values containing colons" do
-      yaml = """
-      extractions:
-        - dialogue: work and service: and these
-          dialogue_attributes:
-            speaker: Someone
-      """
-
-      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(yaml)
-      assert entry["text"] == "work and service: and these"
-    end
-
-    test "preserves already-quoted YAML values" do
-      yaml = """
-      extractions:
-        - dialogue: "already quoted: value"
-          dialogue_attributes:
-            speaker: Someone
-      """
-
-      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(yaml)
-      assert entry["text"] == "already quoted: value"
-    end
-
     test "handles combined think tags, fences, and dynamic keys" do
-      input = """
-      <think>Thinking...</think>
-      ```yaml
-      extractions:
-      - finding: mass
-        finding_attributes:
-          size: 2cm
-      ```
-      """
+      inner =
+        Jason.encode!(%{
+          "extractions" => [%{"finding" => "mass", "finding_attributes" => %{"size" => "2cm"}}]
+        })
+
+      input = "<think>Thinking...</think>\n```json\n#{inner}\n```"
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -307,10 +269,7 @@ defmodule LangExtract.WireFormatTest do
     end
 
     test "_attributes key without matching prefix is treated as a class key" do
-      input = """
-      extractions:
-      - html_attributes: "<b>bold</b>"
-      """
+      input = Jason.encode!(%{"extractions" => [%{"html_attributes" => "<b>bold</b>"}]})
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -322,11 +281,7 @@ defmodule LangExtract.WireFormatTest do
     end
 
     test "entry with multiple non-attribute keys is passed through" do
-      input = """
-      extractions:
-      - drug: aspirin
-        dosage: 100mg
-      """
+      input = Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "dosage" => "100mg"}]})
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -338,10 +293,7 @@ defmodule LangExtract.WireFormatTest do
     end
 
     test "entry with no keys is passed through" do
-      input = """
-      extractions:
-      - {}
-      """
+      input = Jason.encode!(%{"extractions" => [%{}]})
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
@@ -378,102 +330,6 @@ defmodule LangExtract.WireFormatTest do
     end
   end
 
-  describe "normalize/1 with block scalars" do
-    test "preserves literal block scalar values" do
-      input = """
-      extractions:
-        - dialogue: |-
-            Two households, both alike in dignity,
-            In fair Verona, where we lay our scene.
-          dialogue_attributes:
-            speaker: Chorus
-      """
-
-      assert {:ok, decoded} = WireFormat.normalize(input)
-      assert [entry] = decoded["extractions"]
-      assert entry["class"] == "dialogue"
-
-      assert entry["text"] ==
-               "Two households, both alike in dignity,\nIn fair Verona, where we lay our scene."
-
-      assert entry["attributes"] == %{"speaker" => "Chorus"}
-    end
-
-    test "preserves folded block scalars" do
-      input = """
-      extractions:
-        - dialogue: >-
-            Sweet is the scent of the hawthorn,
-            and sweet are the bluebells.
-          dialogue_attributes:
-            speaker: Nightingale
-      """
-
-      assert {:ok, decoded} = WireFormat.normalize(input)
-      assert [entry] = decoded["extractions"]
-      assert entry["text"] == "Sweet is the scent of the hawthorn, and sweet are the bluebells."
-    end
-
-    test "repairs an unterminated leading quote" do
-      # Real Sonnet 5 defect: the model opens a quoted scalar on the last
-      # entry and never closes it, swallowing the rest of the document.
-      input = """
-      extractions:
-        - dialogue: "Death is a great price to pay for a red rose,"
-          dialogue_attributes:
-            speaker: the Nightingale
-        - dialogue: "and Life is very dear to all.
-          dialogue_attributes:
-            speaker: the Nightingale
-      """
-
-      assert {:ok, decoded} = WireFormat.normalize(input)
-      assert [first, second] = decoded["extractions"]
-      assert first["text"] == "Death is a great price to pay for a red rose,"
-      assert second["text"] == "and Life is very dear to all."
-    end
-
-    test "repairs unescaped quotes inside a quoted value" do
-      input = """
-      extractions:
-        - dialogue: "Well," said he, "I believe you."
-          dialogue_attributes:
-            speaker: he
-      """
-
-      assert {:ok, decoded} = WireFormat.normalize(input)
-      assert [entry] = decoded["extractions"]
-      assert entry["text"] == ~s(Well," said he, "I believe you.)
-    end
-
-    test "repairs multi-line plain scalars containing colons" do
-      input = """
-      extractions:
-        - dialogue: What, drawn, and talk of peace? I hate the word
-            As I hate hell, all Montagues, and thee:
-            Have at thee, coward.
-          dialogue_attributes:
-            speaker: TYBALT
-      """
-
-      assert {:ok, decoded} = WireFormat.normalize(input)
-      assert [entry] = decoded["extractions"]
-      assert entry["text"] =~ "I hate the word As I hate hell, all Montagues, and thee:"
-    end
-
-    test "still quotes plain values containing colon-space" do
-      input = """
-      extractions:
-        - dialogue: Friar Lawrence said: be patient
-          dialogue_attributes: {}
-      """
-
-      assert {:ok, decoded} = WireFormat.normalize(input)
-      assert [entry] = decoded["extractions"]
-      assert entry["text"] == "Friar Lawrence said: be patient"
-    end
-  end
-
   describe "normalize/1 with JSON responses" do
     test "parses a fenced JSON response in dynamic-key format" do
       raw = ~s(```json\n{"extractions": [{"person": "Ahab", "person_attributes": {}}]}\n```)
@@ -483,7 +339,7 @@ defmodule LangExtract.WireFormatTest do
       assert entry["text"] == "Ahab"
     end
 
-    test "parses JSON that the YAML parser rejects (tab inside a string)" do
+    test "parses strings containing control characters" do
       raw = ~s({"extractions": [{"note": "a\\tb", "note_attributes": {}}]})
 
       assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(raw)

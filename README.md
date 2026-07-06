@@ -231,7 +231,6 @@ spans = LangExtract.align("the quick brown fox", ["quick brown", "fox"])
 Or parse raw LLM output and align in one step:
 
 ```elixir
-# JSON is the wire format; YAML responses are also accepted
 raw = ~s({"extractions": [{"class": "animal", "text": "fox"}]})
 {:ok, spans} = LangExtract.extract("the quick brown fox", raw)
 ```
