@@ -82,6 +82,9 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "a timed-out chunk is a per-chunk error; survivors keep flowing" do
+      # Margins matter under load: the fast chunk needs generous headroom
+      # inside the timeout, and the slow chunk (150ms sleep) must sit well
+      # past it — 100ms leaves ~2x on both sides.
       counting_stub(self())
 
       events =
@@ -89,7 +92,7 @@ defmodule LangExtract.OrchestratorTest do
         |> LangExtract.stream(@two_chunk_source, template(),
           max_chunk_chars: 25,
           max_concurrency: 2,
-          task_timeout: 60
+          task_timeout: 100
         )
         |> Enum.to_list()
 
