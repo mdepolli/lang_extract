@@ -1,7 +1,7 @@
 defmodule LangExtract.ProviderTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Provider.{Claude, Gemini, OpenAI}
+  alias LangExtract.Provider.{Claude, Gemini, OpenAI, Response}
 
   describe "[:lang_extract, :request] telemetry span" do
     # Telemetry handlers are global: concurrent async tests calling infer
@@ -39,7 +39,7 @@ defmodule LangExtract.ProviderTest do
         })
       end)
 
-      assert {:ok, "hi"} =
+      assert {:ok, %Response{text: "hi"}} =
                Claude.infer("prompt",
                  api_key: "sk-test",
                  model: model,
@@ -65,7 +65,7 @@ defmodule LangExtract.ProviderTest do
         })
       end)
 
-      assert {:ok, "hi"} =
+      assert {:ok, %Response{text: "hi"}} =
                OpenAI.infer("prompt",
                  api_key: "sk-test",
                  model: model,
@@ -87,7 +87,7 @@ defmodule LangExtract.ProviderTest do
         })
       end)
 
-      assert {:ok, "hi"} =
+      assert {:ok, %Response{text: "hi"}} =
                Gemini.infer("prompt",
                  api_key: "gm-test",
                  model: model,
@@ -172,7 +172,7 @@ defmodule LangExtract.ProviderTest do
         Req.Test.json(conn, %{"content" => [%{"type" => "text", "text" => "hi"}]})
       end)
 
-      assert {:ok, "hi"} =
+      assert {:ok, %Response{text: "hi"}} =
                Claude.infer("prompt",
                  api_key: "sk-test",
                  model: model,

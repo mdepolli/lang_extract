@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking: `Provider.infer/2` returns `%Provider.Response{}`** (was a
+  bare `{:ok, text}`) — the struct carries `text` plus `usage`
+  (input/output token counts, `nil` when the API omits them). Providers
+  were already parsing usage and discarding it into telemetry; now it
+  reaches callers programmatically. Only affects direct callers of the
+  provider layer and third-party `Provider` implementations — `run/4`,
+  `stream/4`, and the Runner are unchanged by this entry.
 - **Breaking: `run/4` returns `{:ok, %LangExtract.Result{}}`** (was
   `{:ok, {spans, chunk_errors}}`) — in both `LangExtract.run/4` and
   `Runner.run/4`. The struct binds by key, so future fields (usage,

@@ -3,11 +3,15 @@ defmodule LangExtract.Provider do
   Behaviour for LLM inference providers.
 
   Each provider implements `infer/2` which takes a prompt string and returns
-  the raw LLM response. Parsing and normalization are the caller's responsibility.
+  a `LangExtract.Provider.Response` — the raw response text plus token usage
+  when the API reported it. Parsing and normalization are the caller's
+  responsibility.
 
   Shared helpers for API key resolution and HTTP error mapping are provided
   for use by provider implementations.
   """
+
+  alias LangExtract.Provider.Response
 
   @typedoc """
   Every error a provider can return from `c:infer/2`.
@@ -29,7 +33,7 @@ defmodule LangExtract.Provider do
   @callback build_http_client(opts :: keyword()) :: {:ok, Req.Request.t()} | {:error, term()}
 
   @callback infer(prompt :: String.t(), opts :: keyword()) ::
-              {:ok, String.t()} | {:error, error()}
+              {:ok, Response.t()} | {:error, error()}
 
   @doc """
   Resolves an API key from opts or an environment variable.
@@ -127,18 +131,28 @@ defmodule LangExtract.Provider do
   """
   @spec request(Req.Request.t(), keyword(), map(), (term() ->
                                                       {:ok, String.t()} | {:error, error()})) ::
-          {:ok, String.t()} | {:error, error()}
+          {:ok, Response.t()} | {:error, error()}
   def request(req, request_opts, metadata, parse_response) do
     :telemetry.span([:lang_extract, :request], metadata, fn ->
       raw = Req.post(req, request_opts)
+      usage = usage_measurements(raw)
 
       {
-        parse_response.(raw),
-        usage_measurements(raw),
+        wrap_response(parse_response.(raw), usage),
+        usage,
         Map.put(metadata, :status, response_status(raw))
       }
     end)
   end
+
+  # Usage rides the success value as well as the telemetry measurements:
+  # the same keys, nil instead of empty when the API reported nothing.
+  defp wrap_response({:ok, text}, usage) when map_size(usage) == 0 do
+    {:ok, %Response{text: text, usage: nil}}
+  end
+
+  defp wrap_response({:ok, text}, usage), do: {:ok, %Response{text: text, usage: usage}}
+  defp wrap_response({:error, _} = error, _usage), do: error
 
   defp response_status({:ok, %Req.Response{status: status}}), do: status
   defp response_status({:error, _exception}), do: :transport_error

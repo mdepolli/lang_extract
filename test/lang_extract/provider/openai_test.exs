@@ -5,6 +5,7 @@ defmodule LangExtract.Provider.OpenAITest do
   use ExUnit.Case, async: false
 
   alias LangExtract.Provider.OpenAI
+  alias LangExtract.Provider.Response
 
   describe "build_request/2" do
     setup do
@@ -206,7 +207,7 @@ defmodule LangExtract.Provider.OpenAITest do
         })
       end)
 
-      assert {:ok, "hello"} =
+      assert {:ok, %Response{text: "hello"}} =
                OpenAI.infer("Say hello.",
                  api_key: "sk-test",
                  req_options: [plug: {Req.Test, __MODULE__}]

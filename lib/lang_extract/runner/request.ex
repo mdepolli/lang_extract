@@ -24,6 +24,7 @@ defmodule LangExtract.Runner.Request do
   """
 
   alias LangExtract.{Client, Provider}
+  alias LangExtract.Provider.Response
   alias LangExtract.Runner.Limiter
 
   @max_backoff_ms 10_000
@@ -31,7 +32,7 @@ defmodule LangExtract.Runner.Request do
   @default_rate_limit_retries 10
 
   @spec infer(GenServer.server(), Client.t(), String.t(), keyword()) ::
-          {:ok, String.t()} | {:error, Provider.error()}
+          {:ok, Response.t()} | {:error, Provider.error()}
   def infer(limiter, %Client{} = client, prompt, opts) do
     attempt(limiter, client, prompt, %{
       budget: Keyword.fetch!(opts, :chunk_retries),
@@ -51,7 +52,7 @@ defmodule LangExtract.Runner.Request do
     handle(result, limiter, client, prompt, s)
   end
 
-  defp handle({:ok, text}, _limiter, _client, _prompt, _s), do: {:ok, text}
+  defp handle({:ok, %Response{}} = ok, _limiter, _client, _prompt, _s), do: ok
 
   defp handle(
          {:error, {:rate_limited, _}} = error,

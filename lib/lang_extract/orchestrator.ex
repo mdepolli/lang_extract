@@ -17,8 +17,19 @@ defmodule LangExtract.Orchestrator do
   # Matches upstream langextract's max_workers default.
   @default_max_concurrency 10
 
-  alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt, Result, Template}
+  alias LangExtract.{
+    Alignment.Span,
+    Chunker,
+    Client,
+    Pipeline,
+    Prompt,
+    Provider,
+    Result,
+    Template
+  }
+
   alias Pipeline.{ChunkError, ChunkResult}
+  alias Provider.Response
 
   # run/4 is literally a consumer of stream/4 — one code path, no drift.
   # Halting on a task-exit error kills outstanding tasks through the
@@ -168,7 +179,7 @@ defmodule LangExtract.Orchestrator do
           Chunker.Chunk.t(),
           Template.t(),
           keyword(),
-          (String.t() -> {:ok, String.t()} | {:error, term()})
+          (String.t() -> {:ok, Response.t()} | {:error, term()})
         ) :: {:ok, [Span.t()]} | {:error, ChunkError.t()}
   def process_chunk(chunk, template, opts, infer_fun) do
     metadata = %{byte_start: chunk.byte_start, byte_end: chunk.byte_end}
@@ -183,7 +194,7 @@ defmodule LangExtract.Orchestrator do
   defp extract_chunk(chunk, template, opts, infer_fun) do
     prompt = Prompt.Builder.build(template, chunk.text)
 
-    with {:ok, raw_output} <- infer_fun.(prompt),
+    with {:ok, %Response{text: raw_output}} <- infer_fun.(prompt),
          {:ok, spans} <- Pipeline.extract(chunk.text, raw_output, opts) do
       {:ok, adjust_offsets(spans, chunk.byte_start)}
     else

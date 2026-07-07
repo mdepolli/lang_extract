@@ -33,7 +33,7 @@ defmodule LangExtract.Provider.OpenAI do
   end
 
   @impl true
-  @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, Provider.error()}
+  @spec infer(String.t(), keyword()) :: {:ok, Provider.Response.t()} | {:error, Provider.error()}
   def infer(prompt, opts) do
     with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
       %{model: model} = Provider.common_opts(opts, @defaults)

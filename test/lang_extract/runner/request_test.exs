@@ -1,6 +1,7 @@
 defmodule LangExtract.Runner.RequestTest do
   use ExUnit.Case, async: true
 
+  alias LangExtract.Provider.Response
   alias LangExtract.Runner.{Limiter, Request}
   alias LangExtract.Test.FakeAnthropic
   alias LangExtract.Test.Telemetry
@@ -22,7 +23,7 @@ defmodule LangExtract.Runner.RequestTest do
   test "success passes straight through", %{limiter: limiter} do
     probe = FakeAnthropic.install(__MODULE__, [{:text, "hello"}])
 
-    assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
+    assert {:ok, %Response{text: "hello"}} = Request.infer(limiter, client(), "prompt", @opts)
     assert FakeAnthropic.calls(probe) == 1
     refute_receive {[:lang_extract, :chunk, :retry], _, %{limiter: ^limiter}}
   end
@@ -32,7 +33,7 @@ defmodule LangExtract.Runner.RequestTest do
     probe =
       FakeAnthropic.install(__MODULE__, [{:status, 429, [{"retry-after", "0"}]}, {:text, "hello"}])
 
-    assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
+    assert {:ok, %Response{text: "hello"}} = Request.infer(limiter, client(), "prompt", @opts)
     assert FakeAnthropic.calls(probe) == 2
 
     assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
@@ -43,7 +44,7 @@ defmodule LangExtract.Runner.RequestTest do
        %{limiter: limiter} do
     probe = FakeAnthropic.install(__MODULE__, [{:status, 429, []}, {:text, "hello"}])
 
-    assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
+    assert {:ok, %Response{text: "hello"}} = Request.infer(limiter, client(), "prompt", @opts)
     assert FakeAnthropic.calls(probe) == 2
   end
 
@@ -57,7 +58,7 @@ defmodule LangExtract.Runner.RequestTest do
         {:text, "hello"}
       ])
 
-    assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
+    assert {:ok, %Response{text: "hello"}} = Request.infer(limiter, client(), "prompt", @opts)
     assert FakeAnthropic.calls(probe) == 2
 
     assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
@@ -86,7 +87,7 @@ defmodule LangExtract.Runner.RequestTest do
     probe =
       FakeAnthropic.install(__MODULE__, [{:status, 500, []}, {:status, 503, []}, {:text, "hello"}])
 
-    assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
+    assert {:ok, %Response{text: "hello"}} = Request.infer(limiter, client(), "prompt", @opts)
     assert FakeAnthropic.calls(probe) == 3
 
     assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
@@ -110,7 +111,7 @@ defmodule LangExtract.Runner.RequestTest do
        %{limiter: limiter} do
     probe = FakeAnthropic.install(__MODULE__, [:transport_error, {:text, "hello"}])
 
-    assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
+    assert {:ok, %Response{text: "hello"}} = Request.infer(limiter, client(), "prompt", @opts)
     assert FakeAnthropic.calls(probe) == 2
 
     assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
@@ -131,6 +132,7 @@ defmodule LangExtract.Runner.RequestTest do
     tight_limiter = start_supervised!({Limiter, [max_in_flight: 1]}, id: :tight)
     FakeAnthropic.install(__MODULE__, [{:status, 500, []}, {:status, 500, []}, {:text, "hello"}])
 
-    assert {:ok, "hello"} = Request.infer(tight_limiter, client(), "prompt", @opts)
+    assert {:ok, %Response{text: "hello"}} =
+             Request.infer(tight_limiter, client(), "prompt", @opts)
   end
 end

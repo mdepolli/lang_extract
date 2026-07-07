@@ -5,6 +5,7 @@ defmodule LangExtract.Provider.GeminiTest do
   use ExUnit.Case, async: false
 
   alias LangExtract.Provider.Gemini
+  alias LangExtract.Provider.Response
 
   describe "build_request/2" do
     setup do
@@ -221,7 +222,7 @@ defmodule LangExtract.Provider.GeminiTest do
         })
       end)
 
-      assert {:ok, "hello"} =
+      assert {:ok, %Response{text: "hello"}} =
                Gemini.infer("Say hello.",
                  api_key: "gm-test",
                  req_options: [plug: {Req.Test, __MODULE__}]

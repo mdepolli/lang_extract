@@ -5,6 +5,7 @@ defmodule LangExtract.Provider.ClaudeTest do
   use ExUnit.Case, async: false
 
   alias LangExtract.Provider.Claude
+  alias LangExtract.Provider.Response
 
   describe "build_request/2" do
     setup do
@@ -217,7 +218,7 @@ defmodule LangExtract.Provider.ClaudeTest do
         })
       end)
 
-      assert {:ok, "extracted entities"} =
+      assert {:ok, %Response{text: "extracted entities"}} =
                Claude.infer("Extract entities.",
                  api_key: "sk-test",
                  req_options: [plug: {Req.Test, __MODULE__}]
