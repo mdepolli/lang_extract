@@ -8,10 +8,10 @@ defmodule LangExtractTest do
 
   doctest LangExtract
 
-  describe "template/2" do
+  describe "template!/2" do
     test "accepts string-keyed maps (JSON-loaded task definitions)" do
       template =
-        LangExtract.template("Extract entities.",
+        LangExtract.template!("Extract entities.",
           examples: [
             %{
               "text" => "Ahab sailed from Nantucket.",
@@ -35,12 +35,12 @@ defmodule LangExtractTest do
       }
 
       assert %Template{examples: [^example]} =
-               LangExtract.template("Extract.", examples: [example])
+               LangExtract.template!("Extract.", examples: [example])
     end
 
     test "misaligned examples raise ValidationError at construction" do
       assert_raise ValidationError, fn ->
-        LangExtract.template("Extract.",
+        LangExtract.template!("Extract.",
           examples: [
             %{text: "the quick brown fox", extractions: [%{class: "x", text: "purple elephant"}]}
           ]
@@ -50,7 +50,7 @@ defmodule LangExtractTest do
 
     test "validate: false skips alignment checking" do
       template =
-        LangExtract.template("Extract.",
+        LangExtract.template!("Extract.",
           examples: [
             %{text: "the quick brown fox", extractions: [%{class: "x", text: "purple elephant"}]}
           ],
@@ -62,18 +62,43 @@ defmodule LangExtractTest do
 
     test "missing required keys raise ArgumentError naming the owner" do
       assert_raise ArgumentError, ~r/example is missing required key :text/, fn ->
-        LangExtract.template("Extract.", examples: [%{extractions: []}])
+        LangExtract.template!("Extract.", examples: [%{extractions: []}])
       end
 
       assert_raise ArgumentError, ~r/extraction is missing required key :class/, fn ->
-        LangExtract.template("Extract.",
+        LangExtract.template!("Extract.",
           examples: [%{text: "hello", extractions: [%{text: "hello"}]}]
         )
       end
     end
 
     test "a description-only template needs no examples" do
-      assert %Template{description: "Extract.", examples: []} = LangExtract.template("Extract.")
+      assert %Template{description: "Extract.", examples: []} = LangExtract.template!("Extract.")
+    end
+  end
+
+  describe "template/2" do
+    test "returns {:ok, template} on valid input" do
+      assert {:ok, %Template{description: "Extract.", examples: [%Example{}]}} =
+               LangExtract.template("Extract.",
+                 examples: [%{text: "hello world", extractions: [%{class: "w", text: "hello"}]}]
+               )
+    end
+
+    test "returns the ValidationError misaligned examples would raise" do
+      assert {:error, %ValidationError{issues: [_ | _]}} =
+               LangExtract.template("Extract.",
+                 examples: [
+                   %{text: "the quick brown fox", extractions: [%{class: "x", text: "zebra"}]}
+                 ]
+               )
+    end
+
+    test "returns the ArgumentError malformed maps would raise" do
+      assert {:error, %ArgumentError{message: message}} =
+               LangExtract.template("Extract.", examples: [%{extractions: []}])
+
+      assert message =~ "example is missing required key :text"
     end
   end
 end

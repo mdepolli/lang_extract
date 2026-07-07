@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking: `template/2` is renamed `template!/2`; `template/2` now
+  returns tagged tuples** — the raising constructor gets the bang the
+  stdlib convention demands (`URI.new/new!`), and the un-suffixed name
+  becomes the non-raising twin for runtime task definitions:
+  `{:ok, Template.t()} | {:error, ArgumentError.t() | ValidationError.t()}`.
+  Migration: append `!` to existing calls.
 - **Breaking: `Provider.infer/2` returns `%Provider.Response{}`** (was a
   bare `{:ok, text}`) — the struct carries `text` plus `usage`
   (input/output token counts, `nil` when the API omits them). Providers

@@ -37,7 +37,7 @@ defmodule Mix.Tasks.Benchmark.Run do
     out_dir = opts[:out] || @default_out
 
     task_def = load_task(task_name)
-    template = LangExtract.template(task_def["description"], examples: task_def["examples"])
+    template = LangExtract.template!(task_def["description"], examples: task_def["examples"])
     corpus_files = corpus_files!(corpus_dir, opts[:document])
 
     run_dir = create_run_dir!(out_dir, task_name)

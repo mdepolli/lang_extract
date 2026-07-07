@@ -16,18 +16,19 @@ defmodule LangExtract do
       examples and parsed LLM output
   """
 
-  alias LangExtract.Alignment.{Aligner, Span}
-
   alias LangExtract.{
     Client,
     Extraction,
     Orchestrator,
     Pipeline,
-    Prompt,
     Provider,
     Result,
     Template
   }
+
+  alias LangExtract.Alignment.{Aligner, Span}
+  alias LangExtract.Prompt.Validator
+  alias LangExtract.Prompt.Validator.ValidationError
 
   @doc """
   Aligns extraction strings to byte spans in source text.
@@ -103,7 +104,7 @@ defmodule LangExtract do
   ## Examples
 
       client = LangExtract.new(:claude, api_key: "sk-...")
-      template = LangExtract.template("Extract entities.")
+      template = LangExtract.template!("Extract entities.")
 
       {:ok, %LangExtract.Result{spans: spans, errors: errors}} =
         LangExtract.run(client, "the quick brown fox", template)
@@ -157,12 +158,13 @@ defmodule LangExtract do
   production aligner; misaligned examples raise
   `LangExtract.Prompt.Validator.ValidationError` — a template that
   constructs is a template whose examples align. Pass `validate: false`
-  to skip.
+  to skip. For runtime data where raising is inappropriate, `template/2`
+  returns tagged tuples instead.
 
   ## Examples
 
       iex> template =
-      ...>   LangExtract.template("Extract conditions.",
+      ...>   LangExtract.template!("Extract conditions.",
       ...>     examples: [
       ...>       %{text: "Patient has diabetes.",
       ...>         extractions: [%{class: "condition", text: "diabetes"}]}
@@ -173,51 +175,105 @@ defmodule LangExtract do
       [%LangExtract.Extraction{class: "condition", text: "diabetes", attributes: %{}}]
 
   """
-  @spec template(String.t(), keyword()) :: Template.t()
-  def template(description, opts \\ []) when is_binary(description) do
-    examples =
-      opts
-      |> Keyword.get(:examples, [])
-      |> Enum.map(&normalize_example/1)
-
-    template = %Template{description: description, examples: examples}
-
-    if Keyword.get(opts, :validate, true) do
-      Prompt.Validator.validate!(template)
+  @spec template!(String.t(), keyword()) :: Template.t()
+  def template!(description, opts \\ []) when is_binary(description) do
+    case template(description, opts) do
+      {:ok, template} -> template
+      {:error, exception} -> raise exception
     end
-
-    template
   end
 
-  defp normalize_example(%Template.Example{} = example), do: example
+  @doc """
+  Builds a validated extraction template, returning a tagged tuple.
+
+  The non-raising twin of `template!/2` for templates built from runtime
+  data (user-uploaded or JSON-loaded task definitions). Returns
+  `{:error, exception}` where `template!/2` would raise — an
+  `ArgumentError` for malformed example maps, or a
+  `LangExtract.Prompt.Validator.ValidationError` (carrying the per-example
+  issues) for examples whose extractions don't align.
+
+  ## Examples
+
+      iex> {:error, %ArgumentError{}} =
+      ...>   LangExtract.template("Extract.", examples: [%{extractions: []}])
+
+  """
+  @spec template(String.t(), keyword()) ::
+          {:ok, Template.t()} | {:error, Exception.t()}
+  def template(description, opts \\ []) when is_binary(description) do
+    examples = Keyword.get(opts, :examples, [])
+    validate = Keyword.get(opts, :validate, true)
+
+    with {:ok, examples} <- normalize_all(examples, &normalize_example/1),
+         {:ok, template} <- build_template(description, examples, validate) do
+      {:ok, template}
+    else
+      {:error, _} = error -> error
+    end
+  end
+
+  defp normalize_all(items, fun) do
+    items
+    |> Enum.reduce_while([], fn item, acc ->
+      case fun.(item) do
+        {:ok, value} -> {:cont, [value | acc]}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:error, _} = error -> error
+      list -> {:ok, Enum.reverse(list)}
+    end
+  end
+
+  defp normalize_example(%Template.Example{} = example), do: {:ok, example}
 
   defp normalize_example(%{} = map) do
-    %Template.Example{
-      text: fetch_field!(map, :text, "example"),
-      extractions:
-        map
-        |> get_field(:extractions, [])
-        |> Enum.map(&normalize_extraction/1)
-    }
+    with {:ok, text} <- fetch_field(map, :text, "example"),
+         {:ok, extractions} <-
+           normalize_all(get_field(map, :extractions, []), &normalize_extraction/1) do
+      {:ok, %Template.Example{text: text, extractions: extractions}}
+    end
   end
 
-  defp normalize_extraction(%Extraction{} = extraction), do: extraction
+  defp normalize_extraction(%Extraction{} = extraction), do: {:ok, extraction}
 
   defp normalize_extraction(%{} = map) do
-    %Extraction{
-      class: fetch_field!(map, :class, "extraction"),
-      text: fetch_field!(map, :text, "extraction"),
-      attributes: get_field(map, :attributes, %{})
-    }
+    with {:ok, class} <- fetch_field(map, :class, "extraction"),
+         {:ok, text} <- fetch_field(map, :text, "extraction") do
+      {:ok, %Extraction{class: class, text: text, attributes: get_field(map, :attributes, %{})}}
+    end
   end
 
-  defp fetch_field!(map, key, owner) do
-    get_field(map, key, nil) ||
-      raise ArgumentError, "#{owner} is missing required key #{inspect(key)}: #{inspect(map)}"
+  defp fetch_field(map, key, owner) do
+    case get_field(map, key, nil) do
+      nil ->
+        {:error,
+         ArgumentError.exception(
+           "#{owner} is missing required key #{inspect(key)}: #{inspect(map)}"
+         )}
+
+      value ->
+        {:ok, value}
+    end
   end
 
   defp get_field(map, key, default) do
     Map.get(map, key) || Map.get(map, Atom.to_string(key)) || default
+  end
+
+  defp build_template(description, examples, validate) do
+    validate_template(%Template{description: description, examples: examples}, validate)
+  end
+
+  defp validate_template(template, false), do: {:ok, template}
+
+  defp validate_template(template, true) do
+    case Validator.validate(template) do
+      :ok -> {:ok, template}
+      {:error, issues} -> {:error, ValidationError.exception(issues: issues)}
+    end
   end
 
   @doc """

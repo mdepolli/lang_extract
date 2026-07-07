@@ -19,7 +19,7 @@ granularity, and the output format:
 client = LangExtract.new(:claude, api_key: System.get_env("ANTHROPIC_API_KEY"))
 
 template =
-  LangExtract.template("Extract literary works, people, and locations from the text.",
+  LangExtract.template!("Extract literary works, people, and locations from the text.",
     examples: [
       %{text: "Dickens wrote Oliver Twist while living in London.",
         extractions: [
@@ -113,7 +113,7 @@ examples align. (Pass `validate: false` to skip the check.)
 
 ```elixir
 template =
-  LangExtract.template("Extract medical conditions and medications from clinical text.",
+  LangExtract.template!("Extract medical conditions and medications from clinical text.",
     examples: [
       %{text: "Patient was diagnosed with diabetes and prescribed metformin.",
         extractions: [

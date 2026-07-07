@@ -22,7 +22,7 @@ defmodule LangExtract.Runner.ChaosTest do
     )
   end
 
-  defp template, do: LangExtract.template("Extract words.")
+  defp template, do: LangExtract.template!("Extract words.")
 
   test "one 429 pauses the whole runner until the retry-after deadline" do
     probe =
