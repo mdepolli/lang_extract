@@ -11,8 +11,8 @@ defmodule LangExtract.Runner.Limiter do
   same exhausted window.
 
   Emits `[:lang_extract, :limiter, :wait]` whenever an acquire had to wait,
-  with the wait `duration` and the `reason` that blocked it first
-  (`:rpm` | `:in_flight` | `:retry_after`).
+  with the wait `duration`, the `reason` that blocked it first
+  (`:rpm` | `:in_flight` | `:retry_after`), and the `limiter` pid.
 
   Tokens refill lazily from elapsed time — no timer ticks. The clock is
   injectable (`:clock`, a zero-arity fun returning milliseconds) so tests
@@ -176,10 +176,13 @@ defmodule LangExtract.Runner.Limiter do
           :ok ->
             {pid, _tag} = from
 
+            # The limiter pid identifies which runner waited — same contract
+            # as the chunk retry event, and what lets tests filter events
+            # from concurrent suites.
             :telemetry.execute(
               [:lang_extract, :limiter, :wait],
               %{duration: state.clock.() - enqueued_at},
-              %{reason: reason}
+              %{reason: reason, limiter: self()}
             )
 
             GenServer.reply(from, :ok)

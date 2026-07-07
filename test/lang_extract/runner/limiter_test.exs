@@ -72,7 +72,9 @@ defmodule LangExtract.Runner.LimiterTest do
       send(second, :release)
       assert_receive {:acquired, ^fourth}
 
-      assert_receive {[:lang_extract, :limiter, :wait], %{duration: d}, %{reason: :in_flight}}
+      assert_receive {[:lang_extract, :limiter, :wait], %{duration: d},
+                      %{reason: :in_flight, limiter: ^limiter}}
+
       assert d >= 0
     end
 
@@ -105,7 +107,8 @@ defmodule LangExtract.Runner.LimiterTest do
       assert_receive {:acquired, ^waiter}, 500
       assert System.monotonic_time(:millisecond) - started >= 70
 
-      assert_receive {[:lang_extract, :limiter, :wait], _, %{reason: :retry_after}}
+      assert_receive {[:lang_extract, :limiter, :wait], _,
+                      %{reason: :retry_after, limiter: ^limiter}}
     end
 
     test "pauses extend to the furthest deadline, never shorten" do
@@ -144,7 +147,9 @@ defmodule LangExtract.Runner.LimiterTest do
       send(limiter, :wake)
 
       assert_receive {:acquired, ^fourth}
-      assert_receive {[:lang_extract, :limiter, :wait], %{duration: 20_001}, %{reason: :rpm}}
+
+      assert_receive {[:lang_extract, :limiter, :wait], %{duration: 20_001},
+                      %{reason: :rpm, limiter: ^limiter}}
     end
 
     test "rpm: :infinity never blocks on tokens" do

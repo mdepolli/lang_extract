@@ -14,7 +14,7 @@ the library's own benchmark suite is built on these same events.
 | `[:lang_extract, :chunk, :stop]` | `duration`, `span_count` | `byte_start`, `byte_end`, `status` (`:ok` \| `:error`) |
 | `[:lang_extract, :request, :start]` | `system_time` | `provider`, `model` |
 | `[:lang_extract, :request, :stop]` | `duration`, `input_tokens`, `output_tokens` | `provider`, `model`, `status` |
-| `[:lang_extract, :limiter, :wait]` | `duration` | `reason` (`:rpm` \| `:in_flight` \| `:retry_after`) |
+| `[:lang_extract, :limiter, :wait]` | `duration` | `reason` (`:rpm` \| `:in_flight` \| `:retry_after`), `limiter` |
 | `[:lang_extract, :chunk, :retry]` | `attempt` | `reason`, `limiter` |
 
 The last two are emitted only by the supervised Runner — see the

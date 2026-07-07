@@ -27,8 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   come back as `%ChunkError{reason: :drained}`. In runner mode every
   failure is per-chunk; there is no abandon-the-document error path.
   New guide: "Running in Production". New telemetry:
-  `[:lang_extract, :limiter, :wait]` (duration + blocking reason) and
-  `[:lang_extract, :chunk, :retry]` (attempt, reason, limiter).
+  `[:lang_extract, :limiter, :wait]` (duration, blocking reason, limiter)
+  and `[:lang_extract, :chunk, :retry]` (attempt, reason, limiter).
 - **`LangExtract.stream/4`** — lazy stream of per-chunk results
   (`{:ok, %Pipeline.ChunkResult{}}` | `{:error, %Pipeline.ChunkError{}}`)
   in completion order, so first spans arrive while later chunks are still

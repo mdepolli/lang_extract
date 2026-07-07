@@ -109,7 +109,7 @@ The [Telemetry guide](telemetry.md) covers the pipeline events
 
 | Event | Measurements | Metadata |
 | ----- | ------------ | -------- |
-| `[:lang_extract, :limiter, :wait]` | `duration` | `reason` (`:rpm` \| `:in_flight` \| `:retry_after`) |
+| `[:lang_extract, :limiter, :wait]` | `duration` | `reason` (`:rpm` \| `:in_flight` \| `:retry_after`), `limiter` |
 | `[:lang_extract, :chunk, :retry]` | `attempt` | `reason` (`:rate_limited` \| `:server_error` \| `:transport_error`), `limiter` |
 
 Limiter waits tell you which budget dimension you're saturating; retry
