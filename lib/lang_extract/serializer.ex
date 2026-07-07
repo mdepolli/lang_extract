@@ -56,15 +56,13 @@ defmodule LangExtract.Serializer do
   Each element is a `{source, spans}` tuple.
   """
   @spec save_jsonl([{String.t(), [Span.t()]}], Path.t()) :: :ok | {:error, term()}
-  def save_jsonl([], path), do: File.write(path, "")
-
   def save_jsonl(results, path) do
-    content =
-      Enum.map_join(results, "\n", fn {source, spans} ->
-        source |> to_map(spans) |> Jason.encode!()
+    lines =
+      Enum.map(results, fn {source, spans} ->
+        [source |> to_map(spans) |> Jason.encode_to_iodata!(), "\n"]
       end)
 
-    File.write(path, [content, "\n"])
+    File.write(path, lines)
   end
 
   @doc """
