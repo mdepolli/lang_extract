@@ -43,7 +43,9 @@ defmodule LangExtract.Chunker do
   # so pack_sentences' byte accounting is unaffected. A single token longer
   # than the budget stays whole: token boundaries are never violated.
   defp split_oversized(sentence, max_chars) do
-    if String.length(sentence) <= max_chars do
+    # chars ≤ bytes, so a small byte count proves the sentence fits without
+    # walking its graphemes; only near-oversized sentences pay for a count.
+    if byte_size(sentence) <= max_chars or String.length(sentence) <= max_chars do
       [sentence]
     else
       sentence
