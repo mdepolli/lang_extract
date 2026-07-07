@@ -3,27 +3,12 @@ defmodule LangExtract.Runner.RequestTest do
 
   alias LangExtract.Runner.{Limiter, Request}
   alias LangExtract.Test.FakeAnthropic
+  alias LangExtract.Test.Telemetry
 
   @opts [chunk_retries: 3, retry_backoff_ms: 1]
 
-  # Module-qualified capture, not an anonymous fn, so telemetry stores it
-  # without the local-handler penalty; the parent pid travels as config.
-  def forward_event(event, measurements, metadata, parent) do
-    send(parent, {event, measurements, metadata})
-  end
-
   setup do
-    handler_id = "request-retry-telemetry-#{inspect(self())}"
-
-    :telemetry.attach(
-      handler_id,
-      [:lang_extract, :chunk, :retry],
-      &__MODULE__.forward_event/4,
-      self()
-    )
-
-    on_exit(fn -> :telemetry.detach(handler_id) end)
-
+    Telemetry.attach([[:lang_extract, :chunk, :retry]])
     %{limiter: start_supervised!({Limiter, [max_in_flight: 5]})}
   end
 

@@ -5,23 +5,9 @@ defmodule LangExtract.OrchestratorTest do
   alias LangExtract.Client
   alias LangExtract.Pipeline.ChunkError
   alias LangExtract.Test.FakeAnthropic
+  alias LangExtract.Test.Telemetry
 
   @req_options [plug: {Req.Test, __MODULE__}]
-
-  # Module-qualified capture, not an anonymous fn, so telemetry stores it
-  # without the local-handler penalty; the parent pid travels as config.
-  def forward_event(event, measurements, metadata, parent) do
-    send(parent, {event, measurements, metadata})
-  end
-
-  # Document telemetry fires in whichever process consumes the stream, so
-  # a handler can filter on the emitting process: only events this test
-  # process itself emits reach the mailbox, never a concurrent test's.
-  def forward_own_event(event, measurements, metadata, parent) do
-    if self() == parent do
-      send(parent, {event, measurements, metadata})
-    end
-  end
 
   describe "LangExtract.stream/4" do
     alias LangExtract.Pipeline.ChunkResult
@@ -113,17 +99,10 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "emits document telemetry at consumption, including on early halt" do
-      handler_id = "stream-doc-telemetry-#{inspect(self())}"
-      parent = self()
-
-      :telemetry.attach_many(
-        handler_id,
-        [[:lang_extract, :document, :start], [:lang_extract, :document, :stop]],
-        &__MODULE__.forward_own_event/4,
-        parent
-      )
-
-      on_exit(fn -> :telemetry.detach(handler_id) end)
+      Telemetry.attach_own([
+        [:lang_extract, :document, :start],
+        [:lang_extract, :document, :stop]
+      ])
 
       counting_stub(self())
 
@@ -400,21 +379,11 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "emits document and chunk telemetry spans" do
-      handler_id = "orchestrator-telemetry-#{inspect(self())}"
-      parent = self()
-
-      :telemetry.attach_many(
-        handler_id,
-        [
-          [:lang_extract, :document, :start],
-          [:lang_extract, :document, :stop],
-          [:lang_extract, :chunk, :stop]
-        ],
-        &__MODULE__.forward_event/4,
-        parent
-      )
-
-      on_exit(fn -> :telemetry.detach(handler_id) end)
+      Telemetry.attach([
+        [:lang_extract, :document, :start],
+        [:lang_extract, :document, :stop],
+        [:lang_extract, :chunk, :stop]
+      ])
 
       source = "First sentence here. Second sentence there."
 
@@ -450,24 +419,14 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "run/4 emits the full pre-streaming event census" do
-      handler_id = "invariance-telemetry-#{inspect(self())}"
-      parent = self()
-
-      :telemetry.attach_many(
-        handler_id,
-        [
-          [:lang_extract, :document, :start],
-          [:lang_extract, :document, :stop],
-          [:lang_extract, :chunk, :start],
-          [:lang_extract, :chunk, :stop],
-          [:lang_extract, :request, :start],
-          [:lang_extract, :request, :stop]
-        ],
-        &__MODULE__.forward_event/4,
-        parent
-      )
-
-      on_exit(fn -> :telemetry.detach(handler_id) end)
+      Telemetry.attach([
+        [:lang_extract, :document, :start],
+        [:lang_extract, :document, :stop],
+        [:lang_extract, :chunk, :start],
+        [:lang_extract, :chunk, :stop],
+        [:lang_extract, :request, :start],
+        [:lang_extract, :request, :stop]
+      ])
 
       stub_claude(claude_extraction_response([]))
 
@@ -522,17 +481,7 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "failed chunk emits :error status and counts into document error_count" do
-      handler_id = "orchestrator-telemetry-err-#{inspect(self())}"
-      parent = self()
-
-      :telemetry.attach_many(
-        handler_id,
-        [[:lang_extract, :document, :stop], [:lang_extract, :chunk, :stop]],
-        &__MODULE__.forward_event/4,
-        parent
-      )
-
-      on_exit(fn -> :telemetry.detach(handler_id) end)
+      Telemetry.attach([[:lang_extract, :document, :stop], [:lang_extract, :chunk, :stop]])
 
       Req.Test.stub(__MODULE__, fn conn ->
         Req.Test.json(conn, %{

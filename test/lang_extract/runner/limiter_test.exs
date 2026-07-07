@@ -2,24 +2,10 @@ defmodule LangExtract.Runner.LimiterTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Runner.Limiter
-
-  # Module-qualified capture, not an anonymous fn, so telemetry stores it
-  # without the local-handler penalty; the parent pid travels as config.
-  def forward_event(event, measurements, metadata, parent) do
-    send(parent, {event, measurements, metadata})
-  end
+  alias LangExtract.Test.Telemetry
 
   defp attach_wait_telemetry do
-    handler_id = "limiter-telemetry-#{inspect(self())}"
-
-    :telemetry.attach(
-      handler_id,
-      [:lang_extract, :limiter, :wait],
-      &__MODULE__.forward_event/4,
-      self()
-    )
-
-    on_exit(fn -> :telemetry.detach(handler_id) end)
+    Telemetry.attach([[:lang_extract, :limiter, :wait]])
   end
 
   defp blocked_acquire(limiter) do
