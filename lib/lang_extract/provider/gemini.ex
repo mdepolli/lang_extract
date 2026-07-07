@@ -34,7 +34,7 @@ defmodule LangExtract.Provider.Gemini do
   end
 
   @impl true
-  @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
+  @spec infer(String.t(), keyword()) :: {:ok, String.t()} | {:error, Provider.error()}
   def infer(prompt, opts) do
     with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
       %{model: model} = Provider.common_opts(opts, @defaults)
@@ -74,7 +74,7 @@ defmodule LangExtract.Provider.Gemini do
 
   @doc false
   @spec parse_response({:ok, Req.Response.t()} | {:error, Exception.t()}) ::
-          {:ok, String.t()} | {:error, term()}
+          {:ok, String.t()} | {:error, Provider.error()}
   def parse_response(response), do: Provider.map_response(response, &extract_text/1)
 
   defp extract_text(%{

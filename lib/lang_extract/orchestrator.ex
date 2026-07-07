@@ -25,7 +25,7 @@ defmodule LangExtract.Orchestrator do
   # stream's own cleanup and preserves the documented abandon-the-document
   # contract; document telemetry comes from the stream's events.
   @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
-          {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, term()}
+          {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, {:task_exit, term()}}
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     client
     |> stream(source, template, opts)
@@ -118,6 +118,7 @@ defmodule LangExtract.Orchestrator do
   # accumulated so far. Event shapes mirror :telemetry.span/3. Shared with
   # the Runner's stream, which wraps its own delivery mechanism.
   @doc false
+  @spec with_document_events(Enumerable.t(), non_neg_integer(), map()) :: Enumerable.t()
   def with_document_events(events, chunk_count, metadata) do
     metadata = Map.put(metadata, :telemetry_span_context, make_ref())
 
@@ -164,6 +165,12 @@ defmodule LangExtract.Orchestrator do
   # two modes differ — direct provider call here, budget-scheduled
   # Runner.Request there.
   @doc false
+  @spec process_chunk(
+          Chunker.Chunk.t(),
+          Template.t(),
+          keyword(),
+          (String.t() -> {:ok, String.t()} | {:error, term()})
+        ) :: {:ok, [Span.t()]} | {:error, ChunkError.t()}
   def process_chunk(chunk, template, opts, infer_fun) do
     metadata = %{byte_start: chunk.byte_start, byte_end: chunk.byte_end}
 

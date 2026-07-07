@@ -55,7 +55,7 @@ defmodule LangExtract.Serializer do
 
   Each element is a `{source, spans}` tuple.
   """
-  @spec save_jsonl([{String.t(), [Span.t()]}], Path.t()) :: :ok | {:error, term()}
+  @spec save_jsonl([{String.t(), [Span.t()]}], Path.t()) :: :ok | {:error, File.posix()}
   def save_jsonl(results, path) do
     lines =
       Enum.map(results, fn {source, spans} ->
@@ -68,7 +68,8 @@ defmodule LangExtract.Serializer do
   @doc """
   Loads extraction results from a JSONL file.
   """
-  @spec load_jsonl(Path.t()) :: {:ok, [{String.t(), [Span.t()]}]} | {:error, term()}
+  @spec load_jsonl(Path.t()) ::
+          {:ok, [{String.t(), [Span.t()]}]} | {:error, File.posix() | :invalid_data}
   def load_jsonl(path) do
     with {:ok, content} <- File.read(path) do
       results =

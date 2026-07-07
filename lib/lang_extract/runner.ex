@@ -48,7 +48,21 @@ defmodule LangExtract.Runner do
   alias LangExtract.Pipeline.{ChunkError, ChunkResult}
   alias LangExtract.Runner.{Delivery, Limiter, Request}
 
-  @spec start_link(keyword()) :: Supervisor.on_start()
+  @type option ::
+          {:client, Client.t()}
+          | {:name, GenServer.name()}
+          | {:max_in_flight, pos_integer()}
+          | {:rpm, pos_integer() | :infinity}
+          | {:chunk_retries, non_neg_integer()}
+          | {:rate_limit_retries, non_neg_integer()}
+          | {:retry_backoff_ms, pos_integer()}
+          | {:buffer, pos_integer()}
+          | {:drain_timeout, non_neg_integer()}
+
+  @doc """
+  Starts the runner supervisor. See the module docs for options.
+  """
+  @spec start_link([option()]) :: Supervisor.on_start()
   def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name)
     sup_opts = if name, do: [name: name], else: []

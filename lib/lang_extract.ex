@@ -93,7 +93,7 @@ defmodule LangExtract do
 
   """
   @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
-          {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, term()}
+          {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, {:task_exit, term()}}
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     Orchestrator.run(client, source, template, opts)
   end

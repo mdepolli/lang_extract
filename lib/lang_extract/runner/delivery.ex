@@ -39,13 +39,18 @@ defmodule LangExtract.Runner.Delivery do
   per-chunk errors, so drain adds no new consumer code paths.
   """
 
+  alias LangExtract.Alignment.Span
   alias LangExtract.Chunker.Chunk
   alias LangExtract.Pipeline.{ChunkError, ChunkResult}
 
   @type event :: {:ok, ChunkResult.t()} | {:error, ChunkError.t()}
 
-  @spec stream_events(Supervisor.supervisor(), [Chunk.t()], (Chunk.t() -> term()), keyword()) ::
-          Enumerable.t()
+  @spec stream_events(
+          Supervisor.supervisor(),
+          [Chunk.t()],
+          (Chunk.t() -> {:ok, [Span.t()]} | {:error, ChunkError.t()}),
+          keyword()
+        ) :: Enumerable.t()
   def stream_events(task_supervisor, chunks, process_fun, opts) do
     state = %{
       sup: task_supervisor,
@@ -98,6 +103,10 @@ defmodule LangExtract.Runner.Delivery do
 
   defp next(%{tasks: tasks, pending: pending, draining?: draining?} = state)
        when map_size(tasks) == 0 do
+    # next/1 only ever sees a state that just left admit/1 or is already
+    # draining, and admit/1 never stops with tasks empty, pending
+    # non-empty, and draining? false — so one of these two arms always
+    # matches. Anything else is an invariant breach; let cond raise.
     cond do
       pending == [] ->
         {:halt, state}
@@ -105,12 +114,6 @@ defmodule LangExtract.Runner.Delivery do
       draining? ->
         [chunk | rest] = pending
         {[drained_event(chunk)], %{state | pending: rest}}
-
-      # Admission was deferred (fresh state after all tasks resolved);
-      # buffer is a pos_integer, so admit/1 either starts a task, drains,
-      # or empties pending — the recursion terminates.
-      true ->
-        next(admit(state))
     end
   end
 

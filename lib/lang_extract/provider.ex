@@ -9,10 +9,27 @@ defmodule LangExtract.Provider do
   for use by provider implementations.
   """
 
+  @typedoc """
+  Every error a provider can return from `c:infer/2`.
+
+  The runner's retry policy dispatches on these shapes: `:rate_limited`
+  pauses globally, `:server_error` and `:request_error` consume retry
+  budget, everything else fails the chunk immediately.
+  """
+  @type error ::
+          :missing_api_key
+          | :empty_response
+          | :unauthorized
+          | :server_error
+          | {:bad_request, term()}
+          | {:rate_limited, non_neg_integer() | nil}
+          | {:api_error, pos_integer(), term()}
+          | {:request_error, Exception.t()}
+
   @callback build_http_client(opts :: keyword()) :: {:ok, Req.Request.t()} | {:error, term()}
 
   @callback infer(prompt :: String.t(), opts :: keyword()) ::
-              {:ok, String.t()} | {:error, term()}
+              {:ok, String.t()} | {:error, error()}
 
   @doc """
   Resolves an API key from opts or an environment variable.
@@ -37,7 +54,7 @@ defmodule LangExtract.Provider do
   """
   @spec common_opts(keyword(), keyword()) :: %{
           model: String.t(),
-          max_tokens: integer(),
+          max_tokens: pos_integer(),
           temperature: number() | nil,
           base_url: String.t()
         }
@@ -109,8 +126,8 @@ defmodule LangExtract.Provider do
   the HTTP status code, or `:transport_error` when no response arrived.
   """
   @spec request(Req.Request.t(), keyword(), map(), (term() ->
-                                                      {:ok, String.t()} | {:error, term()})) ::
-          {:ok, String.t()} | {:error, term()}
+                                                      {:ok, String.t()} | {:error, error()})) ::
+          {:ok, String.t()} | {:error, error()}
   def request(req, request_opts, metadata, parse_response) do
     :telemetry.span([:lang_extract, :request], metadata, fn ->
       raw = Req.post(req, request_opts)
@@ -154,7 +171,7 @@ defmodule LangExtract.Provider do
   @spec map_response(
           {:ok, Req.Response.t()} | {:error, Exception.t()},
           (term() -> {:ok, String.t()} | {:error, :empty_response})
-        ) :: {:ok, String.t()} | {:error, term()}
+        ) :: {:ok, String.t()} | {:error, error()}
   def map_response({:ok, %Req.Response{status: 200, body: body}}, extract_text) do
     extract_text.(body)
   end
