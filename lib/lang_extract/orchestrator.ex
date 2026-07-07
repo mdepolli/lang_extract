@@ -100,7 +100,7 @@ defmodule LangExtract.Orchestrator do
   end
 
   defp public_event({:ok, {chunk, {:ok, spans}}}) do
-    {:ok, %ChunkResult{byte_start: chunk.byte_start, byte_end: chunk.byte_end, spans: spans}}
+    {:ok, ChunkResult.from_chunk(chunk, spans)}
   end
 
   defp public_event({:ok, {_chunk, {:error, %ChunkError{} = error}}}) do
@@ -110,12 +110,7 @@ defmodule LangExtract.Orchestrator do
   # Task-level failures stay per-chunk in stream mode: the surviving chunks
   # keep flowing, and the dead one is reported with its byte range.
   defp public_event({:exit, {chunk, reason}}) do
-    {:error,
-     %ChunkError{
-       byte_start: chunk.byte_start,
-       byte_end: chunk.byte_end,
-       reason: {:task_exit, reason}
-     }}
+    {:error, ChunkError.from_chunk(chunk, {:task_exit, reason})}
   end
 
   # Document telemetry for lazy consumption: :start fires at first demand,
@@ -186,13 +181,7 @@ defmodule LangExtract.Orchestrator do
          {:ok, spans} <- Pipeline.extract(chunk.text, raw_output, opts) do
       {:ok, adjust_offsets(spans, chunk.byte_start)}
     else
-      {:error, reason} ->
-        {:error,
-         %ChunkError{
-           byte_start: chunk.byte_start,
-           byte_end: chunk.byte_end,
-           reason: reason
-         }}
+      {:error, reason} -> {:error, ChunkError.from_chunk(chunk, reason)}
     end
   end
 

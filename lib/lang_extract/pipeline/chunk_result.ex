@@ -9,6 +9,7 @@ defmodule LangExtract.Pipeline.ChunkResult do
   """
 
   alias LangExtract.Alignment.Span
+  alias LangExtract.Chunker.Chunk
 
   @type t :: %__MODULE__{
           byte_start: non_neg_integer(),
@@ -18,4 +19,10 @@ defmodule LangExtract.Pipeline.ChunkResult do
 
   @enforce_keys [:byte_start, :byte_end, :spans]
   defstruct [:byte_start, :byte_end, :spans]
+
+  @doc "Builds a result carrying `chunk`'s byte range."
+  @spec from_chunk(Chunk.t(), [Span.t()]) :: t()
+  def from_chunk(%Chunk{} = chunk, spans) do
+    %__MODULE__{byte_start: chunk.byte_start, byte_end: chunk.byte_end, spans: spans}
+  end
 end

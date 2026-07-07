@@ -132,22 +132,16 @@ defmodule LangExtract.Runner.Delivery do
   end
 
   defp to_event(chunk, {:ok, spans}) do
-    {:ok, %ChunkResult{byte_start: chunk.byte_start, byte_end: chunk.byte_end, spans: spans}}
+    {:ok, ChunkResult.from_chunk(chunk, spans)}
   end
 
   defp to_event(_chunk, {:error, %ChunkError{} = error}), do: {:error, error}
 
   defp crash_event(chunk, reason) do
-    {:error,
-     %ChunkError{
-       byte_start: chunk.byte_start,
-       byte_end: chunk.byte_end,
-       reason: {:task_exit, reason}
-     }}
+    {:error, ChunkError.from_chunk(chunk, {:task_exit, reason})}
   end
 
   defp drained_event(chunk) do
-    {:error,
-     %ChunkError{byte_start: chunk.byte_start, byte_end: chunk.byte_end, reason: :drained}}
+    {:error, ChunkError.from_chunk(chunk, :drained)}
   end
 end
