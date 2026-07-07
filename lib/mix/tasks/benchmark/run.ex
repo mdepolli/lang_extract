@@ -27,18 +27,11 @@ defmodule Mix.Tasks.Benchmark.Run do
   # rotation — is exercisable without network access.
   @doc false
   def do_run(args, extractor) do
-    {opts, _, _} =
-      OptionParser.parse(args,
-        strict: [task: :string, corpus: :string, out: :string, document: :string]
-      )
-
-    task_name = opts[:task] || Mix.raise("Missing --task argument")
-    corpus_dir = opts[:corpus] || @default_corpus
-    out_dir = opts[:out] || @default_out
+    %{task: task_name, corpus: corpus_dir, out: out_dir, document: document} = parse_args!(args)
 
     task_def = load_task(task_name)
     template = LangExtract.template!(task_def["description"], examples: task_def["examples"])
-    corpus_files = corpus_files!(corpus_dir, opts[:document])
+    corpus_files = corpus_files!(corpus_dir, document)
 
     run_dir = create_run_dir!(out_dir, task_name)
 
@@ -53,6 +46,20 @@ defmodule Mix.Tasks.Benchmark.Run do
     update_latest_symlink(out_dir, task_name, run_dir)
 
     Mix.shell().info("\nResults written to #{run_dir}/")
+  end
+
+  defp parse_args!(args) do
+    {opts, _, _} =
+      OptionParser.parse(args,
+        strict: [task: :string, corpus: :string, out: :string, document: :string]
+      )
+
+    %{
+      task: opts[:task] || Mix.raise("Missing --task argument"),
+      corpus: opts[:corpus] || @default_corpus,
+      out: opts[:out] || @default_out,
+      document: opts[:document]
+    }
   end
 
   defp live_extract(source, template) do
