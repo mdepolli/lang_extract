@@ -39,7 +39,6 @@ defmodule LangExtract.Runner.Delivery do
   per-chunk errors, so drain adds no new consumer code paths.
   """
 
-  alias LangExtract.Alignment.Span
   alias LangExtract.Chunker.Chunk
   alias LangExtract.Pipeline.{ChunkError, ChunkResult}
 
@@ -48,7 +47,7 @@ defmodule LangExtract.Runner.Delivery do
   @spec stream_events(
           Supervisor.supervisor(),
           [Chunk.t()],
-          (Chunk.t() -> {:ok, [Span.t()]} | {:error, ChunkError.t()}),
+          (Chunk.t() -> {:ok, ChunkResult.t()} | {:error, ChunkError.t()}),
           keyword()
         ) :: Enumerable.t()
   def stream_events(task_supervisor, chunks, process_fun, opts) do
@@ -134,10 +133,7 @@ defmodule LangExtract.Runner.Delivery do
     Enum.each(state.tasks, fn {_ref, {task, _chunk}} -> Task.shutdown(task, :brutal_kill) end)
   end
 
-  defp to_event(chunk, {:ok, spans}) do
-    {:ok, ChunkResult.from_chunk(chunk, spans)}
-  end
-
+  defp to_event(_chunk, {:ok, %ChunkResult{} = result}), do: {:ok, result}
   defp to_event(_chunk, {:error, %ChunkError{} = error}), do: {:error, error}
 
   defp crash_event(chunk, reason) do

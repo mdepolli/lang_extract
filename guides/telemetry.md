@@ -33,6 +33,10 @@ semantics) if the wrapped work raises.
 - **Token measurements appear only when the provider reported usage**
   (Anthropic/OpenAI `"usage"`, Gemini `"usageMetadata"`). Treat missing
   keys as unknown, not zero.
+- **Usage is also programmatic** — the same numbers ride the return
+  values: per chunk on `ChunkResult.usage`, totaled on `Result.usage`.
+  Telemetry is for observability pipelines; the struct fields answer
+  "what did this run cost" without a handler.
 - **Request `status` metadata** is the HTTP status code, or
   `:transport_error` when no response arrived.
 - **Chunk `status` is only `:ok` or `:error`** — failure detail stays in

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Programmatic usage: `Result.usage` and `ChunkResult.usage`** — token
+  totals from the return value, no telemetry handler required:
+  `result.usage.output_tokens` after a `run/4`, per-chunk on every
+  `ChunkResult` stream event. `nil` when the provider reported no usage
+  block; with partial chunk failures the totals cover the chunks that
+  reported. Telemetry emission is unchanged — the same numbers now flow
+  both ways.
+
 ### Changed
 
 - **Breaking: `Provider.infer/2` returns `%Provider.Response{}`** (was a

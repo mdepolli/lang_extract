@@ -60,6 +60,25 @@ defmodule LangExtract.OrchestratorTest do
       assert second.byte_start > 0
     end
 
+    test "chunk results carry usage; run/4 totals it" do
+      counting_stub(self())
+      opts = [max_chunk_chars: 25, max_concurrency: 2]
+
+      usages =
+        claude_client()
+        |> LangExtract.stream(@two_chunk_source, template(), opts)
+        |> Enum.map(fn {:ok, %ChunkResult{usage: usage}} -> usage end)
+
+      # FakeAnthropic reports 10/10 per request.
+      assert usages == [
+               %{input_tokens: 10, output_tokens: 10},
+               %{input_tokens: 10, output_tokens: 10}
+             ]
+
+      assert {:ok, %Result{usage: %{input_tokens: 20, output_tokens: 20}}} =
+               LangExtract.run(claude_client(), @two_chunk_source, template(), opts)
+    end
+
     test "run/4 output equals the collected-and-sorted stream (order restoration)" do
       counting_stub(self())
       opts = [max_chunk_chars: 25, max_concurrency: 2]
@@ -190,7 +209,7 @@ defmodule LangExtract.OrchestratorTest do
         ])
       )
 
-      assert {:ok, %Result{spans: [span], errors: []}} =
+      assert {:ok, %Result{spans: [span], errors: [], usage: nil}} =
                LangExtract.run(claude_client(), "the quick brown fox", template("Extract words."))
 
       assert span.class == "word"

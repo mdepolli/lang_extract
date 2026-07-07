@@ -66,7 +66,26 @@ defmodule LangExtract.Orchestrator do
       |> Enum.sort_by(& &1.byte_start)
       |> Enum.flat_map(& &1.spans)
 
-    %Result{spans: spans, errors: Enum.sort_by(errors, & &1.byte_start)}
+    %Result{
+      spans: spans,
+      errors: Enum.sort_by(errors, & &1.byte_start),
+      usage: total_usage(results)
+    }
+  end
+
+  # nil only when no chunk reported usage; with partial reporting the
+  # totals cover the chunks that did (documented on Result).
+  defp total_usage(results) do
+    case results |> Enum.map(& &1.usage) |> Enum.reject(&is_nil/1) do
+      [] ->
+        nil
+
+      usages ->
+        %{
+          input_tokens: usages |> Enum.map(& &1.input_tokens) |> Enum.sum(),
+          output_tokens: usages |> Enum.map(& &1.output_tokens) |> Enum.sum()
+        }
+    end
   end
 
   @spec stream(Client.t(), String.t(), Template.t(), keyword()) :: Enumerable.t()
@@ -109,8 +128,8 @@ defmodule LangExtract.Orchestrator do
     )
   end
 
-  defp public_event({:ok, {chunk, {:ok, spans}}}) do
-    {:ok, ChunkResult.from_chunk(chunk, spans)}
+  defp public_event({:ok, {_chunk, {:ok, %ChunkResult{} = result}}}) do
+    {:ok, result}
   end
 
   defp public_event({:ok, {_chunk, {:error, %ChunkError{} = error}}}) do
@@ -180,7 +199,7 @@ defmodule LangExtract.Orchestrator do
           Template.t(),
           keyword(),
           (String.t() -> {:ok, Response.t()} | {:error, term()})
-        ) :: {:ok, [Span.t()]} | {:error, ChunkError.t()}
+        ) :: {:ok, ChunkResult.t()} | {:error, ChunkError.t()}
   def process_chunk(chunk, template, opts, infer_fun) do
     metadata = %{byte_start: chunk.byte_start, byte_end: chunk.byte_end}
 
@@ -194,15 +213,15 @@ defmodule LangExtract.Orchestrator do
   defp extract_chunk(chunk, template, opts, infer_fun) do
     prompt = Prompt.Builder.build(template, chunk.text)
 
-    with {:ok, %Response{text: raw_output}} <- infer_fun.(prompt),
+    with {:ok, %Response{text: raw_output, usage: usage}} <- infer_fun.(prompt),
          {:ok, spans} <- Pipeline.extract(chunk.text, raw_output, opts) do
-      {:ok, adjust_offsets(spans, chunk.byte_start)}
+      {:ok, ChunkResult.from_chunk(chunk, adjust_offsets(spans, chunk.byte_start), usage)}
     else
       {:error, reason} -> {:error, ChunkError.from_chunk(chunk, reason)}
     end
   end
 
-  defp chunk_measurements({:ok, spans}), do: %{span_count: length(spans)}
+  defp chunk_measurements({:ok, %ChunkResult{spans: spans}}), do: %{span_count: length(spans)}
   defp chunk_measurements({:error, _chunk_error}), do: %{span_count: 0}
 
   # The ChunkError reason can embed the raw LLM payload; keep it out of

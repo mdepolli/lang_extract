@@ -107,12 +107,15 @@ defmodule LangExtract.RunnerTest do
       word_stub()
       runner = start_supervised!({Runner, [client: client()]})
 
-      assert {:ok, %Result{spans: spans, errors: []}} =
+      assert {:ok, %Result{spans: spans, errors: [], usage: usage}} =
                Runner.run(runner, @source, template(), max_chunk_chars: 25)
 
       assert Enum.map(spans, & &1.text) == ["First", "Second"]
       assert [%{byte_start: 0}, %{byte_start: second_start}] = spans
       assert second_start > 0
+
+      # FakeAnthropic reports 10/10 per request; two chunks total 20/20.
+      assert usage == %{input_tokens: 20, output_tokens: 20}
     end
 
     test "max_in_flight serializes requests even with a wider buffer" do

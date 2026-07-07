@@ -18,13 +18,13 @@ defmodule LangExtract.Runner.DeliveryTest do
   test "admission never exceeds the buffer", %{sup: sup} do
     counter = :atomics.new(2, [])
 
-    process = fn _chunk ->
+    process = fn chunk ->
       current = :atomics.add_get(counter, 1, 1)
       previous_max = :atomics.get(counter, 2)
       if current > previous_max, do: :atomics.put(counter, 2, current)
       Process.sleep(15)
       :atomics.sub(counter, 1, 1)
-      {:ok, []}
+      {:ok, ChunkResult.from_chunk(chunk, [])}
     end
 
     events =
@@ -41,7 +41,7 @@ defmodule LangExtract.Runner.DeliveryTest do
   end
 
   test "every chunk arrives exactly once with its byte range", %{sup: sup} do
-    process = fn chunk -> {:ok, [chunk.text]} end
+    process = fn chunk -> {:ok, ChunkResult.from_chunk(chunk, [chunk.text])} end
 
     starts =
       sup
@@ -57,7 +57,7 @@ defmodule LangExtract.Runner.DeliveryTest do
   test "a crashing task becomes a per-chunk task_exit error", %{sup: sup} do
     process = fn
       %Chunk{byte_start: 100} -> raise "boom"
-      _chunk -> {:ok, []}
+      chunk -> {:ok, ChunkResult.from_chunk(chunk, [])}
     end
 
     events = sup |> Delivery.stream_events(chunks(3), process, buffer: 3) |> Enum.to_list()
@@ -78,7 +78,7 @@ defmodule LangExtract.Runner.DeliveryTest do
 
   test "halting early kills all outstanding tasks", %{sup: sup} do
     process = fn
-      %Chunk{byte_start: 0} -> {:ok, []}
+      %Chunk{byte_start: 0} = chunk -> {:ok, ChunkResult.from_chunk(chunk, [])}
       _chunk -> Process.sleep(60_000)
     end
 
