@@ -52,6 +52,8 @@ defmodule LangExtract.Runner.DeliveryTest do
     assert starts == Enum.map(0..9, &(&1 * 100))
   end
 
+  # The deliberate raise produces a task crash report.
+  @tag capture_log: true
   test "a crashing task becomes a per-chunk task_exit error", %{sup: sup} do
     process = fn
       %Chunk{byte_start: 100} -> raise "boom"

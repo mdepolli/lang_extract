@@ -1,6 +1,9 @@
 defmodule LangExtract.Pipeline.ParserTest do
   use ExUnit.Case, async: true
 
+  # Invalid-entry tests deliberately trigger Parser's skip warnings.
+  @moduletag capture_log: true
+
   alias LangExtract.Extraction
   alias LangExtract.Pipeline.Parser
 
