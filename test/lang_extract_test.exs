@@ -28,6 +28,23 @@ defmodule LangExtractTest do
       assert nantucket.attributes == %{"kind" => "port"}
     end
 
+    test "normalizes atom attribute keys to strings, matching the wire format" do
+      template =
+        LangExtract.template!("Extract entities.",
+          examples: [
+            %{
+              text: "Ahab sailed from Nantucket.",
+              extractions: [
+                %{class: "place", text: "Nantucket", attributes: %{"sea" => true, kind: "port"}}
+              ]
+            }
+          ]
+        )
+
+      assert %Template{examples: [%Example{extractions: [nantucket]}]} = template
+      assert nantucket.attributes == %{"kind" => "port", "sea" => true}
+    end
+
     test "accepts ready-made structs unchanged" do
       example = %Example{
         text: "hello world",

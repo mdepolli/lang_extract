@@ -153,7 +153,9 @@ defmodule LangExtract do
   Builds a validated extraction template.
 
   Examples are given as plain maps (string or atom keys, so JSON-loaded
-  task definitions work verbatim) or as ready-made structs. Each example's
+  task definitions work verbatim) or as ready-made structs. Map-authored
+  attributes are normalized to string keys, matching the wire format's
+  decoded shape; ready-made structs pass through unchanged. Each example's
   extraction texts are validated against the example text using the
   production aligner; misaligned examples raise
   `LangExtract.Prompt.Validator.ValidationError` — a template that
@@ -240,10 +242,23 @@ defmodule LangExtract do
   defp normalize_extraction(%Extraction{} = extraction), do: {:ok, extraction}
 
   defp normalize_extraction(%{} = map) do
+    attributes = map |> get_field(:attributes, %{}) |> normalize_attribute_keys()
+
     with {:ok, class} <- fetch_field(map, :class, "extraction"),
          {:ok, text} <- fetch_field(map, :text, "extraction") do
-      {:ok, %Extraction{class: class, text: text, attributes: get_field(map, :attributes, %{})}}
+      {:ok, %Extraction{class: class, text: text, attributes: attributes}}
     end
+  end
+
+  # The wire format decodes attributes with string keys (JSON); template
+  # examples must produce the same shape regardless of how they were
+  # authored, so prompt-rendered examples and parsed output never differ
+  # by key type. Values pass through verbatim.
+  defp normalize_attribute_keys(attributes) do
+    Map.new(attributes, fn
+      {key, value} when is_atom(key) -> {Atom.to_string(key), value}
+      {key, value} -> {key, value}
+    end)
   end
 
   defp fetch_field(map, key, owner) do

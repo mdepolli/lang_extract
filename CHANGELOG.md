@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Template attribute keys normalize to strings at construction** —
+  map-authored example attributes (`%{kind: "port"}`) now produce the
+  same string-keyed shape the wire format decodes (`%{"kind" => "port"}`),
+  so prompt-rendered examples and parsed output never differ by key type.
+  Ready-made `Extraction` structs pass through unchanged.
 - **Breaking: `template/2` is renamed `template!/2`; `template/2` now
   returns tagged tuples** — the raising constructor gets the bang the
   stdlib convention demands (`URI.new/new!`), and the un-suffixed name
