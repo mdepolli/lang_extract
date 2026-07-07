@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reported. Telemetry emission is unchanged — the same numbers now flow
   both ways.
 
+- **`Span.located?/1`** — the documented guard for offset arithmetic:
+  `true` for `:exact`/`:fuzzy` spans (offsets present), `false` for
+  `:not_found` (offsets `nil`). `Enum.filter(spans, &Span.located?/1)`
+  replaces every consumer hand-rolling the status check.
+
 ### Changed
 
 - **Template attribute keys normalize to strings at construction** —
