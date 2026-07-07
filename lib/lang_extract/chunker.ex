@@ -109,6 +109,9 @@ defmodule LangExtract.Chunker do
     end
   end
 
+  # Public only as a test seam: the sentence-boundary rules aren't
+  # observable through chunk/2 (packing merges sentences back together).
+  @doc false
   @spec find_sentences(String.t()) :: [String.t()]
   def find_sentences(""), do: []
 
