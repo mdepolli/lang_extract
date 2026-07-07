@@ -385,7 +385,13 @@ defmodule LangExtract.OrchestratorTest do
         [:lang_extract, :chunk, :stop]
       ])
 
-      source = "First sentence here. Second sentence there."
+      # Cross-suite discipline (see the census test below): a unique byte
+      # size pins document events; chunk offsets past anything other
+      # suites use pin chunk events. runner_test/chaos_test share the
+      # short two-sentence fixture, so it can't be used under a global
+      # telemetry handler.
+      source = String.duplicate("Telemetry span sentence sits here. ", 30)
+      source_bytes = byte_size(source)
 
       Req.Test.stub(__MODULE__, fn conn ->
         Req.Test.json(conn, %{
@@ -396,9 +402,7 @@ defmodule LangExtract.OrchestratorTest do
       end)
 
       assert {:ok, {[], []}} =
-               LangExtract.run(claude_client(), source, template(), max_chunk_chars: 25)
-
-      source_bytes = byte_size(source)
+               LangExtract.run(claude_client(), source, template(), max_chunk_chars: 600)
 
       assert_receive {[:lang_extract, :document, :start], _, %{source_bytes: ^source_bytes}}
 
@@ -410,12 +414,16 @@ defmodule LangExtract.OrchestratorTest do
       assert measurements.error_count == 0
       assert is_integer(measurements.duration)
 
-      assert_receive {[:lang_extract, :chunk, :stop], chunk_meas, chunk_meta}
+      assert_receive {[:lang_extract, :chunk, :stop], chunk_meas,
+                      %{byte_end: chunk_end} = chunk_meta}
+                     when chunk_end > 500
+
       assert chunk_meas.span_count == 0
       assert chunk_meta.status == :ok
       assert is_integer(chunk_meta.byte_start) and is_integer(chunk_meta.byte_end)
 
-      assert_receive {[:lang_extract, :chunk, :stop], _, _}
+      assert_receive {[:lang_extract, :chunk, :stop], _, %{byte_end: other_end}}
+                     when other_end > 500
     end
 
     test "run/4 emits the full pre-streaming event census" do
@@ -489,11 +497,19 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:ok, {[], [%ChunkError{}]}} =
-               LangExtract.run(claude_client(), "some text", template())
+      # Unique byte size: chaos_test emits errored documents concurrently,
+      # so error_count alone can't identify this run's events.
+      source = "Unparseable census payload."
+      source_bytes = byte_size(source)
 
-      assert_receive {[:lang_extract, :chunk, :stop], %{span_count: 0}, %{status: :error}}
-      assert_receive {[:lang_extract, :document, :stop], %{error_count: 1}, _}
+      assert {:ok, {[], [%ChunkError{}]}} =
+               LangExtract.run(claude_client(), source, template())
+
+      assert_receive {[:lang_extract, :chunk, :stop], %{span_count: 0},
+                      %{status: :error, byte_end: ^source_bytes}}
+
+      assert_receive {[:lang_extract, :document, :stop], %{error_count: 1},
+                      %{source_bytes: ^source_bytes}}
     end
 
     test "chunk task timeout returns {:error, {:task_exit, :timeout}}" do
