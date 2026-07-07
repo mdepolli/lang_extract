@@ -194,10 +194,11 @@ defmodule LangExtract.Alignment.Aligner do
     end
   end
 
-  defp subslice_at?(source_texts_tuple, ext_texts, start_idx) do
-    ext_texts
-    |> Enum.with_index(start_idx)
-    |> Enum.all?(fn {text, idx} -> elem(source_texts_tuple, idx) == text end)
+  defp subslice_at?(_source_texts_tuple, [], _start_idx), do: true
+
+  defp subslice_at?(source_texts_tuple, [text | rest], start_idx) do
+    elem(source_texts_tuple, start_idx) == text and
+      subslice_at?(source_texts_tuple, rest, start_idx + 1)
   end
 
   # --- Phase 2: lesser match (longest contiguous partial run) ---
