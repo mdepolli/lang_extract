@@ -109,6 +109,7 @@ defmodule LangExtract.Runner.RequestTest do
     probe = FakeAnthropic.install(__MODULE__, [:transport_error, {:text, "hello"}])
 
     assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
+    assert FakeAnthropic.calls(probe) == 2
 
     assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
                     %{reason: :transport_error, limiter: ^limiter}}

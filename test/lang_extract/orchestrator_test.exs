@@ -14,6 +14,15 @@ defmodule LangExtract.OrchestratorTest do
     send(parent, {event, measurements, metadata})
   end
 
+  # Document telemetry fires in whichever process consumes the stream, so
+  # a handler can filter on the emitting process: only events this test
+  # process itself emits reach the mailbox, never a concurrent test's.
+  def forward_own_event(event, measurements, metadata, parent) do
+    if self() == parent do
+      send(parent, {event, measurements, metadata})
+    end
+  end
+
   describe "LangExtract.stream/4" do
     alias LangExtract.Pipeline.ChunkResult
 
@@ -110,7 +119,7 @@ defmodule LangExtract.OrchestratorTest do
       :telemetry.attach_many(
         handler_id,
         [[:lang_extract, :document, :start], [:lang_extract, :document, :stop]],
-        &__MODULE__.forward_event/4,
+        &__MODULE__.forward_own_event/4,
         parent
       )
 

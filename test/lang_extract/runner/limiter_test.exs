@@ -36,6 +36,20 @@ defmodule LangExtract.Runner.LimiterTest do
     end)
   end
 
+  # blocked_acquire is asynchronous: nothing orders one spawn's acquire
+  # call ahead of the next one's. FIFO assertions need the earlier waiter
+  # confirmed in the queue before spawning the later one.
+  defp await_waiting(limiter, n) do
+    %{waiting: waiting} = :sys.get_state(limiter)
+
+    if :queue.len(waiting) < n do
+      Process.sleep(1)
+      await_waiting(limiter, n)
+    else
+      :ok
+    end
+  end
+
   describe "in-flight cap" do
     test "blocks past max_in_flight and admits FIFO on release" do
       attach_wait_telemetry()
@@ -47,6 +61,7 @@ defmodule LangExtract.Runner.LimiterTest do
       assert_receive {:acquired, ^second}
 
       third = blocked_acquire(limiter)
+      await_waiting(limiter, 1)
       fourth = blocked_acquire(limiter)
       refute_receive {:acquired, _}, 50
 

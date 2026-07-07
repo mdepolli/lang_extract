@@ -40,3 +40,8 @@ __pycache__/
 
 # macOS Finder metadata
 .DS_Store
+
+# Local environment files (API keys for the benchmark runners)
+.env
+.env.*
+.envrc
