@@ -8,64 +8,54 @@ full provenance. Superseded baselines live in this file's git history;
 the experiments behind format and prompt choices live in
 `benchmark/decisions/`.
 
-## Production baseline — 2026-07-05 (Q/A scaffold + JSON wire format)
+## Production baseline — 2026-07-07 (v0.7.0, post-streaming)
 
-The citable baseline for the 0.6.0-era pipeline: clean runs at `9eb65d23`
-(`dialogue_20260705_174137`, `ner_20260705_175723`), compared against the
-Python instrumented baseline (`0dff5479`), both at concurrency 2.
+The citable baseline for the 0.7.0 pipeline: clean Elixir runs
+(`dialogue_20260707_020751` @ `c50e946`, `ner_20260707_024235` @
+`a3c344e`) against the Python instrumented baseline (`0dff5479`), all at
+concurrency 2. The two Elixir stamps differ by one test-only commit
+(orchestrator_test.exs), which cannot affect benchmark behavior.
 
 |                        | Dialogue E / P      | NER E / P           |
 | ---------------------- | ------------------- | ------------------- |
 | Chunk errors           | 0 / 0               | 0 / 0               |
-| Extractions            | 1,301 / 1,232       | 2,010 / 2,056       |
-| exact / fuzzy / nf     | 1283/**18/0** · 1165/66/1 | 1915/46/49 · 2010/45/1 |
-| Match rate / status agreement | 83% / 95.7%  | **88%** / 93.6%     |
-| Offsets identical      | 94.7%               | 68.6%               |
-| Output tokens          | 129,816 / 130,009   | 117,789 / 86,017    |
-| Avg time/doc           | 78.8s / 66.4s       | 84.2s / 49.7s       |
+| Extractions            | 1,303 / 1,232       | 2,020 / 2,056       |
+| exact / fuzzy / nf     | 1288/**15/0** · 1165/66/1 | 1927/44/49 · 2010/45/1 |
+| Match rate / status agreement | 82% / 96.3%  | 88% / 93.9%         |
+| Offsets identical      | 95.1%               | 69.5%               |
+| Output tokens          | 126,919 / 130,009   | 113,621 / 86,017    |
+| Output tokens/sec      | 178.0 / 163.2       | 155.4 / 144.3       |
+| Avg time/doc           | 59.4s / 66.4s       | 60.9s / 49.7s       |
 
-Relative to the pre-scaffold, pre-switch pipeline (instrumented baseline
-below): ner output tokens fell **233k → 118k (−49%)** and wall clock
-106.3s → 84.2s; dialogue fuzzy spans fell 76 → 18 with zero not_found —
-the JSON switch improved verbatim discipline. Costs of the switch:
-input tokens up ~8–16% (scaffold + fence overhead; output is the
-expensive direction, so net cost still drops) and dialogue output +2%
-net. Residual vs Python: 1.37× ner output tokens — below single-run
-attribution; park unless it matters in practice.
+**The 0.7.0 changes are semantics-neutral on this corpus, confirmed
+empirically.** Against the retired 0.6.0-era baseline (git history of
+this file), every count is within single-run noise: dialogue 1,303 vs
+1,301 extractions with fuzzy *down* 18 → 15, ner 2,020 vs 2,010 with an
+identical status profile. Zero chunk errors across all 24 documents —
+the JSON-only decode (YAML tolerance path removed) rescued nothing
+because nothing needed rescuing, and the chunker hard-split changed no
+chunking on natural prose.
 
-## Instrumented baseline — 2026-07-05 (Phase 0, pre-streaming)
+**The streaming refactor shows no regression.** `run/4` now executes as
+the collected stream; against the retired pre-streaming instrumented
+baseline, dialogue wall clock tracks request latency exactly (59.4s vs
+64.4s per doc on a −7% mean request, 3,258ms vs 3,513ms) and throughput
+is modestly up (178 vs 165 tok/s). The larger historical ner wall-clock
+drops were already banked by the Q/A scaffold (`benchmark/decisions/`).
 
-All four runs at `27db4343` (clean, phase-0-instrumentation branch), both
-libraries pinned to concurrency 2, first runs carrying `usage` blocks
-(token counts + per-request latency). **This is the comparison target for
-the pending post-streaming (v0.7.0) rerun; it is superseded once that
-lands.**
+Residual vs Python: 1.32× ner output tokens (was 1.37× — single-run
+noise) — still parked; below single-run attribution.
 
-|                     | Dialogue E / P      | NER E / P           |
-| ------------------- | ------------------- | ------------------- |
-| Avg time/doc        | 64.4s / 66.4s       | 106.3s / 49.7s      |
-| Input tokens        | 267,356 / 255,244   | 384,157 / 415,404   |
-| Output tokens       | 127,530 / 130,009   | **233,072 / 86,017**|
-| Output tokens/sec   | 165.0 / 163.2       | **182.8 / 144.3**   |
-| Mean request        | 3,513ms / 3,359ms   | 5,815ms / 2,572ms   |
-| Chunk errors        | 0 / 0               | 2 / 0               |
-
-**The ner timing gap is resolved: output volume, not pipeline speed.**
-Elixir generates 2.7× the output tokens for the same extraction count and
-does so at *higher* throughput (182.8 vs 144.3 tok/s) — the 2.3× mean-
-request gap is fully accounted for by token volume. Both sides are
-dominated by adaptive-thinking spend; the prompt-side fix is recorded in
-`decisions/2026-07-05-qa-scaffold.md`. Dialogue is the control:
-near-identical token profiles and even timing.
-
-Run directories: `dialogue_20260705_062044`/`_062045`,
-`ner_20260705_063408`/`_063409` (elixir/python respectively).
+**Timing caveat:** wall-clock comparisons across runs reflect API-side
+latency variance (these runs went at ~02:00 local; the retired baseline's
+afternoon runs measured ~10–30% slower requests). Compare tokens/sec
+across runs, not seconds/doc.
 
 ## Shared provenance
 
 | Field           | Value                                            |
 | --------------- | ------------------------------------------------ |
-| Library versions| lang_extract main @ `9eb65d23` (0.6.0-era), langextract 1.6.0 @ `0dff5479` |
+| Library versions| lang_extract 0.7.0 (dialogue @ `c50e946`, ner @ `a3c344e`), langextract 1.6.0 @ `0dff5479` |
 | Model           | claude-sonnet-5 (no sampling controls available) |
 | Max tokens      | 8,192                                            |
 | Chunk size      | 1,000 chars                                      |
