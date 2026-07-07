@@ -17,7 +17,7 @@ defmodule LangExtract.Orchestrator do
   # Matches upstream langextract's max_workers default.
   @default_max_concurrency 10
 
-  alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt, Template}
+  alias LangExtract.{Alignment.Span, Chunker, Client, Pipeline, Prompt, Result, Template}
   alias Pipeline.{ChunkError, ChunkResult}
 
   # run/4 is literally a consumer of stream/4 — one code path, no drift.
@@ -25,7 +25,7 @@ defmodule LangExtract.Orchestrator do
   # stream's own cleanup and preserves the documented abandon-the-document
   # contract; document telemetry comes from the stream's events.
   @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
-          {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, {:task_exit, term()}}
+          {:ok, Result.t()} | {:error, {:task_exit, term()}}
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     client
     |> stream(source, template, opts)
@@ -48,15 +48,14 @@ defmodule LangExtract.Orchestrator do
   # Document order restored from unordered per-chunk events — shared by
   # Runner.run/4, whose collect differs only in never halting.
   @doc false
-  @spec assemble_results([ChunkResult.t()], [ChunkError.t()]) ::
-          {[Span.t()], [ChunkError.t()]}
+  @spec assemble_results([ChunkResult.t()], [ChunkError.t()]) :: Result.t()
   def assemble_results(results, errors) do
     spans =
       results
       |> Enum.sort_by(& &1.byte_start)
       |> Enum.flat_map(& &1.spans)
 
-    {spans, Enum.sort_by(errors, & &1.byte_start)}
+    %Result{spans: spans, errors: Enum.sort_by(errors, & &1.byte_start)}
   end
 
   @spec stream(Client.t(), String.t(), Template.t(), keyword()) :: Enumerable.t()

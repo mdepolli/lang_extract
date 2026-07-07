@@ -43,8 +43,7 @@ defmodule LangExtract.Runner do
 
   use Supervisor
 
-  alias LangExtract.Alignment.Span
-  alias LangExtract.{Client, Orchestrator, Template}
+  alias LangExtract.{Client, Orchestrator, Result, Template}
   alias LangExtract.Pipeline.{ChunkError, ChunkResult}
   alias LangExtract.Runner.{Delivery, Limiter, Request}
 
@@ -141,13 +140,20 @@ defmodule LangExtract.Runner do
   Runs a full extraction through the runner's shared budget.
 
   Collects `stream/4` and restores document order. Always returns
-  `{:ok, {spans, chunk_errors}}`: in runner mode every failure is
-  per-chunk (a crashed or timed-out chunk task lands in `chunk_errors`
-  with reason `{:task_exit, reason}`), so there is no
+  `{:ok, %LangExtract.Result{}}`: in runner mode every failure is
+  per-chunk (a crashed or timed-out chunk task lands in the result's
+  `errors` with reason `{:task_exit, reason}`), so there is no
   abandon-the-document error path.
+
+  Not a drop-in swap with `LangExtract.run/4` despite the matching shape:
+  the standalone function abandons the document on a task exit and returns
+  `{:error, {:task_exit, reason}}`, which this function never does. Code
+  written against one entry point must not assume the other's outcome
+  space. See the failure-semantics table in the "Running in Production"
+  guide.
   """
   @spec run(Supervisor.supervisor(), String.t(), Template.t(), keyword()) ::
-          {:ok, {[Span.t()], [ChunkError.t()]}}
+          {:ok, Result.t()}
   def run(runner, source, %Template{} = template, opts \\ []) do
     {results, errors} =
       runner

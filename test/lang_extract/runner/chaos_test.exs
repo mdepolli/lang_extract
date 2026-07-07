@@ -7,6 +7,7 @@ defmodule LangExtract.Runner.ChaosTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Pipeline.{ChunkError, ChunkResult}
+  alias LangExtract.Result
   alias LangExtract.Runner
   alias LangExtract.Test.FakeAnthropic
 
@@ -32,7 +33,8 @@ defmodule LangExtract.Runner.ChaosTest do
 
     runner = start_supervised!({Runner, [client: client(), max_in_flight: 2]})
 
-    assert {:ok, {[], []}} = Runner.run(runner, @source, template(), @chunk_opts)
+    assert {:ok, %Result{spans: [], errors: []}} =
+             Runner.run(runner, @source, template(), @chunk_opts)
 
     # 2 chunks + 1 retried request; the retry waited out the global pause.
     assert FakeAnthropic.calls(probe) == 3
@@ -47,7 +49,7 @@ defmodule LangExtract.Runner.ChaosTest do
 
     runner = start_supervised!({Runner, [client: client(), max_in_flight: 2, buffer: 5]})
 
-    assert {:ok, {[], []}} =
+    assert {:ok, %Result{spans: [], errors: []}} =
              Runner.run(runner, six_sentences, template(), max_chunk_chars: 25)
 
     assert FakeAnthropic.calls(probe) >= 6
@@ -60,7 +62,7 @@ defmodule LangExtract.Runner.ChaosTest do
     runner =
       start_supervised!({Runner, [client: client(), retry_backoff_ms: 1, rate_limit_retries: 2]})
 
-    assert {:ok, {[], [%ChunkError{reason: {:rate_limited, nil}}]}} =
+    assert {:ok, %Result{spans: [], errors: [%ChunkError{reason: {:rate_limited, nil}}]}} =
              Runner.run(runner, "hello world", template())
 
     # initial + 2 capped retries, then the chunk gave up.
@@ -75,7 +77,7 @@ defmodule LangExtract.Runner.ChaosTest do
 
     runner = start_supervised!({Runner, [client: client()]})
 
-    assert {:ok, {spans, [%ChunkError{reason: {:invalid_format, _}}]}} =
+    assert {:ok, %Result{spans: spans, errors: [%ChunkError{reason: {:invalid_format, _}}]}} =
              Runner.run(runner, @source, template(), @chunk_opts)
 
     assert [%{text: "Second"}] = spans

@@ -91,6 +91,7 @@ defmodule LangExtract.MixProject do
           LangExtract,
           LangExtract.Client,
           LangExtract.Extraction,
+          LangExtract.Result,
           LangExtract.Template,
           LangExtract.Template.Example,
           LangExtract.WireFormat

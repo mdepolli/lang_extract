@@ -17,8 +17,17 @@ defmodule LangExtract do
   """
 
   alias LangExtract.Alignment.{Aligner, Span}
-  alias LangExtract.{Client, Extraction, Orchestrator, Pipeline, Prompt, Provider, Template}
-  alias Pipeline.ChunkError
+
+  alias LangExtract.{
+    Client,
+    Extraction,
+    Orchestrator,
+    Pipeline,
+    Prompt,
+    Provider,
+    Result,
+    Template
+  }
 
   @doc """
   Aligns extraction strings to byte spans in source text.
@@ -68,10 +77,16 @@ defmodule LangExtract do
   @doc """
   Runs the full extraction pipeline: prompt → LLM → parse → align.
 
-  Returns `{:ok, {spans, chunk_errors}}` on success. When some chunks fail
-  to parse, the successful spans are still returned alongside the errors.
-  Returns `{:error, reason}` only for infrastructure failures (task exits,
-  timeouts).
+  Returns `{:ok, %Result{}}` on success — document-ordered spans plus
+  per-chunk errors. When some chunks fail to parse, the successful spans
+  are still returned alongside the errors. Returns `{:error, reason}` only
+  for infrastructure failures (task exits, timeouts).
+
+  Not a drop-in swap with `LangExtract.Runner.run/4` despite the matching
+  shape: the runner retries failures into per-chunk errors and never
+  returns `{:error, _}`, while this function abandons the document on a
+  task exit. See the failure-semantics table in the "Running in
+  Production" guide.
 
   ## Options
 
@@ -89,11 +104,13 @@ defmodule LangExtract do
 
       client = LangExtract.new(:claude, api_key: "sk-...")
       template = LangExtract.template("Extract entities.")
-      {:ok, {spans, errors}} = LangExtract.run(client, "the quick brown fox", template)
+
+      {:ok, %LangExtract.Result{spans: spans, errors: errors}} =
+        LangExtract.run(client, "the quick brown fox", template)
 
   """
   @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
-          {:ok, {[Span.t()], [ChunkError.t()]}} | {:error, {:task_exit, term()}}
+          {:ok, Result.t()} | {:error, {:task_exit, term()}}
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     Orchestrator.run(client, source, template, opts)
   end

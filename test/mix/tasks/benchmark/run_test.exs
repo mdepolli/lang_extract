@@ -4,6 +4,7 @@ defmodule Mix.Tasks.Benchmark.RunTest do
 
   alias LangExtract.Alignment.Span
   alias LangExtract.Pipeline.ChunkError
+  alias LangExtract.Result
   alias Mix.Tasks.Benchmark.Run
 
   @span %Span{
@@ -33,7 +34,8 @@ defmodule Mix.Tasks.Benchmark.RunTest do
     end
 
     defp ok_extractor(source, _template) do
-      {:ok, {[%Span{@span | text: source |> String.split() |> List.last()}], []}}
+      {:ok,
+       %Result{spans: [%Span{@span | text: source |> String.split() |> List.last()}], errors: []}}
     end
 
     defp run_args(corpus, out, extra \\ []) do
@@ -82,7 +84,9 @@ defmodule Mix.Tasks.Benchmark.RunTest do
       out: out
     } do
       extractor = fn source, _template ->
-        if source =~ "fox", do: raise("boom on alpha"), else: {:ok, {[@span], []}}
+        if source =~ "fox",
+          do: raise("boom on alpha"),
+          else: {:ok, %Result{spans: [@span], errors: []}}
       end
 
       Run.do_run(run_args(corpus, out), extractor)
@@ -119,7 +123,11 @@ defmodule Mix.Tasks.Benchmark.RunTest do
           %{provider: :claude, model: "test", status: 429}
         )
 
-        {:ok, {[%Span{@span | text: source |> String.split() |> List.last()}], []}}
+        {:ok,
+         %Result{
+           spans: [%Span{@span | text: source |> String.split() |> List.last()}],
+           errors: []
+         }}
       end
 
       Run.do_run(run_args(corpus, out, ["--document", "alpha"]), emitting_extractor)
@@ -176,7 +184,8 @@ defmodule Mix.Tasks.Benchmark.RunTest do
 
   describe "document_result/4" do
     test "clean success has empty errors list and timing" do
-      result = Run.document_result("slug", "dialogue", {:ok, {[@span], []}}, 1200)
+      result =
+        Run.document_result("slug", "dialogue", {:ok, %Result{spans: [@span], errors: []}}, 1200)
 
       assert result["source"] == "slug"
       assert result["task"] == "dialogue"
@@ -188,7 +197,9 @@ defmodule Mix.Tasks.Benchmark.RunTest do
 
     test "partial success carries chunk errors alongside extractions" do
       error = %ChunkError{byte_start: 0, byte_end: 1000, reason: :rate_limited}
-      result = Run.document_result("slug", "ner", {:ok, {[@span], [error]}}, 900)
+
+      result =
+        Run.document_result("slug", "ner", {:ok, %Result{spans: [@span], errors: [error]}}, 900)
 
       assert length(result["extractions"]) == 1
       assert result["timing"] == %{"total_ms" => 900}
@@ -212,7 +223,7 @@ defmodule Mix.Tasks.Benchmark.RunTest do
     test "result encodes to JSON" do
       assert {:ok, _} =
                "slug"
-               |> Run.document_result("dialogue", {:ok, {[@span], []}}, 1)
+               |> Run.document_result("dialogue", {:ok, %Result{spans: [@span], errors: []}}, 1)
                |> Jason.encode()
     end
   end

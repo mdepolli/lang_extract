@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking: `run/4` returns `{:ok, %LangExtract.Result{}}`** (was
+  `{:ok, {spans, chunk_errors}}`) — in both `LangExtract.run/4` and
+  `Runner.run/4`. The struct binds by key, so future fields (usage,
+  timing) can be added without breaking consumer matches; the positional
+  tuple could never grow. Migration is mechanical:
+  `{:ok, {spans, errors}}` → `{:ok, %LangExtract.Result{spans: spans,
+  errors: errors}}`.
+
 - **Tokenizer adopts upstream's letter/digit/symbol-run splitting** —
   possessives and contractions split at the apostrophe (`Tooke’s` →
   `Tooke`·`’`·`s`), numbers split at separators, and symbol runs are

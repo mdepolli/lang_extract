@@ -1,6 +1,7 @@
 defmodule LangExtract.RunnerTest do
   use ExUnit.Case, async: true
 
+  alias LangExtract.Result
   alias LangExtract.Runner
   alias LangExtract.Test.FakeAnthropic
 
@@ -106,7 +107,7 @@ defmodule LangExtract.RunnerTest do
       word_stub()
       runner = start_supervised!({Runner, [client: client()]})
 
-      assert {:ok, {spans, []}} =
+      assert {:ok, %Result{spans: spans, errors: []}} =
                Runner.run(runner, @source, template(), max_chunk_chars: 25)
 
       assert Enum.map(spans, & &1.text) == ["First", "Second"]
@@ -133,7 +134,7 @@ defmodule LangExtract.RunnerTest do
 
       runner = start_supervised!({Runner, [client: client(), max_in_flight: 1, buffer: 4]})
 
-      assert {:ok, {[], []}} =
+      assert {:ok, %Result{spans: [], errors: []}} =
                Runner.run(runner, @source, template(), max_chunk_chars: 25)
 
       assert :atomics.get(concurrency, 2) == 1
@@ -162,7 +163,9 @@ defmodule LangExtract.RunnerTest do
       runner =
         start_supervised!({Runner, [client: client(), retry_backoff_ms: 1]})
 
-      assert {:ok, {[span], []}} = Runner.run(runner, "hello world", template())
+      assert {:ok, %Result{spans: [span], errors: []}} =
+               Runner.run(runner, "hello world", template())
+
       assert span.text == "hello"
       assert Agent.get(calls, & &1) == 2
     end
@@ -177,7 +180,11 @@ defmodule LangExtract.RunnerTest do
       runner =
         start_supervised!({Runner, [client: client(), chunk_retries: 1, retry_backoff_ms: 1]})
 
-      assert {:ok, {[], [%LangExtract.Pipeline.ChunkError{reason: :server_error}]}} =
+      assert {:ok,
+              %Result{
+                spans: [],
+                errors: [%LangExtract.Pipeline.ChunkError{reason: :server_error}]
+              }} =
                Runner.run(runner, "hello world", template())
     end
   end

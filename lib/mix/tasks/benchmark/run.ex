@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   use Mix.Task
 
-  alias LangExtract.{Pipeline.ChunkError, Serializer}
+  alias LangExtract.{Pipeline.ChunkError, Result, Serializer}
 
   @default_corpus "benchmark/corpus"
   @default_out "benchmark/results/elixir"
@@ -205,7 +205,13 @@ defmodule Mix.Tasks.Benchmark.Run do
   @doc false
   def document_result(slug, task_name, run_result, elapsed_ms, usage \\ nil)
 
-  def document_result(slug, task_name, {:ok, {spans, errors}}, elapsed_ms, usage) do
+  def document_result(
+        slug,
+        task_name,
+        {:ok, %Result{spans: spans, errors: errors}},
+        elapsed_ms,
+        usage
+      ) do
     %{
       "source" => slug,
       "task" => task_name,

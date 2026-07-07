@@ -30,7 +30,7 @@ template =
     ]
   )
 
-{:ok, {spans, _errors}} = LangExtract.run(client, "Romeo and Juliet was written by William Shakespeare.", template)
+{:ok, %LangExtract.Result{spans: spans}} = LangExtract.run(client, "Romeo and Juliet was written by William Shakespeare.", template)
 
 for span <- spans do
   IO.puts("#{span.class}: \"#{span.text}\" [bytes #{span.byte_start}..#{span.byte_end}] (#{span.status})")
@@ -133,7 +133,7 @@ through verbatim. The underlying structs (`LangExtract.Template`,
 ```elixir
 source = "The patient presents with hypertension and is taking lisinopril daily."
 
-{:ok, {spans, errors}} = LangExtract.run(client, source, template)
+{:ok, %LangExtract.Result{spans: spans, errors: errors}} = LangExtract.run(client, source, template)
 ```
 
 When some chunks fail to parse, the successful spans are still returned alongside
@@ -191,7 +191,7 @@ For documents that exceed LLM token limits, pass `:max_chunk_chars` to split the
 source into sentence-aware chunks and process them in parallel:
 
 ```elixir
-{:ok, {spans, errors}} = LangExtract.run(client, long_document, template,
+{:ok, %LangExtract.Result{spans: spans, errors: errors}} = LangExtract.run(client, long_document, template,
   max_chunk_chars: 4000,
   max_concurrency: 5
 )
