@@ -33,25 +33,31 @@ defmodule LangExtract.WireFormat do
   def normalize(raw) when is_binary(raw) do
     cleaned = raw |> strip_think_tags() |> strip_fences()
 
-    with :error <- parse_json(cleaned) do
-      {:error, {:invalid_format, raw}}
+    with {:ok, decoded} <- parse_json(cleaned),
+         {:ok, document} <- check_document(decoded) do
+      {:ok, normalize_extractions(document)}
+    else
+      :error -> {:error, {:invalid_format, raw}}
     end
   end
 
   defp parse_json(json) do
     case Jason.decode(json) do
-      {:ok, decoded} -> validate_decoded(decoded)
+      {:ok, decoded} -> {:ok, decoded}
       {:error, _} -> :error
     end
   end
 
-  defp validate_decoded(%{"extractions" => entries} = decoded) when is_list(entries) do
-    {:ok, %{decoded | "extractions" => Enum.map(entries, &normalize_entry/1)}}
+  # A valid document is a non-empty JSON object. No "extractions" key is
+  # still valid here — Parser reports :missing_extractions for those.
+  defp check_document(%{} = decoded) when decoded != %{}, do: {:ok, decoded}
+  defp check_document(_decoded), do: :error
+
+  defp normalize_extractions(%{"extractions" => entries} = document) when is_list(entries) do
+    %{document | "extractions" => Enum.map(entries, &normalize_entry/1)}
   end
 
-  # Valid document without "extractions" key — let Parser return :missing_extractions
-  defp validate_decoded(%{} = decoded) when decoded != %{}, do: {:ok, decoded}
-  defp validate_decoded(_decoded), do: :error
+  defp normalize_extractions(document), do: document
 
   @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
   @fence_pattern ~r/```(?:json|yaml)?\s*(.*?)\s*```/s
