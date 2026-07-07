@@ -36,31 +36,47 @@ defmodule LangExtract.Alignment.Aligner do
 
   @spec align(String.t(), [String.t()], keyword()) :: [Span.t()]
   def align(source, extractions, opts \\ []) do
-    config = %{
+    config = build_config(opts)
+    index = index_source(source)
+    ext_token_lists = tokenize_extractions(extractions)
+    selection = occurrence_selection(config.exact_algorithm, index.texts, ext_token_lists)
+
+    place_extractions(extractions, ext_token_lists, selection, index, config)
+  end
+
+  defp build_config(opts) do
+    %{
       threshold: Keyword.get(opts, :fuzzy_threshold, @default_fuzzy_threshold),
       min_density: Keyword.get(opts, :min_density, @default_min_density),
       accept_lesser: Keyword.get(opts, :accept_lesser, true),
       exact_algorithm: Keyword.get(opts, :exact_algorithm, :dp)
     }
+  end
 
-    source_tokens = Tokenizer.tokenize(source)
-    source_words = reject_whitespace(source_tokens)
-    source_words_tuple = List.to_tuple(source_words)
-    source_texts = Enum.map(source_words, &String.downcase(&1.text))
-    source_texts_tuple = List.to_tuple(source_texts)
-    source_stemmed = Enum.map(source_texts, &stem_token/1)
+  # The source representations every phase reads: word tokens with byte
+  # offsets (span construction), their downcased texts (matching), and
+  # stemmed texts (LCS phase only). Tuples for O(1) indexed access.
+  defp index_source(source) do
+    words = source |> Tokenizer.tokenize() |> reject_whitespace()
+    texts = Enum.map(words, &String.downcase(&1.text))
 
-    ext_token_lists =
-      Enum.map(extractions, fn extraction ->
-        extraction
-        |> Tokenizer.tokenize()
-        |> reject_whitespace()
-        |> Enum.map(&String.downcase(&1.text))
-      end)
+    %{
+      words: List.to_tuple(words),
+      texts: List.to_tuple(texts),
+      stemmed: Enum.map(texts, &stem_token/1)
+    }
+  end
 
-    selection =
-      occurrence_selection(config.exact_algorithm, source_texts_tuple, ext_token_lists)
+  defp tokenize_extractions(extractions) do
+    Enum.map(extractions, fn extraction ->
+      extraction
+      |> Tokenizer.tokenize()
+      |> reject_whitespace()
+      |> Enum.map(&String.downcase(&1.text))
+    end)
+  end
 
+  defp place_extractions(extractions, ext_token_lists, selection, index, config) do
     extractions
     |> Enum.zip(ext_token_lists)
     |> Enum.with_index()
@@ -68,26 +84,18 @@ defmodule LangExtract.Alignment.Aligner do
       case selection do
         %{^idx => start_idx} ->
           end_idx = start_idx + length(ext_texts) - 1
-          found_span(extraction, source_words_tuple, start_idx, end_idx, :exact)
+          found_span(extraction, index.words, start_idx, end_idx, :exact)
 
         _ ->
-          align_one(
-            extraction,
-            ext_texts,
-            source_words_tuple,
-            source_texts_tuple,
-            source_stemmed,
-            config
-          )
+          align_one(extraction, ext_texts, index, config)
       end
     end)
   end
 
-  defp align_one(extraction, ext_texts, source_words, source_texts_tuple, source_stemmed, config) do
-    with :no_match <- exact_match(extraction, source_words, source_texts_tuple, ext_texts),
-         :no_match <-
-           lesser_match(extraction, source_words, source_texts_tuple, ext_texts, config),
-         :no_match <- lcs_match(extraction, source_words, source_stemmed, ext_texts, config) do
+  defp align_one(extraction, ext_texts, index, config) do
+    with :no_match <- exact_match(extraction, index, ext_texts),
+         :no_match <- lesser_match(extraction, index, ext_texts, config),
+         :no_match <- lcs_match(extraction, index, ext_texts, config) do
       not_found_span(extraction)
     else
       {:ok, span} -> span
@@ -177,20 +185,20 @@ defmodule LangExtract.Alignment.Aligner do
 
   # --- Phase 1: exact contiguous match ---
 
-  defp exact_match(_extraction, _source_words, _source_texts_tuple, []) do
+  defp exact_match(_extraction, _index, []) do
     :no_match
   end
 
-  defp exact_match(extraction, source_words, source_texts_tuple, ext_texts) do
+  defp exact_match(extraction, index, ext_texts) do
     ext_length = length(ext_texts)
-    last_start = tuple_size(source_texts_tuple) - ext_length
+    last_start = tuple_size(index.texts) - ext_length
 
-    case Enum.find(0..last_start//1, &subslice_at?(source_texts_tuple, ext_texts, &1)) do
+    case Enum.find(0..last_start//1, &subslice_at?(index.texts, ext_texts, &1)) do
       nil ->
         :no_match
 
       start_idx ->
-        {:ok, found_span(extraction, source_words, start_idx, start_idx + ext_length - 1, :exact)}
+        {:ok, found_span(extraction, index.words, start_idx, start_idx + ext_length - 1, :exact)}
     end
   end
 
@@ -203,23 +211,18 @@ defmodule LangExtract.Alignment.Aligner do
 
   # --- Phase 2: lesser match (longest contiguous partial run) ---
 
-  defp lesser_match(_e, _sw, _st, _ext, %{accept_lesser: false}), do: :no_match
-  defp lesser_match(_e, _sw, _st, [], _config), do: :no_match
+  defp lesser_match(_extraction, _index, _ext_texts, %{accept_lesser: false}), do: :no_match
+  defp lesser_match(_extraction, _index, [], _config), do: :no_match
 
-  defp lesser_match(extraction, source_words, source_texts_tuple, ext_texts, _config) do
+  defp lesser_match(extraction, index, ext_texts, _config) do
     ext_tuple = List.to_tuple(ext_texts)
 
-    case prefix_block(
-           source_texts_tuple,
-           ext_tuple,
-           tuple_size(source_texts_tuple),
-           tuple_size(ext_tuple)
-         ) do
+    case prefix_block(index.texts, ext_tuple, tuple_size(index.texts), tuple_size(ext_tuple)) do
       nil ->
         :no_match
 
       {start_idx, block_len} ->
-        {:ok, found_span(extraction, source_words, start_idx, start_idx + block_len - 1, :fuzzy)}
+        {:ok, found_span(extraction, index.words, start_idx, start_idx + block_len - 1, :fuzzy)}
     end
   end
 
@@ -265,12 +268,12 @@ defmodule LangExtract.Alignment.Aligner do
 
   # --- Phase 3: LCS subsequence match over stemmed tokens ---
 
-  defp lcs_match(_e, _sw, _stemmed, [], _config), do: :no_match
+  defp lcs_match(_extraction, _index, [], _config), do: :no_match
 
-  defp lcs_match(extraction, source_words, source_stemmed, ext_texts, config) do
+  defp lcs_match(extraction, index, ext_texts, config) do
     ext_stemmed = Enum.map(ext_texts, &stem_token/1)
     ext_length = length(ext_stemmed)
-    spans = best_lcs_spans(source_stemmed, ext_stemmed)
+    spans = best_lcs_spans(index.stemmed, ext_stemmed)
 
     spans
     |> Map.keys()
@@ -282,7 +285,7 @@ defmodule LangExtract.Alignment.Aligner do
       density = matches / span_len
 
       if coverage >= config.threshold and density >= config.min_density do
-        {:ok, found_span(extraction, source_words, start_idx, end_idx, :fuzzy)}
+        {:ok, found_span(extraction, index.words, start_idx, end_idx, :fuzzy)}
       end
     end)
   end
