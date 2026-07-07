@@ -207,11 +207,12 @@ defmodule LangExtract do
     examples = Keyword.get(opts, :examples, [])
     validate = Keyword.get(opts, :validate, true)
 
-    with {:ok, examples} <- normalize_all(examples, &normalize_example/1),
-         {:ok, template} <- build_template(description, examples, validate) do
-      {:ok, template}
-    else
-      {:error, _} = error -> error
+    case normalize_all(examples, &normalize_example/1) do
+      {:ok, examples} ->
+        validate_template(%Template{description: description, examples: examples}, validate)
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -276,10 +277,6 @@ defmodule LangExtract do
 
   defp get_field(map, key, default) do
     Map.get(map, key) || Map.get(map, Atom.to_string(key)) || default
-  end
-
-  defp build_template(description, examples, validate) do
-    validate_template(%Template{description: description, examples: examples}, validate)
   end
 
   defp validate_template(template, false), do: {:ok, template}
