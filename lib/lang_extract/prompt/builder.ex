@@ -6,7 +6,7 @@ defmodule LangExtract.Prompt.Builder do
   `Examples` heading, `Q:`/`A:` pairs (answers are code-fenced by
   `WireFormat.format_extractions/1`), and a trailing bare `A:` that primes
   the model to emit the artifact directly. Measured on the ner benchmark
-  (2026-07-05 probe series, BASELINE.md): this scaffold cuts output tokens
+  (2026-07-05 probe series, benchmark/decisions/): this scaffold cuts output tokens
   ~20% versus bare concatenation by reducing adaptive-thinking spend, with
   no alignment cost.
   """

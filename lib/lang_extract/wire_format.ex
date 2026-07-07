@@ -4,7 +4,7 @@ defmodule LangExtract.WireFormat do
 
   Serializes `%Extraction{}` structs to fenced dynamic-key JSON for prompts
   (matching upstream langextract's default — decided by the 2026-07-05
-  format A/B, see benchmark/BASELINE.md), and normalizes raw LLM output
+  format A/B, see benchmark/decisions/), and normalizes raw LLM output
   back to canonical format for the parser. Decoding is JSON-only (since
   0.7.0; the YAML tolerance path and its repair machinery were removed
   once JSON became the wire format).
