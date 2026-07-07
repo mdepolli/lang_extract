@@ -76,6 +76,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Extraction` got in 0.4.0), and the example struct is a subordinate type
   nested in its owner. Construct via `LangExtract.template/2`; the structs
   remain public for pattern matching.
+- **`req` constraint tightened to `~> 0.6.0`** (was `~> 0.6`) — pre-1.0
+  minors are breaking by convention, so the constraint states what CI
+  actually proves.
+- **Specs name the provider error union** — the new
+  `LangExtract.Provider.error/0` type covers every error `c:Provider.infer/2`
+  can return; the provider modules, `Runner.Request.infer/4`, and
+  `map_response/2` use it instead of `{:error, term()}`, and `run/4`'s
+  error spec narrowed to `{:error, {:task_exit, term()}}`. Spec-only —
+  no runtime change.
 
 ## [0.6.0] - 2026-07-05
 
@@ -95,10 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pairs, and a trailing bare `A:` answer primer, mirroring langextract's
   `QAPromptGenerator`. Measured effect: ~20% fewer output tokens (reduced
   adaptive-thinking spend), no alignment cost.
-- **`req` constraint tightened to `~> 0.6.0`** (via `~> 0.6`; was `~> 0.5`) —
-  pre-1.0 minors are breaking by convention, so the constraint states what
-  CI actually proves. The previous `~> 0.5` admitted minors the test suite
-  had never run against.
+- **`req` constraint tightened to `~> 0.6`** — the previous `~> 0.5`
+  admitted pre-1.0 minors the test suite has never run against.
 - **`WireFormat.normalize/1` parses JSON first** — the strict, fast parser
   handles the (now default) JSON responses; the YAML parser and its repair
   pass remain as the tolerance path for models that answer in YAML.
