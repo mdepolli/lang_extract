@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-07-06
 
 ### Added
 
@@ -80,11 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minors are breaking by convention, so the constraint states what CI
   actually proves.
 - **Specs name the provider error union** — the new
-  `LangExtract.Provider.error/0` type covers every error `c:Provider.infer/2`
-  can return; the provider modules, `Runner.Request.infer/4`, and
-  `map_response/2` use it instead of `{:error, term()}`, and `run/4`'s
-  error spec narrowed to `{:error, {:task_exit, term()}}`. Spec-only —
-  no runtime change.
+  `t:LangExtract.Provider.error/0` type covers every error
+  `c:LangExtract.Provider.infer/2` can return; the provider modules,
+  `Runner.Request.infer/4`, and `map_response/2` use it instead of
+  `{:error, term()}`, and `run/4`'s error spec narrowed to
+  `{:error, {:task_exit, term()}}`. Spec-only — no runtime change.
 
 ## [0.6.0] - 2026-07-05
 
