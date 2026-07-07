@@ -62,6 +62,23 @@ defmodule LangExtract.Runner.RequestTest do
     assert FakeAnthropic.calls(probe) == 2
   end
 
+  test "429 with an unparseable retry-after falls back to the backoff pause",
+       %{limiter: limiter} do
+    # HTTP-date is RFC-legal; retry_after_ms only parses integer seconds,
+    # so this must take the nil path and escalate, not crash.
+    probe =
+      FakeAnthropic.install(__MODULE__, [
+        {:status, 429, [{"retry-after", "Wed, 21 Oct 2026 07:28:00 GMT"}]},
+        {:text, "hello"}
+      ])
+
+    assert {:ok, "hello"} = Request.infer(limiter, client(), "prompt", @opts)
+    assert FakeAnthropic.calls(probe) == 2
+
+    assert_receive {[:lang_extract, :chunk, :retry], %{attempt: 1},
+                    %{reason: :rate_limited, limiter: ^limiter}}
+  end
+
   test "persistent 429s hit the rate-limit cap with escalating pauses",
        %{limiter: limiter} do
     probe = FakeAnthropic.install(__MODULE__, [{:status, 429, []}])
