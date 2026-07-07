@@ -8,54 +8,52 @@ full provenance. Superseded baselines live in this file's git history;
 the experiments behind format and prompt choices live in
 `benchmark/decisions/`.
 
-## Production baseline — 2026-07-07 (v0.7.0, post-streaming)
+## Production baseline — 2026-07-07 (tokenizer parity)
 
-The citable baseline for the 0.7.0 pipeline: clean Elixir runs
-(`dialogue_20260707_020751` @ `c50e946`, `ner_20260707_024235` @
-`a3c344e`) against the Python instrumented baseline (`0dff5479`), all at
-concurrency 2. The two Elixir stamps differ by one test-only commit
-(orchestrator_test.exs), which cannot affect benchmark behavior.
+The citable baseline for the post-0.7.0 pipeline with upstream tokenizer
+parity: clean Elixir runs (`dialogue_20260707_155632`,
+`ner_20260707_032131`, both @ `a86641d`) against the Python instrumented
+baseline (`0dff5479`), all at concurrency 2.
 
 |                        | Dialogue E / P      | NER E / P           |
 | ---------------------- | ------------------- | ------------------- |
 | Chunk errors           | 0 / 0               | 0 / 0               |
-| Extractions            | 1,303 / 1,232       | 2,020 / 2,056       |
-| exact / fuzzy / nf     | 1288/**15/0** · 1165/66/1 | 1927/44/49 · 2010/45/1 |
-| Match rate / status agreement | 82% / 96.3%  | 88% / 93.9%         |
-| Offsets identical      | 95.1%               | 69.5%               |
-| Output tokens          | 126,919 / 130,009   | 113,621 / 86,017    |
-| Output tokens/sec      | 178.0 / 163.2       | 155.4 / 144.3       |
-| Avg time/doc           | 59.4s / 66.4s       | 60.9s / 49.7s       |
+| Extractions            | 1,289 / 1,232       | 2,046 / 2,056       |
+| exact / fuzzy / nf     | 1279/**10/0** · 1165/66/1 | 2043/**3/0** · 2010/45/1 |
+| Match rate / status agreement | 84% / 95.8%  | 89% / 98.1%         |
+| Offsets identical      | 97.3%               | 76.7%               |
+| Output tokens          | 120,220 / 130,009   | 115,483 / 86,017    |
+| Output tokens/sec      | 164.4 / 163.2       | 155.2 / 144.3       |
+| Avg time/doc           | 60.9s / 66.4s       | 62.0s / 49.7s       |
 
-**The 0.7.0 changes are semantics-neutral on this corpus, confirmed
-empirically.** Against the retired 0.6.0-era baseline (git history of
-this file), every count is within single-run noise: dialogue 1,303 vs
-1,301 extractions with fuzzy *down* 18 → 15, ner 2,020 vs 2,010 with an
-identical status profile. Zero chunk errors across all 24 documents —
-the JSON-only decode (YAML tolerance path removed) rescued nothing
-because nothing needed rescuing, and the chunker hard-split changed no
-chunking on natural prose.
+**Alignment now exceeds upstream on this corpus.** The tokenizer parity
+change (upstream's letter/digit/symbol-run splitting; see CHANGELOG)
+collapsed ner not_found 49 → 0 and fuzzy 44 → 3 — against upstream's own
+1 and 45 — by grounding bare-name extractions inside possessive mentions
+(`Tooke’s`) that previously fell through every phase. Dialogue improved
+in kind: fuzzy 15 → 10, offsets identical 95.1% → 97.3%. Status
+agreement on ner rose 93.9% → 98.1%. The remaining offsets-identical
+headline gap on ner is the documented repeated-text sampling variance,
+not aligner behavior.
 
-**The streaming refactor shows no regression.** `run/4` now executes as
-the collected stream; against the retired pre-streaming instrumented
-baseline, dialogue wall clock tracks request latency exactly (59.4s vs
-64.4s per doc on a −7% mean request, 3,258ms vs 3,513ms) and throughput
-is modestly up (178 vs 165 tok/s). The larger historical ner wall-clock
-drops were already banked by the Q/A scaffold (`benchmark/decisions/`).
+Two earlier verdicts carry forward from the retired v0.7.0 baseline
+(git history): the 0.7.0 pipeline changes (streaming consolidation,
+chunker hard-split, JSON-only decode) were semantics-neutral, and the
+streaming refactor showed no regression against the pre-streaming
+instrumented runs — wall clock tracked request latency, throughput
+modestly up.
 
-Residual vs Python: 1.32× ner output tokens (was 1.37× — single-run
-noise) — still parked; below single-run attribution.
+Residual vs Python: 1.34× ner output tokens — stable across three runs
+(1.37×, 1.32×, 1.34×); parked, below single-run attribution.
 
 **Timing caveat:** wall-clock comparisons across runs reflect API-side
-latency variance (these runs went at ~02:00 local; the retired baseline's
-afternoon runs measured ~10–30% slower requests). Compare tokens/sec
-across runs, not seconds/doc.
+latency variance. Compare tokens/sec across runs, not seconds/doc.
 
 ## Shared provenance
 
 | Field           | Value                                            |
 | --------------- | ------------------------------------------------ |
-| Library versions| lang_extract 0.7.0 (dialogue @ `c50e946`, ner @ `a3c344e`), langextract 1.6.0 @ `0dff5479` |
+| Library versions| lang_extract 0.7.0 + tokenizer parity (unreleased) @ `a86641d`, langextract 1.6.0 @ `0dff5479` |
 | Model           | claude-sonnet-5 (no sampling controls available) |
 | Max tokens      | 8,192                                            |
 | Chunk size      | 1,000 chars                                      |
