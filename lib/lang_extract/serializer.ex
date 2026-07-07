@@ -43,8 +43,9 @@ defmodule LangExtract.Serializer do
   @spec from_map(map()) :: {:ok, {String.t(), [Span.t()]}} | {:error, :invalid_data}
   def from_map(%{"text" => text, "extractions" => extractions})
       when is_binary(text) and is_list(extractions) do
-    with {:ok, spans} <- map_spans(extractions) do
-      {:ok, {text, spans}}
+    case map_spans(extractions) do
+      {:ok, spans} -> {:ok, {text, spans}}
+      {:error, _} = error -> error
     end
   end
 
@@ -71,16 +72,15 @@ defmodule LangExtract.Serializer do
   @spec load_jsonl(Path.t()) ::
           {:ok, [{String.t(), [Span.t()]}]} | {:error, File.posix() | :invalid_data}
   def load_jsonl(path) do
-    with {:ok, content} <- File.read(path) do
-      results =
+    case File.read(path) do
+      {:ok, content} ->
         content
         |> String.split("\n", trim: true)
         |> Enum.reduce_while([], &parse_jsonl_line/2)
+        |> collected()
 
-      case results do
-        {:error, _} = error -> error
-        list when is_list(list) -> {:ok, Enum.reverse(list)}
-      end
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -94,19 +94,20 @@ defmodule LangExtract.Serializer do
   end
 
   defp map_spans(extractions) do
-    spans =
-      Enum.reduce_while(extractions, [], fn map, acc ->
-        case map_to_span(map) do
-          {:ok, span} -> {:cont, [span | acc]}
-          {:error, _} = error -> {:halt, error}
-        end
-      end)
-
-    case spans do
-      {:error, _} = error -> error
-      list -> {:ok, Enum.reverse(list)}
-    end
+    extractions
+    |> Enum.reduce_while([], fn map, acc ->
+      case map_to_span(map) do
+        {:ok, span} -> {:cont, [span | acc]}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> collected()
   end
+
+  # Finishes a collect-or-halt fold: the accumulator comes back reversed,
+  # or as the {:error, _} that halted it.
+  defp collected({:error, _} = error), do: error
+  defp collected(values), do: {:ok, Enum.reverse(values)}
 
   # class stays optional: align/3 produces class-less spans, and their
   # serialized form must round-trip.
