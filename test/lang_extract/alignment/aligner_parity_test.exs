@@ -17,11 +17,10 @@ defmodule LangExtract.Alignment.AlignerParityTest do
             |> File.read!()
             |> Jason.decode!()
 
-  # Keyed by {case name, extraction index}. Two divergence families:
-  #
-  # Tokenizers differ by design: we keep contractions whole ("don't" is one
-  # token); upstream splits them (don / ' / t), letting its lesser phase
-  # ground the "don" fragment. Documented 0.1.0 divergence.
+  # Keyed by {case name, extraction index}. One divergence family:
+  # (the contraction-tokenization family closed when the tokenizer adopted
+  # upstream's letter/digit/symbol-run splitting — smart_quote_contraction
+  # now asserts the fixture's real upstream result.)
   #
   # Leftover phases are per-extraction here, joint upstream: after the
   # occurrence DP, upstream reruns difflib over the concatenated tokens of
@@ -32,7 +31,6 @@ defmodule LangExtract.Alignment.AlignerParityTest do
   # paraphrase of an already-claimed repeat grounds its prefix where
   # upstream returns not_found (documented trade-off).
   @known_divergences %{
-    {"smart_quote_contraction", 0} => %{status: :not_found, byte_start: nil, byte_end: nil},
     {"dp_out_of_order_emission", 0} => %{status: :exact, byte_start: 10, byte_end: 13},
     {"dp_contested_overlap", 1} => %{status: :exact, byte_start: 4, byte_end: 11},
     {"dp_paraphrase_among_repeats", 2} => %{status: :fuzzy, byte_start: 0, byte_end: 8}

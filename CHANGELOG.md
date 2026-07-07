@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Tokenizer adopts upstream's letter/digit/symbol-run splitting** —
+  possessives and contractions split at the apostrophe (`Tooke’s` →
+  `Tooke`·`’`·`s`), numbers split at separators, and symbol runs are
+  same-character tokens (`...` is one token). This closes the documented
+  contraction-tokenization divergence: bare-name extractions against
+  possessive source mentions now ground `exact` instead of `not_found`
+  (the dominant cause of the ner benchmark's 49 not_found spans vs
+  Python's 1 — concentrated in Moby-Dick's `—_Author’s Work_`
+  attributions). The `smart_quote_contraction` parity case now asserts
+  upstream's real result. Chunker sentence rules mirrored to upstream's
+  `find_sentence_range`: terminator-run matching (`...` ends sentences),
+  abbreviation pairing (`"Dr" <> "."`), and break-unless-lowercase after
+  newlines (lines opening with quotes or digits now break). Alignment
+  offsets for spans involving contractions/possessives may shift; chunk
+  boundaries on decimal-heavy text may differ.
+
 ## [0.7.0] - 2026-07-06
 
 ### Added

@@ -2,21 +2,26 @@ defmodule LangExtract.Chunker do
   @moduledoc """
   Splits text into sentence-level chunks using the Alignment.Tokenizer.
 
-  Sentence boundary rules:
-  1. A `:punctuation` token of `.`, `!`, or `?` ends a sentence, unless it
-     forms a known abbreviation with the preceding word token.
+  Sentence boundary rules (mirroring upstream's `find_sentence_range`):
+  1. A `:punctuation` token ending in a sentence terminator (`.`, `!`, `?`,
+     CJK equivalents — `...` counts, since symbol runs are one token) ends a
+     sentence, unless the previous token plus the terminator form a known
+     abbreviation (`"Dr" <> "." == "Dr."`).
   2. After sentence-ending punctuation, trailing closing punctuation
      (`"`, `'`, `)`, `]`, `}`, `»`, `\u201D`, `\u2019`) is consumed into the same sentence.
-  3. A `:whitespace` token containing `\\n` followed by an uppercase-starting
-     `:word` token starts a new sentence.
+  3. A `:whitespace` token containing `\\n` starts a new sentence unless the
+     next token begins lowercase — lines opening with quotes, digits, or
+     capitals all break (upstream: "assume break unless lowercase").
   """
 
   alias LangExtract.Alignment.Tokenizer
   alias LangExtract.Chunker.Chunk
 
-  @abbreviations ~w(Mr Mrs Ms Dr Prof St)
+  @abbreviations ~w(Mr. Mrs. Ms. Dr. Prof. St.)
   @closing_punctuation [~s("), "'", ")", "]", "}", "»", "\u201D", "\u2019"]
-  @sentence_ending ~w(. ! ?)
+  # Upstream's _END_OF_SENTENCE_PATTERN: a token ending in a sentence
+  # terminator (same-symbol runs make "..." one token, so match the tail).
+  @sentence_ending ~r/[.?!。！？\x{0964}]["'”’»)\]}]*$/u
 
   @doc """
   Splits text into chunks respecting sentence boundaries.
@@ -139,19 +144,20 @@ defmodule LangExtract.Chunker do
     |> ensure_final_boundary(count)
   end
 
-  defp sentence_end_by_punctuation?(%{type: :punctuation, text: text}, idx, tokens_tuple)
-       when text in @sentence_ending do
-    not abbreviation_before?(idx, tokens_tuple)
+  defp sentence_end_by_punctuation?(%{type: :punctuation, text: text}, idx, tokens_tuple) do
+    Regex.match?(@sentence_ending, text) and not abbreviation_before?(idx, tokens_tuple, text)
   end
 
   defp sentence_end_by_punctuation?(_token, _idx, _tokens_tuple), do: false
 
-  defp abbreviation_before?(punct_idx, tokens_tuple) when punct_idx > 0 do
+  # Upstream concatenates the previous token with the terminator and
+  # checks the pair ("Dr" <> "." == "Dr."), so "Dr..." still breaks.
+  defp abbreviation_before?(punct_idx, tokens_tuple, punct_text) when punct_idx > 0 do
     prev = elem(tokens_tuple, punct_idx - 1)
-    prev.type == :word and prev.text in @abbreviations
+    (prev.text <> punct_text) in @abbreviations
   end
 
-  defp abbreviation_before?(_punct_idx, _tokens_tuple), do: false
+  defp abbreviation_before?(_punct_idx, _tokens_tuple, _punct_text), do: false
 
   defp consume_closing_punctuation(idx, tokens_tuple, count) when idx < count do
     token = elem(tokens_tuple, idx)
@@ -165,10 +171,12 @@ defmodule LangExtract.Chunker do
 
   defp consume_closing_punctuation(idx, _tokens_tuple, _count), do: idx
 
+  # Upstream: "Assume break unless lowercase (covers numbers/quotes)" —
+  # a line starting with “, a digit, or an uppercase letter all break.
   defp sentence_end_by_newline?(%{type: :whitespace, text: ws_text}, idx, tokens_tuple, count) do
     if String.contains?(ws_text, "\n") and idx + 1 < count do
       next = elem(tokens_tuple, idx + 1)
-      next.type == :word and uppercase_start?(next.text)
+      not lowercase_start?(next.text)
     else
       false
     end
@@ -176,12 +184,12 @@ defmodule LangExtract.Chunker do
 
   defp sentence_end_by_newline?(_token, _idx, _tokens_tuple, _count), do: false
 
-  defp uppercase_start?(<<first::utf8, _rest::binary>>) do
+  defp lowercase_start?(<<first::utf8, _rest::binary>>) do
     char = <<first::utf8>>
-    String.upcase(char) == char and String.downcase(char) != char
+    String.downcase(char) == char and String.upcase(char) != char
   end
 
-  defp uppercase_start?(_), do: false
+  defp lowercase_start?(_), do: false
 
   defp ensure_final_boundary(boundaries, count) do
     if List.last(boundaries) == count do

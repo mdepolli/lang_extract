@@ -20,16 +20,32 @@ defmodule LangExtract.Alignment.TokenizerTest do
       assert [] = Tokenizer.tokenize("")
     end
 
-    test "keeps contractions as single tokens" do
-      tokens = Tokenizer.tokenize("don't won't")
-      words = Enum.filter(tokens, &(&1.type == :word))
-      assert [%Token{text: "don't"}, %Token{text: "won't"}] = words
+    test "splits contractions at the apostrophe like upstream" do
+      tokens = Tokenizer.tokenize("don't won’t")
+      texts = Enum.map(tokens, &{&1.type, &1.text})
+
+      assert texts == [
+               {:word, "don"},
+               {:punctuation, "'"},
+               {:word, "t"},
+               {:whitespace, " "},
+               {:word, "won"},
+               {:punctuation, "’"},
+               {:word, "t"}
+             ]
     end
 
-    test "groups numbers with separators" do
+    test "splits numbers at separators like upstream" do
       tokens = Tokenizer.tokenize("costs $1,234.56 total")
-      number = Enum.find(tokens, &(&1.type == :number))
-      assert %Token{text: "1,234.56", byte_start: 7, byte_end: 15} = number
+      numbers = Enum.filter(tokens, &(&1.type == :number))
+
+      assert [%Token{text: "1", byte_start: 7}, %Token{text: "234"}, %Token{text: "56"}] =
+               numbers
+    end
+
+    test "symbol runs are same-character only" do
+      texts = "Wait... what?!" |> Tokenizer.tokenize() |> Enum.map(& &1.text)
+      assert texts == ["Wait", "...", " ", "what", "?", "!"]
     end
 
     test "preserves whitespace runs" do
