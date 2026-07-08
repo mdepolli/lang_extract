@@ -138,6 +138,34 @@ defmodule LangExtract.Runner.LimiterTest do
                       %{reason: :rpm, limiter: ^limiter}}
     end
 
+    test "refill carries the fractional remainder instead of discarding it" do
+      clock = start_supervised!({Agent, fn -> 0 end})
+      clock_fun = fn -> Agent.get(clock, & &1) end
+
+      limiter = start_supervised!({Limiter, [rpm: 3, max_in_flight: 10, clock: clock_fun]})
+
+      # Drain the initial burst.
+      for _ <- 1..3 do
+        acquirer = blocked_acquire(limiter)
+        assert_receive {:acquired, ^acquirer}
+      end
+
+      # 30 virtual seconds at rpm 3 earns 1.5 tokens: one grants now, the
+      # half token must carry into the next refill.
+      Agent.update(clock, fn _ -> 30_000 end)
+      first = blocked_acquire(limiter)
+      assert_receive {:acquired, ^first}
+
+      second = blocked_acquire(limiter)
+      refute_receive {:acquired, _}, 50
+
+      # 15 more seconds earns 0.75 — only enough with the carried half.
+      Agent.update(clock, fn _ -> 45_000 end)
+      send(limiter, :wake)
+
+      assert_receive {:acquired, ^second}
+    end
+
     test "rpm: :infinity never blocks on tokens" do
       limiter = start_supervised!({Limiter, [rpm: :infinity, max_in_flight: 100]})
 

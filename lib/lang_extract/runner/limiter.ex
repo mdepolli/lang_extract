@@ -216,14 +216,19 @@ defmodule LangExtract.Runner.Limiter do
     elapsed = now - state.refilled_at
     earned = elapsed * state.rpm / 60_000
 
-    if earned >= 1 do
-      %{
+    cond do
+      earned < 1 ->
         state
-        | tokens: min(state.rpm, state.tokens + trunc(earned)),
-          refilled_at: now
-      }
-    else
-      state
+
+      state.tokens + trunc(earned) >= state.rpm ->
+        # Bucket full: overflow is discarded, fraction included.
+        %{state | tokens: state.rpm, refilled_at: now}
+
+      true ->
+        # Backdate refilled_at by the unearned fraction so partial tokens
+        # carry into the next refill instead of being discarded each time.
+        leftover_ms = round((earned - trunc(earned)) * 60_000 / state.rpm)
+        %{state | tokens: state.tokens + trunc(earned), refilled_at: now - leftover_ms}
     end
   end
 
