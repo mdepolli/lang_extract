@@ -233,22 +233,31 @@ defmodule LangExtract do
   defp normalize_example(%Template.Example{} = example), do: {:ok, example}
 
   defp normalize_example(%{} = map) do
-    with {:ok, text} <- fetch_field(map, :text, "example"),
-         {:ok, extractions} <-
-           normalize_all(get_field(map, :extractions, []), &normalize_extraction/1) do
+    with {:ok, text} <- fetch_string(map, :text, "example"),
+         {:ok, list} <- expect_list(get_field(map, :extractions, []), :extractions, "example"),
+         {:ok, extractions} <- normalize_all(list, &normalize_extraction/1) do
       {:ok, %Template.Example{text: text, extractions: extractions}}
     end
+  end
+
+  defp normalize_example(other) do
+    {:error, ArgumentError.exception("example must be a map, got: #{inspect(other)}")}
   end
 
   defp normalize_extraction(%Extraction{} = extraction), do: {:ok, extraction}
 
   defp normalize_extraction(%{} = map) do
-    attributes = map |> get_field(:attributes, %{}) |> normalize_attribute_keys()
-
-    with {:ok, class} <- fetch_field(map, :class, "extraction"),
-         {:ok, text} <- fetch_field(map, :text, "extraction") do
-      {:ok, %Extraction{class: class, text: text, attributes: attributes}}
+    with {:ok, class} <- fetch_string(map, :class, "extraction"),
+         {:ok, text} <- fetch_string(map, :text, "extraction"),
+         {:ok, attributes} <-
+           expect_map(get_field(map, :attributes, %{}), :attributes, "extraction") do
+      {:ok,
+       %Extraction{class: class, text: text, attributes: normalize_attribute_keys(attributes)}}
     end
+  end
+
+  defp normalize_extraction(other) do
+    {:error, ArgumentError.exception("extraction must be a map, got: #{inspect(other)}")}
   end
 
   # The wire format decodes attributes with string keys (JSON); template
@@ -262,7 +271,7 @@ defmodule LangExtract do
     end)
   end
 
-  defp fetch_field(map, key, owner) do
+  defp fetch_string(map, key, owner) do
     case get_field(map, key, nil) do
       nil ->
         {:error,
@@ -270,9 +279,25 @@ defmodule LangExtract do
            "#{owner} is missing required key #{inspect(key)}: #{inspect(map)}"
          )}
 
-      value ->
+      value when is_binary(value) ->
         {:ok, value}
+
+      value ->
+        type_error(owner, key, "a string", value)
     end
+  end
+
+  defp expect_list(value, _key, _owner) when is_list(value), do: {:ok, value}
+  defp expect_list(value, key, owner), do: type_error(owner, key, "a list", value)
+
+  defp expect_map(value, _key, _owner) when is_map(value), do: {:ok, value}
+  defp expect_map(value, key, owner), do: type_error(owner, key, "a map", value)
+
+  defp type_error(owner, key, expected, value) do
+    {:error,
+     ArgumentError.exception(
+       "#{owner} key #{inspect(key)} must be #{expected}, got: #{inspect(value)}"
+     )}
   end
 
   defp get_field(map, key, default) do

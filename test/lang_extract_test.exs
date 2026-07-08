@@ -117,5 +117,48 @@ defmodule LangExtractTest do
 
       assert message =~ "example is missing required key :text"
     end
+
+    test "wrong-typed fields return ArgumentError naming the field" do
+      assert {:error, %ArgumentError{message: message}} =
+               LangExtract.template("Extract.", examples: [%{text: 42}])
+
+      assert message =~ "example key :text must be a string, got: 42"
+
+      assert {:error, %ArgumentError{message: message}} =
+               LangExtract.template("Extract.", examples: [%{text: "hello", extractions: "nope"}])
+
+      assert message =~ ~s(example key :extractions must be a list, got: "nope")
+
+      assert {:error, %ArgumentError{message: message}} =
+               LangExtract.template("Extract.",
+                 examples: [
+                   %{
+                     text: "hello world",
+                     extractions: [%{class: "w", text: "hello", attributes: "bogus"}]
+                   }
+                 ]
+               )
+
+      assert message =~ ~s(extraction key :attributes must be a map, got: "bogus")
+
+      assert {:error, %ArgumentError{message: message}} =
+               LangExtract.template("Extract.",
+                 examples: [%{text: "hello", extractions: [%{class: 42, text: "hello"}]}]
+               )
+
+      assert message =~ "extraction key :class must be a string, got: 42"
+    end
+
+    test "non-map examples and extractions return ArgumentError instead of raising" do
+      assert {:error, %ArgumentError{message: message}} =
+               LangExtract.template("Extract.", examples: ["nope"])
+
+      assert message =~ ~s(example must be a map, got: "nope")
+
+      assert {:error, %ArgumentError{message: message}} =
+               LangExtract.template("Extract.", examples: [%{text: "hello", extractions: [42]}])
+
+      assert message =~ "extraction must be a map, got: 42"
+    end
   end
 end
