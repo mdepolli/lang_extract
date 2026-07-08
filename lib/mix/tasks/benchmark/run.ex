@@ -17,7 +17,8 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   @impl Mix.Task
   def run(args) do
-    Mix.Task.run("app.start")
+    Mix.Task.run("app.config")
+    {:ok, _} = Application.ensure_all_started(:lang_extract)
     do_run(args, &live_extract/2)
   end
 

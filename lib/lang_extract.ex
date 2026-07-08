@@ -313,6 +313,8 @@ defmodule LangExtract do
     end
   end
 
+  @type provider :: :claude | :openai | :gemini
+
   @doc """
   Creates a configured LLM client for extraction.
 
@@ -328,8 +330,6 @@ defmodule LangExtract do
       client = LangExtract.new(:gemini, api_key: "gm-...")
 
   """
-  @type provider :: :claude | :openai | :gemini
-
   @spec new(provider(), keyword()) :: Client.t()
   def new(provider, opts \\ []) do
     module = resolve_provider(provider)

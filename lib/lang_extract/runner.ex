@@ -219,8 +219,16 @@ defmodule LangExtract.Runner do
       |> Keyword.merge(retry: false)
 
     opts = Keyword.put(client.options, :req_options, req_options)
-    {:ok, http_client} = client.provider.build_http_client(opts)
 
-    %Client{provider: client.provider, options: opts, http_client: http_client}
+    case client.provider.build_http_client(opts) do
+      {:ok, http_client} ->
+        %Client{provider: client.provider, options: opts, http_client: http_client}
+
+      {:error, reason} ->
+        raise ArgumentError,
+              "runner failed to rebuild the client's HTTP client: #{inspect(reason)}. " <>
+                "The client built successfully at LangExtract.new/2 — if its API key " <>
+                "came from an env var, has it been unset since?"
+    end
   end
 end

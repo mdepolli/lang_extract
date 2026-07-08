@@ -1,9 +1,14 @@
 defmodule LangExtract.RunnerTest do
   use ExUnit.Case, async: true
 
+  alias LangExtract.Client
   alias LangExtract.Result
   alias LangExtract.Runner
   alias LangExtract.Test.FakeAnthropic
+
+  defmodule RebuildFails do
+    def build_http_client(_opts), do: {:error, :api_key_missing}
+  end
 
   defp client do
     LangExtract.new(:claude,
@@ -35,6 +40,17 @@ defmodule LangExtract.RunnerTest do
       assert runner_client.http_client.options.plug == {Req.Test, __MODULE__}
       # the original client is untouched
       assert client().http_client.options.retry == :transient
+    end
+
+    @tag :capture_log
+    test "a client that can't be rebuilt fails startup with a descriptive error" do
+      broken = %Client{provider: RebuildFails, options: [], http_client: nil}
+      Process.flag(:trap_exit, true)
+
+      assert {:error, {%ArgumentError{message: message}, _stacktrace}} =
+               Runner.start_link(client: broken)
+
+      assert message =~ "failed to rebuild the client's HTTP client: :api_key_missing"
     end
 
     test "two runners coexist with independent budgets" do
