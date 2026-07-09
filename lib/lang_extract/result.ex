@@ -21,7 +21,7 @@ defmodule LangExtract.Result do
   """
 
   alias LangExtract.Alignment.Span
-  alias LangExtract.Pipeline.ChunkError
+  alias LangExtract.ChunkError
   alias LangExtract.Provider.Response
 
   @type t :: %__MODULE__{

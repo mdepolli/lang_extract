@@ -2,7 +2,7 @@ defmodule LangExtract.Runner.DeliveryTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Chunker.Chunk
-  alias LangExtract.Pipeline.{ChunkError, ChunkResult}
+  alias LangExtract.{ChunkError, ChunkResult}
   alias LangExtract.Runner.Delivery
 
   defp chunks(n) do

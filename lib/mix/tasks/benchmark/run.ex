@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   use Mix.Task
 
-  alias LangExtract.{Pipeline.ChunkError, Result, Serializer}
+  alias LangExtract.{ChunkError, Result, Serializer}
 
   @default_corpus "benchmark/corpus"
   @default_out "benchmark/results/elixir"

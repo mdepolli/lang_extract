@@ -202,7 +202,7 @@ defmodule LangExtract.RunnerTest do
       assert {:ok,
               %Result{
                 spans: [],
-                errors: [%LangExtract.Pipeline.ChunkError{reason: :server_error}]
+                errors: [%LangExtract.ChunkError{reason: :server_error}]
               }} =
                Runner.run(runner, "hello world", template())
     end

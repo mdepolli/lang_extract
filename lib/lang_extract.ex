@@ -121,8 +121,8 @@ defmodule LangExtract do
   @doc """
   Streams per-chunk extraction results as each chunk completes.
 
-  Returns a lazy stream of `{:ok, %Pipeline.ChunkResult{}}` and
-  `{:error, %Pipeline.ChunkError{}}` events in **completion order**, not
+  Returns a lazy stream of `{:ok, %ChunkResult{}}` and
+  `{:error, %ChunkError{}}` events in **completion order**, not
   document order — consumers who need latency don't wait for slow chunks;
   consumers who need order sort by the byte ranges every event carries.
   Nothing runs until the stream is consumed, and a slow consumer naturally

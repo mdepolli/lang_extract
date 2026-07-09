@@ -40,7 +40,7 @@ defmodule LangExtract.Runner.Delivery do
   """
 
   alias LangExtract.Chunker.Chunk
-  alias LangExtract.Pipeline.{ChunkError, ChunkResult}
+  alias LangExtract.{ChunkError, ChunkResult}
 
   @type event :: {:ok, ChunkResult.t()} | {:error, ChunkError.t()}
 

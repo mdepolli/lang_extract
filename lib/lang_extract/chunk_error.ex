@@ -1,4 +1,4 @@
-defmodule LangExtract.Pipeline.ChunkError do
+defmodule LangExtract.ChunkError do
   @moduledoc """
   A failed chunk with its byte position in the source and error reason.
 

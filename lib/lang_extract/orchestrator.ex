@@ -20,6 +20,8 @@ defmodule LangExtract.Orchestrator do
   alias LangExtract.{
     Alignment.Span,
     Chunker,
+    ChunkError,
+    ChunkResult,
     Client,
     Pipeline,
     Prompt,
@@ -28,7 +30,6 @@ defmodule LangExtract.Orchestrator do
     Template
   }
 
-  alias Pipeline.{ChunkError, ChunkResult}
   alias Provider.Response
 
   # run/4 is literally a consumer of stream/4 — one code path, no drift.

@@ -1,10 +1,10 @@
-defmodule LangExtract.Pipeline.ChunkResult do
+defmodule LangExtract.ChunkResult do
   @moduledoc """
   A successfully processed chunk: its byte range in the source and the
   spans extracted from it.
 
   The per-chunk success unit yielded by `LangExtract.stream/4`, sibling of
-  `LangExtract.Pipeline.ChunkError`. Span byte offsets are already adjusted
+  `LangExtract.ChunkError`. Span byte offsets are already adjusted
   to the original document, not the chunk.
   """
 

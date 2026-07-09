@@ -89,6 +89,8 @@ defmodule LangExtract.MixProject do
       groups_for_modules: [
         Core: [
           LangExtract,
+          LangExtract.ChunkError,
+          LangExtract.ChunkResult,
           LangExtract.Client,
           LangExtract.Extraction,
           LangExtract.Result,
@@ -107,9 +109,7 @@ defmodule LangExtract.MixProject do
           LangExtract.Chunker,
           LangExtract.Chunker.Chunk,
           LangExtract.Pipeline,
-          LangExtract.Pipeline.Parser,
-          LangExtract.Pipeline.ChunkError,
-          LangExtract.Pipeline.ChunkResult
+          LangExtract.Pipeline.Parser
         ],
         Alignment: [
           LangExtract.Alignment.Aligner,

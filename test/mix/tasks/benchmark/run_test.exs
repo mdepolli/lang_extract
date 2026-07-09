@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Benchmark.RunTest do
   use ExUnit.Case, async: false
 
   alias LangExtract.Alignment.Span
-  alias LangExtract.Pipeline.ChunkError
+  alias LangExtract.ChunkError
   alias LangExtract.Result
   alias Mix.Tasks.Benchmark.Run
 
