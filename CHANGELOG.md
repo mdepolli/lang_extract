@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Deserialization validates field types, not just shape** —
+  `Serializer.from_map/1` (and `load_jsonl/1`) now reject maps whose byte
+  offsets or attributes have the wrong type, enforcing the `Span`
+  invariant at the decode boundary: located spans carry non-negative
+  integer offsets, `not_found` spans carry `nil`, attributes are a map.
+  Previously such maps decoded into corrupted structs that crashed later
+  in consumer offset arithmetic; now they fail fast as
+  `{:error, :invalid_data}`. `result_from_map/1` applies the same checks
+  to chunk errors.
+
 - **Breaking: `ChunkError`, `ChunkResult`, and `Span` are promoted to
   `LangExtract.*`** (were `LangExtract.Pipeline.ChunkError`,
   `LangExtract.Pipeline.ChunkResult`, `LangExtract.Alignment.Span`) —

@@ -79,8 +79,22 @@ defmodule LangExtract.SerializerTest do
                Serializer.result_from_map(map)
     end
 
+    test "round-trips a not_found span through the full result" do
+      result = %Result{spans: [@exact_span, @not_found_span], errors: [], usage: nil}
+
+      map = Serializer.result_to_map(@source, result)
+
+      assert {:ok, {@source, loaded}} = Serializer.result_from_map(map)
+      assert loaded.spans == [@exact_span, @not_found_span]
+    end
+
     test "result_from_map rejects invalid shapes" do
       valid = Serializer.result_to_map(@source, %Result{spans: [], errors: [], usage: nil})
+
+      assert {:error, :invalid_data} = Serializer.result_from_map(Map.delete(valid, "text"))
+
+      assert {:error, :invalid_data} =
+               Serializer.result_from_map(Map.delete(valid, "extractions"))
 
       assert {:error, :invalid_data} = Serializer.result_from_map(Map.delete(valid, "errors"))
       assert {:error, :invalid_data} = Serializer.result_from_map(%{valid | "errors" => "nope"})
@@ -90,6 +104,20 @@ defmodule LangExtract.SerializerTest do
                Serializer.result_from_map(%{valid | "errors" => [%{"reason" => :not_a_string}]})
 
       assert {:error, :invalid_data} = Serializer.result_from_map("nope")
+    end
+
+    test "result_from_map rejects chunk errors with malformed byte offsets" do
+      valid = Serializer.result_to_map(@source, %Result{spans: [], errors: [], usage: nil})
+      error = %{"byte_start" => 0, "byte_end" => 1000, "reason" => "boom"}
+
+      for bad <- [
+            %{error | "byte_start" => "0"},
+            %{error | "byte_end" => nil},
+            %{error | "byte_start" => -1}
+          ] do
+        assert {:error, :invalid_data} =
+                 Serializer.result_from_map(%{valid | "errors" => [bad]})
+      end
     end
   end
 
@@ -218,10 +246,60 @@ defmodule LangExtract.SerializerTest do
       assert {:error, :invalid_data} = Serializer.from_map(map)
     end
 
+    test "returns error for non-integer byte offsets on a located span" do
+      map = %{
+        "text" => @source,
+        "extractions" => [
+          %{"text" => "fox", "status" => "exact", "byte_start" => "16", "byte_end" => 19}
+        ]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for a located span with missing byte offsets" do
+      map = %{
+        "text" => @source,
+        "extractions" => [%{"text" => "fox", "status" => "fuzzy"}]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for a not_found span carrying byte offsets" do
+      map = %{
+        "text" => @source,
+        "extractions" => [
+          %{"text" => "unicorn", "status" => "not_found", "byte_start" => 0, "byte_end" => 7}
+        ]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for non-map attributes" do
+      map = %{
+        "text" => @source,
+        "extractions" => [
+          %{
+            "text" => "fox",
+            "status" => "exact",
+            "byte_start" => 16,
+            "byte_end" => 19,
+            "attributes" => "nope"
+          }
+        ]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
     test "accepts a class-less span (align/3 round-trip)" do
       map = %{
         "text" => @source,
-        "extractions" => [%{"text" => "fox", "status" => "exact"}]
+        "extractions" => [
+          %{"text" => "fox", "status" => "exact", "byte_start" => 16, "byte_end" => 19}
+        ]
       }
 
       assert {:ok, {@source, [span]}} = Serializer.from_map(map)

@@ -48,8 +48,10 @@ defmodule LangExtract.Serializer do
   @doc """
   Converts a plain map back to `{source, %LangExtract.Result{}}`.
 
-  Returns `{:error, :invalid_data}` if the shape is wrong. Error reasons
-  come back as the `inspect/1` strings `result_to_map/2` wrote.
+  Returns `{:error, :invalid_data}` if the shape or field types are wrong —
+  validation is strict, so a decoded struct upholds the same invariants as
+  a pipeline-produced one. Error reasons come back as the `inspect/1`
+  strings `result_to_map/2` wrote.
   """
   @spec result_from_map(term()) :: {:ok, {String.t(), Result.t()}} | {:error, :invalid_data}
   def result_from_map(%{"text" => text, "extractions" => extractions, "errors" => errors} = map)
@@ -96,8 +98,10 @@ defmodule LangExtract.Serializer do
   @doc """
   Converts a plain map back to extraction results.
 
-  Returns `{:error, :invalid_data}` if the shape is wrong or an extraction
-  has an unknown `"status"`.
+  Returns `{:error, :invalid_data}` if the shape is wrong, an extraction
+  has an unknown `"status"`, or field types don't match the `Span`
+  invariants (located spans carry integer offsets, `not_found` spans
+  carry `nil`).
   """
   @spec from_map(map()) :: {:ok, {String.t(), [Span.t()]}} | {:error, :invalid_data}
   def from_map(%{"text" => text, "extractions" => extractions})
@@ -183,7 +187,8 @@ defmodule LangExtract.Serializer do
          "byte_end" => byte_end,
          "reason" => reason
        })
-       when is_binary(reason) do
+       when is_integer(byte_start) and byte_start >= 0 and is_integer(byte_end) and
+              byte_end >= 0 and is_binary(reason) do
     {:ok, %ChunkError{byte_start: byte_start, byte_end: byte_end, reason: reason}}
   end
 
@@ -209,7 +214,9 @@ defmodule LangExtract.Serializer do
   # serialized form must round-trip.
   defp map_to_span(%{"text" => text} = map) when is_binary(text) do
     with {:ok, status} <- parse_status(map["status"]),
-         :ok <- validate_optional_string(map["class"]) do
+         :ok <- validate_optional_string(map["class"]),
+         :ok <- validate_offsets(status, map["byte_start"], map["byte_end"]),
+         {:ok, attributes} <- validate_attributes(map["attributes"]) do
       {:ok,
        %Span{
          class: map["class"],
@@ -217,7 +224,7 @@ defmodule LangExtract.Serializer do
          byte_start: map["byte_start"],
          byte_end: map["byte_end"],
          status: status,
-         attributes: map["attributes"] || %{}
+         attributes: attributes
        }}
     end
   end
@@ -226,6 +233,22 @@ defmodule LangExtract.Serializer do
 
   defp validate_optional_string(value) when is_binary(value) or is_nil(value), do: :ok
   defp validate_optional_string(_value), do: {:error, :invalid_data}
+
+  # Enforces the Span invariant at the decode boundary: located spans carry
+  # integer offsets, not_found spans carry nil — so a loaded span that passes
+  # located?/1 is safe for offset arithmetic.
+  defp validate_offsets(:not_found, nil, nil), do: :ok
+
+  defp validate_offsets(status, byte_start, byte_end)
+       when status in [:exact, :fuzzy] and is_integer(byte_start) and byte_start >= 0 and
+              is_integer(byte_end) and byte_end >= 0,
+       do: :ok
+
+  defp validate_offsets(_status, _byte_start, _byte_end), do: {:error, :invalid_data}
+
+  defp validate_attributes(nil), do: {:ok, %{}}
+  defp validate_attributes(attributes) when is_map(attributes), do: {:ok, attributes}
+  defp validate_attributes(_attributes), do: {:error, :invalid_data}
 
   defp parse_status("exact"), do: {:ok, :exact}
   defp parse_status("fuzzy"), do: {:ok, :fuzzy}
