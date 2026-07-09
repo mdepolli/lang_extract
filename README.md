@@ -49,7 +49,7 @@ Add `lang_extract` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lang_extract, "~> 0.8.0"}
+    {:lang_extract, "~> 0.9.0"}
   ]
 end
 ```
