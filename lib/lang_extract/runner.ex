@@ -43,8 +43,7 @@ defmodule LangExtract.Runner do
 
   use Supervisor
 
-  alias LangExtract.{Client, Orchestrator, Result, Template}
-  alias LangExtract.Pipeline.{ChunkError, ChunkResult}
+  alias LangExtract.{ChunkError, ChunkResult, Client, Orchestrator, Result, Template}
   alias LangExtract.Runner.{Delivery, Limiter, Request}
 
   @type option ::

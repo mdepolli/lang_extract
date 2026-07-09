@@ -11,6 +11,10 @@ defmodule LangExtract.Orchestrator do
   Two consumption modes over one chunk pipeline: `run/4` collects everything
   and restores document order; `stream/4` yields each chunk's outcome the
   moment it completes.
+
+  Internal — no stability guarantees; see the README's "Stability"
+  section. Documented because it explains how the library works, not
+  because it is API.
   """
 
   @default_max_chunk_chars 1000
@@ -18,17 +22,18 @@ defmodule LangExtract.Orchestrator do
   @default_max_concurrency 10
 
   alias LangExtract.{
-    Alignment.Span,
     Chunker,
+    ChunkError,
+    ChunkResult,
     Client,
     Pipeline,
     Prompt,
     Provider,
     Result,
+    Span,
     Template
   }
 
-  alias Pipeline.{ChunkError, ChunkResult}
   alias Provider.Response
 
   # run/4 is literally a consumer of stream/4 — one code path, no drift.

@@ -4,6 +4,10 @@ defmodule LangExtract.Pipeline.Parser do
 
   Expects normalized maps from `LangExtract.WireFormat`. Validates each
   entry before constructing structs.
+
+  Internal — no stability guarantees; see the README's "Stability"
+  section. Documented because it explains how the library works, not
+  because it is API.
   """
 
   require Logger

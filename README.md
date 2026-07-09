@@ -107,9 +107,11 @@ the examples also teach the wire format. A description alone would leave the
 model to invent all of that.
 
 Each extraction's `text` must appear verbatim in its example's `text`: the
-examples double as alignment ground truth, and `LangExtract.template/2`
+examples double as alignment ground truth, and `LangExtract.template!/2`
 checks this at construction — a template that builds is a template whose
-examples align. (Pass `validate: false` to skip the check.)
+examples align. (Pass `validate: false` to skip the check, or use
+`LangExtract.template/2` for tagged tuples instead of raises when the
+task definition arrives at runtime.)
 
 ```elixir
 template =
@@ -197,12 +199,13 @@ source into sentence-aware chunks and process them in parallel:
 )
 ```
 
-Byte offsets in the returned spans are adjusted to reference the original source,
-not individual chunks.
+Chunk size is measured in characters (`String.length/1`); span offsets are
+always bytes. Byte offsets in the returned spans are adjusted to reference
+the original source, not individual chunks.
 
 ## Prompt Validation
 
-`LangExtract.template/2` validates at construction, so most code never calls
+`LangExtract.template!/2` validates at construction, so most code never calls
 the validator directly. It stays public for templates built with
 `validate: false` or assembled as structs by hand:
 
@@ -241,7 +244,22 @@ stripped automatically.
 
 ## Serialization
 
-Convert results to plain maps for storage or interop:
+Store a full run faithfully — spans, errors, and usage together:
+
+```elixir
+{:ok, result} = LangExtract.run(client, source, template)
+
+map = LangExtract.Serializer.result_to_map(source, result)
+# %{"text" => "...", "extractions" => [...], "errors" => [...], "usage" => %{...}}
+
+{:ok, {source, result}} = LangExtract.Serializer.result_from_map(map)
+```
+
+Error reasons are open terms, so they serialize as their `inspect/1`
+rendering — JSON-safe, but one-way: loaded errors carry the rendered
+string, not the original term.
+
+For bare span lists (e.g. from `align/3`), the span-level pair applies:
 
 ```elixir
 map = LangExtract.Serializer.to_map(source, spans)
@@ -250,7 +268,7 @@ map = LangExtract.Serializer.to_map(source, spans)
 {:ok, {source, spans}} = LangExtract.Serializer.from_map(map)
 ```
 
-Save and load multiple results as JSONL:
+Save and load multiple span-level results as JSONL:
 
 ```elixir
 LangExtract.Serializer.save_jsonl([{source1, spans1}, {source2, spans2}], "results.jsonl")
@@ -307,7 +325,12 @@ the server's `retry-after` deadline; retries follow the runner's policy
 (429 waits are free, 5xx/transport consume a per-chunk budget); stream
 delivery is bounded so slow consumers throttle admission; and shutdown
 drains gracefully — in-flight requests finish, unstarted chunks come back
-as `%ChunkError{reason: :drained}`. See the
+as `%ChunkError{reason: :drained}`.
+
+Despite the matching shapes, `Runner.run/4` is not a drop-in for
+`LangExtract.run/4`: the runner retries failures into per-chunk errors and
+never returns `{:error, _}`, while the standalone function abandons the
+document on a task exit. See the
 [production guide](guides/production.md) for sizing and the full
 failure-semantics table.
 
@@ -351,18 +374,53 @@ phases:
 
 ```
 lib/lang_extract/
-├── alignment/              # Tokenizer, Token, Aligner, Span
-├── pipeline/               # Parser, ChunkError
+├── alignment/              # Tokenizer, Token, Aligner
+├── pipeline/               # Parser
 ├── prompt/                 # Builder, Validator
 ├── provider/               # Claude, OpenAI, Gemini implementations
+├── runner/                 # Limiter, Request, Delivery
+├── chunk_error.ex          # Failed chunk: byte range + reason
+├── chunk_result.ex         # Successful chunk: byte range + spans + usage
+├── chunker.ex              # Sentence-aware text splitting
 ├── client.ex               # Configured LLM client struct
 ├── extraction.ex           # Core extraction struct
-├── wire_format.ex          # LLM wire format (encode + decode)
 ├── orchestrator.ex         # Pipeline wiring + chunking
-├── chunker.ex              # Sentence-aware text splitting
-├── pipeline.ex             # Extraction pipeline public API
-└── serializer.ex           # Serialization + JSONL
+├── pipeline.ex             # Extraction pipeline API
+├── result.ex               # run/4 success value: spans + errors + usage
+├── runner.ex               # Supervised runner with a shared request budget
+├── serializer.ex           # Serialization + JSONL
+├── span.ex                 # Grounded extraction: byte offsets + status
+├── template.ex             # Task definition (+ Template.Example)
+└── wire_format.ex          # LLM wire format (encode + decode)
 ```
+
+## Stability
+
+The docs group modules by tier; SemVer applies to the **Core API** tier.
+
+**Core API** — the contract. `LangExtract` and `LangExtract.Runner` are the
+entry points. The structs they hand out are stable to match on: `Result`,
+`Span`, `ChunkError`, `ChunkResult`, and `Provider.Response` freely;
+`Template`, `Template.Example`, and `Extraction` are public for matching
+and introspection but constructed via `template!/2`, not struct literals.
+`Client` is opaque — build it with `new/2`, hold it, pass it. The
+`Provider` behaviour (callbacks plus `t:LangExtract.Provider.error/0`),
+`Serializer`, `Prompt.Validator`, and the telemetry events documented in
+the telemetry guide complete the contract.
+
+**Advanced** — public and documented, best-effort stability: `WireFormat`,
+`Chunker`, `Aligner`, `Pipeline`, `Prompt.Builder`. Changes land in minor
+releases with changelog notice.
+
+**Providers** — the built-in implementations behind `new/2`'s `:claude`,
+`:openai`, and `:gemini`. Use them via the atom; the modules themselves
+carry no stability guarantee beyond the `Provider` behaviour they
+implement.
+
+**Internal** — no guarantees: `Orchestrator`, `Pipeline.Parser`,
+`Runner.{Limiter,Request,Delivery}`, `Tokenizer`, `Token`. Their docs
+stay published because they explain how the library works, not because
+they're API.
 
 ## Compared to the Python Original
 

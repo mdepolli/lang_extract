@@ -2,9 +2,9 @@ defmodule Mix.Tasks.Benchmark.RunTest do
   # async: false — do_run tests swap the global Mix shell.
   use ExUnit.Case, async: false
 
-  alias LangExtract.Alignment.Span
-  alias LangExtract.Pipeline.ChunkError
+  alias LangExtract.ChunkError
   alias LangExtract.Result
+  alias LangExtract.Span
   alias Mix.Tasks.Benchmark.Run
 
   @span %Span{

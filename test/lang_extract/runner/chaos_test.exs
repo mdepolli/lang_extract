@@ -6,7 +6,7 @@ defmodule LangExtract.Runner.ChaosTest do
   """
   use ExUnit.Case, async: true
 
-  alias LangExtract.Pipeline.{ChunkError, ChunkResult}
+  alias LangExtract.{ChunkError, ChunkResult}
   alias LangExtract.Result
   alias LangExtract.Runner
   alias LangExtract.Test.FakeAnthropic

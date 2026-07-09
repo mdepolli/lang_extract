@@ -9,6 +9,10 @@ defmodule LangExtract.Alignment.Tokenizer do
   preserved (upstream tracks newlines as a token flag instead) for
   continuous offset mapping and the chunker's newline rule.
   No text normalization is applied.
+
+  Internal — no stability guarantees; see the README's "Stability"
+  section. Documented because it explains how the library works, not
+  because it is API.
   """
 
   alias LangExtract.Alignment.Token

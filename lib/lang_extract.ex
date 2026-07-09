@@ -4,8 +4,9 @@ defmodule LangExtract do
   Maps extraction strings back to exact byte positions in source text.
 
   This module is the main entry point: `new/2` builds a client,
-  `template/2` builds a validated task definition, `run/4` executes the
-  full pipeline, and `align/3` / `extract/3` expose the lower-level steps.
+  `template!/2` builds a validated task definition (`template/2` is its
+  non-raising twin for runtime task data), `run/4` executes the full
+  pipeline, and `align/3` / `extract/3` expose the lower-level steps.
   Beyond the facade:
 
     * `LangExtract.Prompt.Validator` — pre-flight check that few-shot
@@ -23,17 +24,18 @@ defmodule LangExtract do
     Pipeline,
     Provider,
     Result,
+    Span,
     Template
   }
 
-  alias LangExtract.Alignment.{Aligner, Span}
+  alias LangExtract.Alignment.Aligner
   alias LangExtract.Prompt.Validator
   alias LangExtract.Prompt.Validator.ValidationError
 
   @doc """
   Aligns extraction strings to byte spans in source text.
 
-  Returns a list of `%LangExtract.Alignment.Span{}` structs, one per extraction.
+  Returns a list of `%LangExtract.Span{}` structs, one per extraction.
 
   ## Options
 
@@ -42,10 +44,10 @@ defmodule LangExtract do
   ## Examples
 
       iex> LangExtract.align("the quick brown fox", ["quick brown"])
-      [%LangExtract.Alignment.Span{text: "quick brown", byte_start: 4, byte_end: 15, status: :exact}]
+      [%LangExtract.Span{text: "quick brown", byte_start: 4, byte_end: 15, status: :exact}]
 
   """
-  @spec align(String.t(), [String.t()], keyword()) :: [LangExtract.Alignment.Span.t()]
+  @spec align(String.t(), [String.t()], keyword()) :: [LangExtract.Span.t()]
   def align(source, extractions, opts \\ []) do
     Aligner.align(source, extractions, opts)
   end
@@ -99,6 +101,7 @@ defmodule LangExtract do
     * `:accept_lesser` - allow prefix-fragment grounding (default `true`)
     * `:exact_algorithm` - `:dp` (occurrence DP, default) or `:first_occurrence`
 
+  Chunk size is measured in characters; span offsets are always bytes.
   See the "Alignment and Spans" guide for what the alignment options tune.
 
   ## Examples
@@ -119,8 +122,8 @@ defmodule LangExtract do
   @doc """
   Streams per-chunk extraction results as each chunk completes.
 
-  Returns a lazy stream of `{:ok, %Pipeline.ChunkResult{}}` and
-  `{:error, %Pipeline.ChunkError{}}` events in **completion order**, not
+  Returns a lazy stream of `{:ok, %ChunkResult{}}` and
+  `{:error, %ChunkError{}}` events in **completion order**, not
   document order — consumers who need latency don't wait for slow chunks;
   consumers who need order sort by the byte ranges every event carries.
   Nothing runs until the stream is consumed, and a slow consumer naturally

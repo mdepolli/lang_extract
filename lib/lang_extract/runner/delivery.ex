@@ -37,10 +37,14 @@ defmodule LangExtract.Runner.Delivery do
   emitted as `{:error, %ChunkError{reason: :drained}}`, detected when
   admission hits the dead task supervisor. Consumers already handle
   per-chunk errors, so drain adds no new consumer code paths.
+
+  Internal — no stability guarantees; see the README's "Stability"
+  section. Documented because it explains how the library works, not
+  because it is API.
   """
 
   alias LangExtract.Chunker.Chunk
-  alias LangExtract.Pipeline.{ChunkError, ChunkResult}
+  alias LangExtract.{ChunkError, ChunkResult}
 
   @type event :: {:ok, ChunkResult.t()} | {:error, ChunkError.t()}
 

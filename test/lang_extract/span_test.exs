@@ -1,7 +1,7 @@
-defmodule LangExtract.Alignment.SpanTest do
+defmodule LangExtract.SpanTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Alignment.Span
+  alias LangExtract.Span
 
   doctest Span
 

@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`Serializer.result_to_map/2` and `result_from_map/1`** — serialize the
+  full `Result` (spans + errors + usage), not just span lists; the shape
+  extends `to_map/2`'s with `"errors"` and `"usage"`. Error reasons are
+  open terms, so they serialize as their `inspect/1` rendering — JSON-safe
+  but one-way: loaded errors carry the rendered string.
+  `chunk_error_to_map/1` is public alongside `span_to_map/1`.
+
+- **Explicit stability tiers** — the docs now group modules as Core API
+  (the SemVer contract), Advanced (public, best-effort), Providers, and
+  Internal (no guarantees), and the README's new "Stability" section
+  spells out the contract: the two entry points, which structs are stable
+  to match on, which are public for matching but constructed via
+  `template!/2`, and that `Client` is opaque. Internal-tier moduledocs
+  carry the marker themselves, so a reader landing directly on an
+  internal module's page sees its status.
+
+### Changed
+
+- **Deserialization validates field types, not just shape** —
+  `Serializer.from_map/1` (and `load_jsonl/1`) now reject maps whose byte
+  offsets or attributes have the wrong type, enforcing the `Span`
+  invariant at the decode boundary: located spans carry non-negative
+  integer offsets, `not_found` spans carry `nil`, attributes are a map.
+  Previously such maps decoded into corrupted structs that crashed later
+  in consumer offset arithmetic; now they fail fast as
+  `{:error, :invalid_data}`. `result_from_map/1` applies the same checks
+  to chunk errors.
+
+- **Breaking: `ChunkError`, `ChunkResult`, and `Span` are promoted to
+  `LangExtract.*`** (were `LangExtract.Pipeline.ChunkError`,
+  `LangExtract.Pipeline.ChunkResult`, `LangExtract.Alignment.Span`) —
+  they are contract structs consumers match on (`Result.spans`,
+  `Result.errors`, `stream/4` events, `align/3`) and now carry top-level
+  names like the rest of the contract surface (`Result`, `Extraction`).
+  Alignment/pipeline machinery (`Aligner`, `Tokenizer`, `Parser`) stays
+  namespaced. Migration: drop the middle segment from aliases and struct
+  patterns — `LangExtract.Alignment.Span` → `LangExtract.Span`,
+  `LangExtract.Pipeline.ChunkError` → `LangExtract.ChunkError`.
+
 ## [0.8.0] - 2026-07-08
 
 ### Added
@@ -534,6 +577,7 @@ byte positions in the source.
 - **Req-inspired API** — `new/2` + `run/3,4` instead of a single function with
   many keyword arguments.
 
+[Unreleased]: https://github.com/mdepolli/lang_extract/compare/v0.8.0...HEAD
 [0.8.0]: https://github.com/mdepolli/lang_extract/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mdepolli/lang_extract/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mdepolli/lang_extract/compare/v0.5.0...v0.6.0

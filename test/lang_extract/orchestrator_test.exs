@@ -1,17 +1,17 @@
 defmodule LangExtract.OrchestratorTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Alignment.Span
+  alias LangExtract.ChunkError
   alias LangExtract.Client
-  alias LangExtract.Pipeline.ChunkError
   alias LangExtract.Result
+  alias LangExtract.Span
   alias LangExtract.Test.FakeAnthropic
   alias LangExtract.Test.Telemetry
 
   @req_options [plug: {Req.Test, __MODULE__}]
 
   describe "LangExtract.stream/4" do
-    alias LangExtract.Pipeline.ChunkResult
+    alias LangExtract.ChunkResult
 
     @two_chunk_source "First sentence here. Second sentence there."
 

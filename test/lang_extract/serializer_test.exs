@@ -1,8 +1,8 @@
 defmodule LangExtract.SerializerTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Alignment.Span
   alias LangExtract.Serializer
+  alias LangExtract.Span
 
   @exact_span %Span{
     text: "fox",
@@ -23,6 +23,103 @@ defmodule LangExtract.SerializerTest do
   }
 
   @source "the quick brown fox"
+
+  describe "result_to_map/2 and result_from_map/1" do
+    alias LangExtract.ChunkError
+    alias LangExtract.Result
+
+    @chunk_error %ChunkError{
+      byte_start: 0,
+      byte_end: 1000,
+      reason: {:task_exit, :timeout}
+    }
+
+    test "round-trips a full result: spans, errors, and usage" do
+      result = %Result{
+        spans: [@exact_span],
+        errors: [@chunk_error],
+        usage: %{input_tokens: 120, output_tokens: 45}
+      }
+
+      map = Serializer.result_to_map(@source, result)
+
+      assert map["text"] == @source
+      assert [%{"text" => "fox"}] = map["extractions"]
+      assert map["usage"] == %{"input_tokens" => 120, "output_tokens" => 45}
+
+      assert {:ok, {@source, loaded}} = Serializer.result_from_map(map)
+      assert loaded.spans == [@exact_span]
+      assert loaded.usage == %{input_tokens: 120, output_tokens: 45}
+      assert [%ChunkError{byte_start: 0, byte_end: 1000}] = loaded.errors
+    end
+
+    test "error reasons serialize as their inspect rendering and stay JSON-encodable" do
+      result = %Result{spans: [], errors: [@chunk_error], usage: nil}
+
+      map = Serializer.result_to_map(@source, result)
+
+      assert [%{"byte_start" => 0, "byte_end" => 1000, "reason" => "{:task_exit, :timeout}"}] =
+               map["errors"]
+
+      # the point of inspect: arbitrary reason terms must not break encoding
+      assert {:ok, _json} = Jason.encode(map)
+
+      # round-trip carries the rendered string, not the original term
+      assert {:ok, {_source, loaded}} = Serializer.result_from_map(map)
+      assert [%ChunkError{reason: "{:task_exit, :timeout}"}] = loaded.errors
+    end
+
+    test "nil usage round-trips as nil" do
+      result = %Result{spans: [], errors: [], usage: nil}
+
+      map = Serializer.result_to_map(@source, result)
+      assert map["usage"] == nil
+
+      assert {:ok, {@source, %Result{usage: nil, spans: [], errors: []}}} =
+               Serializer.result_from_map(map)
+    end
+
+    test "round-trips a not_found span through the full result" do
+      result = %Result{spans: [@exact_span, @not_found_span], errors: [], usage: nil}
+
+      map = Serializer.result_to_map(@source, result)
+
+      assert {:ok, {@source, loaded}} = Serializer.result_from_map(map)
+      assert loaded.spans == [@exact_span, @not_found_span]
+    end
+
+    test "result_from_map rejects invalid shapes" do
+      valid = Serializer.result_to_map(@source, %Result{spans: [], errors: [], usage: nil})
+
+      assert {:error, :invalid_data} = Serializer.result_from_map(Map.delete(valid, "text"))
+
+      assert {:error, :invalid_data} =
+               Serializer.result_from_map(Map.delete(valid, "extractions"))
+
+      assert {:error, :invalid_data} = Serializer.result_from_map(Map.delete(valid, "errors"))
+      assert {:error, :invalid_data} = Serializer.result_from_map(%{valid | "errors" => "nope"})
+      assert {:error, :invalid_data} = Serializer.result_from_map(%{valid | "usage" => "nope"})
+
+      assert {:error, :invalid_data} =
+               Serializer.result_from_map(%{valid | "errors" => [%{"reason" => :not_a_string}]})
+
+      assert {:error, :invalid_data} = Serializer.result_from_map("nope")
+    end
+
+    test "result_from_map rejects chunk errors with malformed byte offsets" do
+      valid = Serializer.result_to_map(@source, %Result{spans: [], errors: [], usage: nil})
+      error = %{"byte_start" => 0, "byte_end" => 1000, "reason" => "boom"}
+
+      for bad <- [
+            %{error | "byte_start" => "0"},
+            %{error | "byte_end" => nil},
+            %{error | "byte_start" => -1}
+          ] do
+        assert {:error, :invalid_data} =
+                 Serializer.result_from_map(%{valid | "errors" => [bad]})
+      end
+    end
+  end
 
   describe "to_map/2" do
     test "converts spans to plain map" do
@@ -149,10 +246,60 @@ defmodule LangExtract.SerializerTest do
       assert {:error, :invalid_data} = Serializer.from_map(map)
     end
 
+    test "returns error for non-integer byte offsets on a located span" do
+      map = %{
+        "text" => @source,
+        "extractions" => [
+          %{"text" => "fox", "status" => "exact", "byte_start" => "16", "byte_end" => 19}
+        ]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for a located span with missing byte offsets" do
+      map = %{
+        "text" => @source,
+        "extractions" => [%{"text" => "fox", "status" => "fuzzy"}]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for a not_found span carrying byte offsets" do
+      map = %{
+        "text" => @source,
+        "extractions" => [
+          %{"text" => "unicorn", "status" => "not_found", "byte_start" => 0, "byte_end" => 7}
+        ]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
+    test "returns error for non-map attributes" do
+      map = %{
+        "text" => @source,
+        "extractions" => [
+          %{
+            "text" => "fox",
+            "status" => "exact",
+            "byte_start" => 16,
+            "byte_end" => 19,
+            "attributes" => "nope"
+          }
+        ]
+      }
+
+      assert {:error, :invalid_data} = Serializer.from_map(map)
+    end
+
     test "accepts a class-less span (align/3 round-trip)" do
       map = %{
         "text" => @source,
-        "extractions" => [%{"text" => "fox", "status" => "exact"}]
+        "extractions" => [
+          %{"text" => "fox", "status" => "exact", "byte_start" => 16, "byte_end" => 19}
+        ]
       }
 
       assert {:ok, {@source, [span]}} = Serializer.from_map(map)

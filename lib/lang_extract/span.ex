@@ -1,4 +1,4 @@
-defmodule LangExtract.Alignment.Span do
+defmodule LangExtract.Span do
   @moduledoc """
   An aligned extraction with its byte position in the source text.
 
@@ -28,11 +28,11 @@ defmodule LangExtract.Alignment.Span do
   The filtering idiom for consumers doing offset arithmetic:
 
       iex> spans = [
-      ...>   %LangExtract.Alignment.Span{text: "found", status: :exact, byte_start: 0, byte_end: 5},
-      ...>   %LangExtract.Alignment.Span{text: "lost", status: :not_found}
+      ...>   %LangExtract.Span{text: "found", status: :exact, byte_start: 0, byte_end: 5},
+      ...>   %LangExtract.Span{text: "lost", status: :not_found}
       ...> ]
-      iex> Enum.filter(spans, &LangExtract.Alignment.Span.located?/1)
-      [%LangExtract.Alignment.Span{text: "found", status: :exact, byte_start: 0, byte_end: 5}]
+      iex> Enum.filter(spans, &LangExtract.Span.located?/1)
+      [%LangExtract.Span{text: "found", status: :exact, byte_start: 0, byte_end: 5}]
 
   """
   @spec located?(t()) :: boolean()

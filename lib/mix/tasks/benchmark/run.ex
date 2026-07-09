@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   use Mix.Task
 
-  alias LangExtract.{Pipeline.ChunkError, Result, Serializer}
+  alias LangExtract.{Result, Serializer}
 
   @default_corpus "benchmark/corpus"
   @default_out "benchmark/results/elixir"
@@ -227,7 +227,7 @@ defmodule Mix.Tasks.Benchmark.Run do
       "extractions" => Enum.map(spans, &Serializer.span_to_map/1),
       "timing" => %{"total_ms" => elapsed_ms},
       "usage" => usage,
-      "errors" => Enum.map(errors, &chunk_error_to_map/1)
+      "errors" => Enum.map(errors, &Serializer.chunk_error_to_map/1)
     }
   end
 
@@ -298,13 +298,5 @@ defmodule Mix.Tasks.Benchmark.Run do
       model: @model,
       max_tokens: @max_tokens
     )
-  end
-
-  defp chunk_error_to_map(%ChunkError{} = err) do
-    %{
-      "byte_start" => err.byte_start,
-      "byte_end" => err.byte_end,
-      "reason" => inspect(err.reason)
-    }
   end
 end

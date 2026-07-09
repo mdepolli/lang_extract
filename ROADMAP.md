@@ -18,16 +18,9 @@ and natural extensions that haven't been implemented yet.
 - **Cross-chunk deduplication** — When chunking, the same entity might be
   extracted from adjacent chunks at sentence boundaries. The original merges
   non-overlapping extractions with a first-pass-wins strategy.
-- **Contraction tokenization parity** — We keep contractions whole ("don't"
-  is one token); upstream splits them, letting its lesser phase ground the
-  fragment. Documented divergence (see `@known_divergences` in
-  `aligner_parity_test.exs`); revisit only if it shows up in real workloads.
 
 ## Multi-Document & Batch Processing
 
-- **Batch inference** — Process multiple documents in a single call with
-  shared chunking and parallel provider calls (subsumed by the Runner's
-  `stream_corpus` if 0.8.0 lands as designed).
 - **`AnnotatedDocument` wrapper** — A struct tying together document ID, source
   text, and extraction results for multi-document workflows.
 
@@ -47,8 +40,6 @@ and natural extensions that haven't been implemented yet.
 - **URL text fetching** — Download and extract text from URLs (needs an
   explicit opt-in design; fetching arbitrary URLs is an SSRF surface).
 - **CSV dataset loading** — Batch-load documents from CSV files.
-- **Template loading from files** — Load `PromptTemplate` from JSON/YAML files
-  instead of constructing structs in code.
 
 ## Tokenization
 
@@ -78,4 +69,10 @@ Shipped or obsoleted: plural stemming, `MATCH_LESSER`, and variable fuzzy
 windows (0.5.0 aligner parity port); `compare.py` rewrite and alignment
 comparison tooling (benchmark overhaul, parity achieved); `align/3` smoke
 test (covered by doctests); smart-quote normalization pass (superseded by
-the parity policy — we match upstream behavior rather than exceeding it).
+the parity policy — we match upstream behavior rather than exceeding it);
+contraction tokenization parity (closed by 0.8.0's tokenizer parity —
+contractions now split at the apostrophe like upstream); batch inference
+(subsumed by `Runner.stream_corpus/4`, shipped 0.7.0); template loading
+from files (obsoleted by the plain-map front door — `template!/2` accepts
+JSON-decoded maps verbatim, so file loading is `File.read!` + `Jason.decode!`
++ `template!/2`).
