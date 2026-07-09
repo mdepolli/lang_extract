@@ -18,12 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking: `ChunkError` and `ChunkResult` are promoted to
-  `LangExtract.ChunkError` and `LangExtract.ChunkResult`** (were
-  `LangExtract.Pipeline.*`) — they are contract structs consumers match on
-  (`Result.errors`, `stream/4` events) and now carry top-level names like
-  the rest of the contract surface (`Result`, `Span`, `Extraction`).
-  Migration: drop `Pipeline.` from aliases and struct patterns —
+- **Breaking: `ChunkError`, `ChunkResult`, and `Span` are promoted to
+  `LangExtract.*`** (were `LangExtract.Pipeline.ChunkError`,
+  `LangExtract.Pipeline.ChunkResult`, `LangExtract.Alignment.Span`) —
+  they are contract structs consumers match on (`Result.spans`,
+  `Result.errors`, `stream/4` events, `align/3`) and now carry top-level
+  names like the rest of the contract surface (`Result`, `Extraction`).
+  Alignment/pipeline machinery (`Aligner`, `Tokenizer`, `Parser`) stays
+  namespaced. Migration: drop the middle segment from aliases and struct
+  patterns — `LangExtract.Alignment.Span` → `LangExtract.Span`,
   `LangExtract.Pipeline.ChunkError` → `LangExtract.ChunkError`.
 
 ## [0.8.0] - 2026-07-08

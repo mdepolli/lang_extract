@@ -1,10 +1,10 @@
 defmodule LangExtract.OrchestratorTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Alignment.Span
   alias LangExtract.ChunkError
   alias LangExtract.Client
   alias LangExtract.Result
+  alias LangExtract.Span
   alias LangExtract.Test.FakeAnthropic
   alias LangExtract.Test.Telemetry
 

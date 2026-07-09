@@ -3,8 +3,9 @@ defmodule LangExtract.Pipeline do
   Extraction pipeline: normalize LLM output, parse extractions, align to source text.
   """
 
-  alias LangExtract.Alignment.{Aligner, Span}
+  alias LangExtract.Alignment.Aligner
   alias LangExtract.Pipeline.Parser
+  alias LangExtract.Span
   alias LangExtract.WireFormat
 
   @spec extract(String.t(), String.t(), keyword()) ::

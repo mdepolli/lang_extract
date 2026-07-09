@@ -1,8 +1,8 @@
 defmodule LangExtract.SerializerTest do
   use ExUnit.Case, async: true
 
-  alias LangExtract.Alignment.Span
   alias LangExtract.Serializer
+  alias LangExtract.Span
 
   @exact_span %Span{
     text: "fox",

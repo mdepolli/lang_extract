@@ -8,9 +8,9 @@ defmodule LangExtract.ChunkResult do
   to the original document, not the chunk.
   """
 
-  alias LangExtract.Alignment.Span
   alias LangExtract.Chunker.Chunk
   alias LangExtract.Provider.Response
+  alias LangExtract.Span
 
   @type t :: %__MODULE__{
           byte_start: non_neg_integer(),

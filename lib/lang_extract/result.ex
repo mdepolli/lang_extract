@@ -20,9 +20,9 @@ defmodule LangExtract.Result do
   totals cover the successful chunks only.
   """
 
-  alias LangExtract.Alignment.Span
   alias LangExtract.ChunkError
   alias LangExtract.Provider.Response
+  alias LangExtract.Span
 
   @type t :: %__MODULE__{
           spans: [Span.t()],

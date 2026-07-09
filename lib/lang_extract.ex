@@ -24,17 +24,18 @@ defmodule LangExtract do
     Pipeline,
     Provider,
     Result,
+    Span,
     Template
   }
 
-  alias LangExtract.Alignment.{Aligner, Span}
+  alias LangExtract.Alignment.Aligner
   alias LangExtract.Prompt.Validator
   alias LangExtract.Prompt.Validator.ValidationError
 
   @doc """
   Aligns extraction strings to byte spans in source text.
 
-  Returns a list of `%LangExtract.Alignment.Span{}` structs, one per extraction.
+  Returns a list of `%LangExtract.Span{}` structs, one per extraction.
 
   ## Options
 
@@ -43,10 +44,10 @@ defmodule LangExtract do
   ## Examples
 
       iex> LangExtract.align("the quick brown fox", ["quick brown"])
-      [%LangExtract.Alignment.Span{text: "quick brown", byte_start: 4, byte_end: 15, status: :exact}]
+      [%LangExtract.Span{text: "quick brown", byte_start: 4, byte_end: 15, status: :exact}]
 
   """
-  @spec align(String.t(), [String.t()], keyword()) :: [LangExtract.Alignment.Span.t()]
+  @spec align(String.t(), [String.t()], keyword()) :: [LangExtract.Span.t()]
   def align(source, extractions, opts \\ []) do
     Aligner.align(source, extractions, opts)
   end

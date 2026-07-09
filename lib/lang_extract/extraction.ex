@@ -6,7 +6,7 @@ defmodule LangExtract.Extraction do
   Appears on both sides of the LLM exchange: as expected output inside
   few-shot examples (`LangExtract.Template.Example`) and as parsed output
   from the model's reply. Positional information is added later by the
-  aligner on `%LangExtract.Alignment.Span{}`.
+  aligner on `%LangExtract.Span{}`.
   """
 
   @type t :: %__MODULE__{

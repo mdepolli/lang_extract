@@ -94,6 +94,7 @@ defmodule LangExtract.MixProject do
           LangExtract.Client,
           LangExtract.Extraction,
           LangExtract.Result,
+          LangExtract.Span,
           LangExtract.Template,
           LangExtract.Template.Example,
           LangExtract.WireFormat
@@ -113,7 +114,6 @@ defmodule LangExtract.MixProject do
         ],
         Alignment: [
           LangExtract.Alignment.Aligner,
-          LangExtract.Alignment.Span,
           LangExtract.Alignment.Token,
           LangExtract.Alignment.Tokenizer
         ],

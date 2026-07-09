@@ -18,7 +18,6 @@ defmodule LangExtract.Orchestrator do
   @default_max_concurrency 10
 
   alias LangExtract.{
-    Alignment.Span,
     Chunker,
     ChunkError,
     ChunkResult,
@@ -27,6 +26,7 @@ defmodule LangExtract.Orchestrator do
     Prompt,
     Provider,
     Result,
+    Span,
     Template
   }
 

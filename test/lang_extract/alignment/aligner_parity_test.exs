@@ -11,7 +11,8 @@ defmodule LangExtract.Alignment.AlignerParityTest do
   """
   use ExUnit.Case, async: true
 
-  alias LangExtract.Alignment.{Aligner, Span}
+  alias LangExtract.Alignment.Aligner
+  alias LangExtract.Span
 
   @fixtures "test/fixtures/alignment_parity.json"
             |> File.read!()

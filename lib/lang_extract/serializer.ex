@@ -13,9 +13,9 @@ defmodule LangExtract.Serializer do
   rendered string, not the original term.
   """
 
-  alias LangExtract.Alignment.Span
   alias LangExtract.ChunkError
   alias LangExtract.Result
+  alias LangExtract.Span
 
   @doc """
   Converts extraction results to a plain map.

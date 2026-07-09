@@ -7,7 +7,7 @@ statuses mean, and where the sharp edges are.
 
 ## Spans
 
-Every alignment produces a `LangExtract.Alignment.Span`:
+Every alignment produces a `LangExtract.Span`:
 
 | Field        | Description                                           |
 | ------------ | ----------------------------------------------------- |

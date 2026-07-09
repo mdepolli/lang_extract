@@ -29,7 +29,8 @@ defmodule LangExtract.Alignment.Aligner do
   aligner_parity_test.exs for the observable consequences.
   """
 
-  alias LangExtract.Alignment.{Span, Tokenizer}
+  alias LangExtract.Alignment.Tokenizer
+  alias LangExtract.Span
 
   @default_fuzzy_threshold 0.75
   @default_min_density 1 / 3
