@@ -86,51 +86,51 @@ defmodule LangExtract.MixProject do
         "guides/production.md",
         "CHANGELOG.md"
       ],
+      # Groups mirror the stability tiers (see README "Stability"): the
+      # Core API group is the SemVer contract; Advanced is public but
+      # best-effort; Internal carries no guarantees — docs kept for
+      # maintainers and the curious.
       groups_for_modules: [
-        Core: [
+        "Core API": [
           LangExtract,
           LangExtract.ChunkError,
           LangExtract.ChunkResult,
           LangExtract.Client,
           LangExtract.Extraction,
-          LangExtract.Result,
-          LangExtract.Span,
-          LangExtract.Template,
-          LangExtract.Template.Example,
-          LangExtract.WireFormat
-        ],
-        Prompt: [
-          LangExtract.Prompt.Builder,
           LangExtract.Prompt.Validator,
           LangExtract.Prompt.Validator.Issue,
-          LangExtract.Prompt.Validator.ValidationError
+          LangExtract.Prompt.Validator.ValidationError,
+          LangExtract.Provider,
+          LangExtract.Provider.Response,
+          LangExtract.Result,
+          LangExtract.Runner,
+          LangExtract.Serializer,
+          LangExtract.Span,
+          LangExtract.Template,
+          LangExtract.Template.Example
         ],
-        Pipeline: [
-          LangExtract.Orchestrator,
+        Advanced: [
+          LangExtract.Alignment.Aligner,
           LangExtract.Chunker,
           LangExtract.Chunker.Chunk,
           LangExtract.Pipeline,
-          LangExtract.Pipeline.Parser
-        ],
-        Alignment: [
-          LangExtract.Alignment.Aligner,
-          LangExtract.Alignment.Token,
-          LangExtract.Alignment.Tokenizer
+          LangExtract.Prompt.Builder,
+          LangExtract.WireFormat
         ],
         Providers: [
-          LangExtract.Provider,
-          LangExtract.Provider.Response,
           LangExtract.Provider.Claude,
           LangExtract.Provider.OpenAI,
           LangExtract.Provider.Gemini
         ],
-        Runner: [
-          LangExtract.Runner,
+        Internal: [
+          LangExtract.Alignment.Token,
+          LangExtract.Alignment.Tokenizer,
+          LangExtract.Orchestrator,
+          LangExtract.Pipeline.Parser,
+          LangExtract.Runner.Delivery,
           LangExtract.Runner.Limiter,
-          LangExtract.Runner.Request,
-          LangExtract.Runner.Delivery
-        ],
-        Serialization: [LangExtract.Serializer]
+          LangExtract.Runner.Request
+        ]
       ]
     ]
   end

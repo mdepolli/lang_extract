@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   but one-way: loaded errors carry the rendered string.
   `chunk_error_to_map/1` is public alongside `span_to_map/1`.
 
+- **Explicit stability tiers** — the docs now group modules as Core API
+  (the SemVer contract), Advanced (public, best-effort), Providers, and
+  Internal (no guarantees), and the README's new "Stability" section
+  spells out the contract: the two entry points, which structs are stable
+  to match on, which are public for matching but constructed via
+  `template!/2`, and that `Client` is opaque.
+
 ### Changed
 
 - **Breaking: `ChunkError`, `ChunkResult`, and `Span` are promoted to

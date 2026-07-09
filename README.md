@@ -359,18 +359,53 @@ phases:
 
 ```
 lib/lang_extract/
-├── alignment/              # Tokenizer, Token, Aligner, Span
-├── pipeline/               # Parser, ChunkError
+├── alignment/              # Tokenizer, Token, Aligner
+├── pipeline/               # Parser
 ├── prompt/                 # Builder, Validator
 ├── provider/               # Claude, OpenAI, Gemini implementations
+├── runner/                 # Limiter, Request, Delivery
+├── chunk_error.ex          # Failed chunk: byte range + reason
+├── chunk_result.ex         # Successful chunk: byte range + spans + usage
+├── chunker.ex              # Sentence-aware text splitting
 ├── client.ex               # Configured LLM client struct
 ├── extraction.ex           # Core extraction struct
-├── wire_format.ex          # LLM wire format (encode + decode)
 ├── orchestrator.ex         # Pipeline wiring + chunking
-├── chunker.ex              # Sentence-aware text splitting
-├── pipeline.ex             # Extraction pipeline public API
-└── serializer.ex           # Serialization + JSONL
+├── pipeline.ex             # Extraction pipeline API
+├── result.ex               # run/4 success value: spans + errors + usage
+├── runner.ex               # Supervised runner with a shared request budget
+├── serializer.ex           # Serialization + JSONL
+├── span.ex                 # Grounded extraction: byte offsets + status
+├── template.ex             # Task definition (+ Template.Example)
+└── wire_format.ex          # LLM wire format (encode + decode)
 ```
+
+## Stability
+
+The docs group modules by tier; SemVer applies to the **Core API** tier.
+
+**Core API** — the contract. `LangExtract` and `LangExtract.Runner` are the
+entry points. The structs they hand out are stable to match on: `Result`,
+`Span`, `ChunkError`, `ChunkResult`, and `Provider.Response` freely;
+`Template`, `Template.Example`, and `Extraction` are public for matching
+and introspection but constructed via `template!/2`, not struct literals.
+`Client` is opaque — build it with `new/2`, hold it, pass it. The
+`Provider` behaviour (callbacks plus `t:LangExtract.Provider.error/0`),
+`Serializer`, `Prompt.Validator`, and the telemetry events documented in
+the telemetry guide complete the contract.
+
+**Advanced** — public and documented, best-effort stability: `WireFormat`,
+`Chunker`, `Aligner`, `Pipeline`, `Prompt.Builder`. Changes land in minor
+releases with changelog notice.
+
+**Providers** — the built-in implementations behind `new/2`'s `:claude`,
+`:openai`, and `:gemini`. Use them via the atom; the modules themselves
+carry no stability guarantee beyond the `Provider` behaviour they
+implement.
+
+**Internal** — no guarantees: `Orchestrator`, `Pipeline.Parser`,
+`Runner.{Limiter,Request,Delivery}`, `Tokenizer`, `Token`. Their docs
+stay published because they explain how the library works, not because
+they're API.
 
 ## Compared to the Python Original
 
