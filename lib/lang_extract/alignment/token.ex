@@ -4,6 +4,10 @@ defmodule LangExtract.Alignment.Token do
 
   Offsets are byte positions in the UTF-8 binary, matching `Regex.scan/3`
   with `return: :index` and consumable by `binary_part/3`.
+
+  Internal — no stability guarantees; see the README's "Stability"
+  section. Documented because it explains how the library works, not
+  because it is API.
   """
 
   @type token_type :: :word | :number | :punctuation | :whitespace

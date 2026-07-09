@@ -17,6 +17,10 @@ defmodule LangExtract.Runner.Limiter do
   Tokens refill lazily from elapsed time — no timer ticks. The clock is
   injectable (`:clock`, a zero-arity fun returning milliseconds) so tests
   run on virtual time.
+
+  Internal — no stability guarantees; see the README's "Stability"
+  section. Documented because it explains how the library works, not
+  because it is API.
   """
 
   use GenServer

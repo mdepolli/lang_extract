@@ -21,6 +21,10 @@ defmodule LangExtract.Runner.Request do
   Emits `[:lang_extract, :chunk, :retry]` before each retry with the
   `attempt` number and a compact `reason`
   (`:rate_limited` | `:server_error` | `:transport_error`).
+
+  Internal — no stability guarantees; see the README's "Stability"
+  section. Documented because it explains how the library works, not
+  because it is API.
   """
 
   alias LangExtract.{Client, Provider}

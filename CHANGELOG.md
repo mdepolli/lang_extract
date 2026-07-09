@@ -21,7 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Internal (no guarantees), and the README's new "Stability" section
   spells out the contract: the two entry points, which structs are stable
   to match on, which are public for matching but constructed via
-  `template!/2`, and that `Client` is opaque.
+  `template!/2`, and that `Client` is opaque. Internal-tier moduledocs
+  carry the marker themselves, so a reader landing directly on an
+  internal module's page sees its status.
 
 ### Changed
 

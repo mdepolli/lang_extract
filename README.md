@@ -244,7 +244,22 @@ stripped automatically.
 
 ## Serialization
 
-Convert results to plain maps for storage or interop:
+Store a full run faithfully — spans, errors, and usage together:
+
+```elixir
+{:ok, result} = LangExtract.run(client, source, template)
+
+map = LangExtract.Serializer.result_to_map(source, result)
+# %{"text" => "...", "extractions" => [...], "errors" => [...], "usage" => %{...}}
+
+{:ok, {source, result}} = LangExtract.Serializer.result_from_map(map)
+```
+
+Error reasons are open terms, so they serialize as their `inspect/1`
+rendering — JSON-safe, but one-way: loaded errors carry the rendered
+string, not the original term.
+
+For bare span lists (e.g. from `align/3`), the span-level pair applies:
 
 ```elixir
 map = LangExtract.Serializer.to_map(source, spans)
@@ -253,7 +268,7 @@ map = LangExtract.Serializer.to_map(source, spans)
 {:ok, {source, spans}} = LangExtract.Serializer.from_map(map)
 ```
 
-Save and load multiple results as JSONL:
+Save and load multiple span-level results as JSONL:
 
 ```elixir
 LangExtract.Serializer.save_jsonl([{source1, spans1}, {source2, spans2}], "results.jsonl")
