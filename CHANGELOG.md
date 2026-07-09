@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] - 2026-07-08
 
 ### Added
 
@@ -34,7 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stdlib convention demands (`URI.new/new!`), and the un-suffixed name
   becomes the non-raising twin for runtime task definitions:
   `{:ok, Template.t()} | {:error, ArgumentError.t() | ValidationError.t()}`.
-  Migration: append `!` to existing calls.
+  Migration: append `!` to existing calls. Wrong-typed fields (non-string
+  `text`/`class`, non-list `extractions`, non-map `attributes`, non-map
+  examples) also return the tagged `ArgumentError` — previously they
+  raised `Protocol.UndefinedError` or `FunctionClauseError` deep in
+  normalization, undermining the non-raising contract.
 - **Breaking: `Provider.infer/2` returns `%Provider.Response{}`** (was a
   bare `{:ok, text}`) — the struct carries `text` plus `usage`
   (input/output token counts, `nil` when the API omits them). Providers
@@ -66,6 +70,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   newlines (lines opening with quotes or digits now break). Alignment
   offsets for spans involving contractions/possessives may shift; chunk
   boundaries on decimal-heavy text may differ.
+
+### Fixed
+
+- **`Runner` limiter refill no longer discards fractional tokens** — each
+  refill reset the bucket's clock, dropping up to one token's worth of
+  elapsed time per refill event; at low `:rpm` the under-delivery was
+  proportionally large. Partial tokens now carry into the next refill.
 
 ## [0.7.0] - 2026-07-06
 
@@ -523,7 +534,8 @@ byte positions in the source.
 - **Req-inspired API** — `new/2` + `run/3,4` instead of a single function with
   many keyword arguments.
 
-[Unreleased]: https://github.com/mdepolli/lang_extract/compare/v0.6.0...HEAD
+[0.8.0]: https://github.com/mdepolli/lang_extract/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/mdepolli/lang_extract/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mdepolli/lang_extract/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mdepolli/lang_extract/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mdepolli/lang_extract/compare/v0.3.0...v0.4.0
