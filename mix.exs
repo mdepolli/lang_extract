@@ -119,6 +119,7 @@ defmodule LangExtract.MixProject do
         ],
         Providers: [
           LangExtract.Provider,
+          LangExtract.Provider.Response,
           LangExtract.Provider.Claude,
           LangExtract.Provider.OpenAI,
           LangExtract.Provider.Gemini

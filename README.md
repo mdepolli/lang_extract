@@ -107,9 +107,11 @@ the examples also teach the wire format. A description alone would leave the
 model to invent all of that.
 
 Each extraction's `text` must appear verbatim in its example's `text`: the
-examples double as alignment ground truth, and `LangExtract.template/2`
+examples double as alignment ground truth, and `LangExtract.template!/2`
 checks this at construction — a template that builds is a template whose
-examples align. (Pass `validate: false` to skip the check.)
+examples align. (Pass `validate: false` to skip the check, or use
+`LangExtract.template/2` for tagged tuples instead of raises when the
+task definition arrives at runtime.)
 
 ```elixir
 template =
@@ -197,12 +199,13 @@ source into sentence-aware chunks and process them in parallel:
 )
 ```
 
-Byte offsets in the returned spans are adjusted to reference the original source,
-not individual chunks.
+Chunk size is measured in characters (`String.length/1`); span offsets are
+always bytes. Byte offsets in the returned spans are adjusted to reference
+the original source, not individual chunks.
 
 ## Prompt Validation
 
-`LangExtract.template/2` validates at construction, so most code never calls
+`LangExtract.template!/2` validates at construction, so most code never calls
 the validator directly. It stays public for templates built with
 `validate: false` or assembled as structs by hand:
 
@@ -307,7 +310,12 @@ the server's `retry-after` deadline; retries follow the runner's policy
 (429 waits are free, 5xx/transport consume a per-chunk budget); stream
 delivery is bounded so slow consumers throttle admission; and shutdown
 drains gracefully — in-flight requests finish, unstarted chunks come back
-as `%ChunkError{reason: :drained}`. See the
+as `%ChunkError{reason: :drained}`.
+
+Despite the matching shapes, `Runner.run/4` is not a drop-in for
+`LangExtract.run/4`: the runner retries failures into per-chunk errors and
+never returns `{:error, _}`, while the standalone function abandons the
+document on a task exit. See the
 [production guide](guides/production.md) for sizing and the full
 failure-semantics table.
 

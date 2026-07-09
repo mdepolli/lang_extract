@@ -4,8 +4,9 @@ defmodule LangExtract do
   Maps extraction strings back to exact byte positions in source text.
 
   This module is the main entry point: `new/2` builds a client,
-  `template/2` builds a validated task definition, `run/4` executes the
-  full pipeline, and `align/3` / `extract/3` expose the lower-level steps.
+  `template!/2` builds a validated task definition (`template/2` is its
+  non-raising twin for runtime task data), `run/4` executes the full
+  pipeline, and `align/3` / `extract/3` expose the lower-level steps.
   Beyond the facade:
 
     * `LangExtract.Prompt.Validator` — pre-flight check that few-shot
@@ -99,6 +100,7 @@ defmodule LangExtract do
     * `:accept_lesser` - allow prefix-fragment grounding (default `true`)
     * `:exact_algorithm` - `:dp` (occurrence DP, default) or `:first_occurrence`
 
+  Chunk size is measured in characters; span offsets are always bytes.
   See the "Alignment and Spans" guide for what the alignment options tune.
 
   ## Examples

@@ -9,6 +9,11 @@ defmodule LangExtract.Provider do
 
   Shared helpers for API key resolution and HTTP error mapping are provided
   for use by provider implementations.
+
+  Providers speak `Req`: `c:build_http_client/1` must return a
+  `Req.Request.t()`, and the shared helpers assume Req's request and
+  response shapes. Third-party implementations must build on Req (or wrap
+  their transport in it) — no transport adapter layer is planned.
   """
 
   alias LangExtract.Provider.Response
