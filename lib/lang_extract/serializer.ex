@@ -3,10 +3,19 @@ defmodule LangExtract.Serializer do
   Serialization and deserialization of extraction results.
 
   Converts between LangExtract structs and plain maps/JSON for storage,
-  debugging, and interop with external systems.
+  debugging, and interop with external systems. `result_to_map/2` /
+  `result_from_map/1` cover the full `LangExtract.Result` (spans, errors,
+  usage); `to_map/2` / `from_map/1` cover bare span lists (e.g. from
+  `LangExtract.align/3`).
+
+  Error reasons are open terms, so they serialize as their `inspect/1`
+  rendering — JSON-safe, but one-way: a loaded `ChunkError` carries the
+  rendered string, not the original term.
   """
 
   alias LangExtract.Alignment.Span
+  alias LangExtract.ChunkError
+  alias LangExtract.Result
 
   @doc """
   Converts extraction results to a plain map.
@@ -16,6 +25,56 @@ defmodule LangExtract.Serializer do
     %{
       "text" => source,
       "extractions" => Enum.map(spans, &span_to_map/1)
+    }
+  end
+
+  @doc """
+  Converts a full `LangExtract.Result` and its source to a plain map.
+
+  The map extends `to_map/2`'s shape with `"errors"` (see
+  `chunk_error_to_map/1`) and `"usage"` (string-keyed token counts, or
+  `nil` when the run reported none).
+  """
+  @spec result_to_map(String.t(), Result.t()) :: map()
+  def result_to_map(source, %Result{} = result) do
+    source
+    |> to_map(result.spans)
+    |> Map.merge(%{
+      "errors" => Enum.map(result.errors, &chunk_error_to_map/1),
+      "usage" => usage_to_map(result.usage)
+    })
+  end
+
+  @doc """
+  Converts a plain map back to `{source, %LangExtract.Result{}}`.
+
+  Returns `{:error, :invalid_data}` if the shape is wrong. Error reasons
+  come back as the `inspect/1` strings `result_to_map/2` wrote.
+  """
+  @spec result_from_map(term()) :: {:ok, {String.t(), Result.t()}} | {:error, :invalid_data}
+  def result_from_map(%{"text" => text, "extractions" => extractions, "errors" => errors} = map)
+      when is_binary(text) and is_list(extractions) and is_list(errors) do
+    with {:ok, spans} <- map_spans(extractions),
+         {:ok, chunk_errors} <- map_chunk_errors(errors),
+         {:ok, usage} <- usage_from_map(map["usage"]) do
+      {:ok, {text, %Result{spans: spans, errors: chunk_errors, usage: usage}}}
+    end
+  end
+
+  def result_from_map(_), do: {:error, :invalid_data}
+
+  @doc """
+  Converts a `LangExtract.ChunkError` to a plain map with string keys.
+
+  The open `reason` term is rendered with `inspect/1` so the map is always
+  JSON-encodable.
+  """
+  @spec chunk_error_to_map(ChunkError.t()) :: map()
+  def chunk_error_to_map(%ChunkError{} = error) do
+    %{
+      "byte_start" => error.byte_start,
+      "byte_end" => error.byte_end,
+      "reason" => inspect(error.reason)
     }
   end
 
@@ -92,6 +151,43 @@ defmodule LangExtract.Serializer do
       {:error, _} -> {:halt, {:error, :invalid_data}}
     end
   end
+
+  defp usage_to_map(nil), do: nil
+
+  defp usage_to_map(usage) do
+    %{"input_tokens" => usage.input_tokens, "output_tokens" => usage.output_tokens}
+  end
+
+  defp usage_from_map(nil), do: {:ok, nil}
+
+  defp usage_from_map(%{"input_tokens" => input, "output_tokens" => output})
+       when is_integer(input) and is_integer(output) do
+    {:ok, %{input_tokens: input, output_tokens: output}}
+  end
+
+  defp usage_from_map(_), do: {:error, :invalid_data}
+
+  defp map_chunk_errors(errors) do
+    errors
+    |> Enum.reduce_while([], fn map, acc ->
+      case map_to_chunk_error(map) do
+        {:ok, error} -> {:cont, [error | acc]}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> collected()
+  end
+
+  defp map_to_chunk_error(%{
+         "byte_start" => byte_start,
+         "byte_end" => byte_end,
+         "reason" => reason
+       })
+       when is_binary(reason) do
+    {:ok, %ChunkError{byte_start: byte_start, byte_end: byte_end, reason: reason}}
+  end
+
+  defp map_to_chunk_error(_), do: {:error, :invalid_data}
 
   defp map_spans(extractions) do
     extractions

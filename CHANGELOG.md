@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Serializer.result_to_map/2` and `result_from_map/1`** — serialize the
+  full `Result` (spans + errors + usage), not just span lists; the shape
+  extends `to_map/2`'s with `"errors"` and `"usage"`. Error reasons are
+  open terms, so they serialize as their `inspect/1` rendering — JSON-safe
+  but one-way: loaded errors carry the rendered string.
+  `chunk_error_to_map/1` is public alongside `span_to_map/1`.
+
 ### Changed
 
 - **Breaking: `ChunkError` and `ChunkResult` are promoted to
