@@ -72,7 +72,23 @@ text against the source bytes.
 ## How alignment works
 
 The aligner mirrors upstream langextract v1.6.0 (+ #485) semantics in four
-phases, each tried in order:
+phases. Occurrence DP runs once over the whole extraction list; leftovers
+fall through the remaining phases one extraction at a time:
+
+```mermaid
+flowchart TD
+    In([Extractions from the model]) --> DP["Occurrence DP<br/>order-preserving, non-overlapping"]
+    DP -->|placed| ExactOut["status: exact"]
+    DP -->|unplaced| Exact["Exact scan<br/>contiguous downcased tokens"]
+    Exact -->|hit| ExactOut
+    Exact -->|miss| Lesser{accept_lesser?}
+    Lesser -->|true| Prefix["Lesser / prefix match<br/>anchor at first token"]
+    Prefix -->|hit| FuzzyOut["status: fuzzy"]
+    Prefix -->|miss| LCS
+    Lesser -->|false| LCS["LCS fuzzy<br/>stemmed tokens"]
+    LCS -->|"coverage and density ok"| FuzzyOut
+    LCS -->|below thresholds| NF["status: not_found<br/>offsets: nil"]
+```
 
 0. **Occurrence DP** — runs once over the whole extraction list in model
    output order: it selects at most one exact occurrence per extraction,

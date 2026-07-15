@@ -66,6 +66,54 @@ chunk instead of N requests colliding with the same exhausted window.
 Run several independent runners for separate budgets (e.g. different
 API keys).
 
+```mermaid
+sequenceDiagram
+    participant A as Caller A
+    participant B as Caller B
+    participant R as Runner
+    participant L as Limiter
+    participant P as Provider
+
+    A->>R: run or stream
+    B->>R: run or stream
+    R->>L: admit chunk
+    L-->>R: token under rpm and max_in_flight
+    R->>P: HTTP request
+    P-->>R: 429 with retry-after
+    Note over L: pause ALL admission until retry-after
+    R->>L: retry — 429 wait is free, no chunk_retries burn
+    B->>R: next chunk
+    R->>L: admit?
+    L-->>R: wait — global pause
+    Note over L: retry-after expires
+    L-->>R: token
+    R->>P: HTTP request
+    P-->>R: 200 with JSON
+    R-->>A: spans or ChunkResult
+    R-->>B: spans or ChunkResult
+```
+
+On shutdown the runner drains rather than hard-killing work: in-flight
+requests finish within `drain_timeout`, and chunks that never started
+return as `%ChunkError{reason: :drained}`.
+
+```mermaid
+sequenceDiagram
+    participant Sup as Supervisor
+    participant R as Runner
+    participant P as Provider
+    participant App as Caller
+
+    Note over R: chunks in flight and queued
+    Sup->>R: shutdown
+    Note over R: stop admitting new work
+    R->>P: in-flight requests continue
+    P-->>R: responses
+    R-->>App: results for finished chunks
+    R-->>App: ChunkError drained for unstarted
+    Note over R: drain_timeout bound
+```
+
 ## Sizing the budget
 
 - **`max_in_flight`** — your provider's concurrency comfort zone divided
@@ -84,6 +132,31 @@ API keys).
   kill almost-finished work.
 
 ## Failure semantics by mode
+
+`LangExtract.run/4` and `Runner.run/4` look the same at the call site but
+are **not** drop-in substitutes — the runner retries failures into
+per-chunk errors and never returns `{:error, _}`, while the standalone
+function can abandon the whole document on a task exit:
+
+```mermaid
+flowchart TD
+    Start([Chunk fails]) --> Mode{Entry point?}
+
+    Mode -->|LangExtract.run/4| KindR{Failure kind?}
+    KindR -->|parse or HTTP error| CE1["ChunkError in Result.errors<br/>survivors kept"]
+    KindR -->|task exit or timeout| Err["error task_exit<br/>document abandoned"]
+
+    Mode -->|LangExtract.stream/4| CE2["error ChunkError event<br/>survivors keep flowing"]
+
+    Mode -->|Runner.run / stream / stream_corpus| KindX{Failure kind?}
+    KindX -->|429| Pause["global admission pause<br/>retry free — no budget burn"]
+    KindX -->|5xx or transport| Retry{chunk_retries left?}
+    Retry -->|yes| Backoff[jittered backoff and retry]
+    Backoff --> KindX
+    Retry -->|exhausted| CE3["ChunkError — never top-level error"]
+    KindX -->|shutdown, unstarted| Drain["ChunkError reason drained"]
+    Pause --> KindX
+```
 
 | Event | `run/4` (standalone) | `stream/4` (standalone) | `Runner.*` |
 | ----- | -------------------- | ----------------------- | ---------- |

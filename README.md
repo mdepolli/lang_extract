@@ -181,6 +181,27 @@ carries its chunk's byte range, so consumers who need order sort and
 consumers who need latency don't wait. The stream is lazy — nothing runs
 until consumed, and a slow consumer naturally limits in-flight requests.
 
+```mermaid
+sequenceDiagram
+    participant App as Your app
+    participant LE as LangExtract
+    participant C0 as Chunk 0
+    participant C1 as Chunk 1
+    participant C2 as Chunk 2
+
+    App->>LE: stream(client, document, template)
+    Note over LE: sentence-aware split
+    LE->>C0: extract (bytes 0..N)
+    LE->>C1: extract (bytes N..M)
+    LE->>C2: extract (bytes M..end)
+    Note over C1: finishes first
+    C1-->>App: ok ChunkResult (byte_start N)
+    Note over C0: times out
+    C0-->>App: error ChunkError (task_exit timeout)
+    C2-->>App: ok ChunkResult (byte_start M)
+    Note over App: completion order is not document order — sort on byte_start if you need order
+```
+
 Failure semantics differ from `run/4` deliberately: in stream mode every
 failure stays per-chunk. A timed-out chunk arrives as
 `{:error, %ChunkError{reason: {:task_exit, :timeout}}}` with its byte range
@@ -202,6 +223,31 @@ source into sentence-aware chunks and process them in parallel:
 Chunk size is measured in characters (`String.length/1`); span offsets are
 always bytes. Byte offsets in the returned spans are adjusted to reference
 the original source, not individual chunks.
+
+```mermaid
+sequenceDiagram
+    participant App as Your app
+    participant LE as LangExtract
+    participant LLM as Provider
+
+    App->>LE: run with max_chunk_chars
+    Note over LE: split into sentence-aware chunks
+    par Chunk 0
+        LE->>LLM: prompt + chunk 0
+        LLM-->>LE: JSON extractions
+        Note over LE: parse, align, rebase offsets
+    and Chunk 1
+        LE->>LLM: prompt + chunk 1
+        LLM-->>LE: JSON extractions
+        Note over LE: parse, align, rebase offsets
+    and Chunk 2 fails
+        LE->>LLM: prompt + chunk 2
+        LLM-->>LE: malformed or HTTP error
+        Note over LE: ChunkError with byte range
+    end
+    LE-->>App: ok Result with spans and errors
+    Note over App: successful spans still returned — check errors for partial failure
+```
 
 ## Prompt Validation
 
@@ -342,18 +388,27 @@ request events carry input/output token counts for cost tracking. See the
 
 ## How It Works
 
-The pipeline has five stages:
+Each chunk runs through five stages; multi-chunk documents run them in
+parallel and merge the results:
 
+```mermaid
+flowchart LR
+    A[Prompt Builder] --> B[LLM Provider]
+    B --> C[Wire Format]
+    C --> D[Parser]
+    D --> E[Aligner]
 ```
-1. Prompt Builder    — Renders few-shot Q&A prompt with dynamic-key examples
-2. LLM Provider      — Calls Claude/OpenAI/Gemini via Req
-3. Wire Format       — Strips fences/<think> tags, normalizes dynamic keys to canonical form
-4. Parser            — Validates and constructs Extraction structs
-5. Aligner           — Maps extraction text to byte positions (exact scan, then fuzzy fallbacks)
-```
+
+| Stage | Role |
+| ----- | ---- |
+| Prompt Builder | Renders a few-shot Q&A prompt with dynamic-key examples |
+| LLM Provider | Calls Claude / OpenAI / Gemini via Req |
+| Wire Format | Strips fences / `<think>` tags; normalizes dynamic keys to canonical form |
+| Parser | Validates and constructs `Extraction` structs |
+| Aligner | Maps extraction text to byte positions (exact scan, then fuzzy fallbacks) |
 
 The aligner mirrors upstream langextract v1.6.0 (+ #485) semantics in four
-phases:
+phases (see the [alignment guide](guides/alignment.md) for the full flow):
 
 - **Occurrence DP**: Over the whole extraction list, selects one exact
   occurrence per extraction — order-preserving, non-overlapping, maximizing
