@@ -80,17 +80,18 @@ sequenceDiagram
     L-->>R: token under rpm and max_in_flight
     R->>P: HTTP request
     P-->>R: 429 with retry-after
-    Note over L: pause ALL admission until retry-after
-    R->>L: retry — 429 wait is free, no chunk_retries burn
+    R->>L: pause until retry-after
+    Note over L: ALL admission paused
+    R->>L: re-admit chunk — free, no chunk_retries burn
     B->>R: next chunk
     R->>L: admit?
-    L-->>R: wait — global pause
+    Note over R,L: both callers blocked on the global pause
     Note over L: retry-after expires
     L-->>R: token
     R->>P: HTTP request
     P-->>R: 200 with JSON
-    R-->>A: spans or ChunkResult
-    R-->>B: spans or ChunkResult
+    R-->>A: Result or ChunkResult event
+    R-->>B: Result or ChunkResult event
 ```
 
 On shutdown the runner drains rather than hard-killing work: in-flight
@@ -107,11 +108,10 @@ sequenceDiagram
     Note over R: chunks in flight and queued
     Sup->>R: shutdown
     Note over R: stop admitting new work
-    R->>P: in-flight requests continue
+    Note over R,P: in-flight requests continue — they get drain_timeout to finish
     P-->>R: responses
     R-->>App: results for finished chunks
     R-->>App: ChunkError drained for unstarted
-    Note over R: drain_timeout bound
 ```
 
 ## Sizing the budget
@@ -155,13 +155,14 @@ flowchart TD
     Backoff --> KindX
     Retry -->|exhausted| CE3["ChunkError — never top-level error"]
     KindX -->|shutdown, unstarted| Drain["ChunkError reason drained"]
-    Pause --> KindX
+    Pause -->|rate_limit_retries left| KindX
+    Pause -->|exhausted| CE3
 ```
 
 | Event | `run/4` (standalone) | `stream/4` (standalone) | `Runner.*` |
 | ----- | -------------------- | ----------------------- | ---------- |
 | Parse / HTTP error on a chunk | `ChunkError` in the errors list | `{:error, %ChunkError{}}` event | same, after the runner's retry policy |
-| 429 | Req transient retry inside the request | same | global pause until `retry-after`, retried without consuming budget |
+| 429 | Req transient retry inside the request | same | global pause until `retry-after`, retried without consuming budget, capped at `rate_limit_retries` |
 | 5xx / transport | Req transient retry inside the request | same | jittered backoff, consumes `chunk_retries`; exhaustion → `ChunkError` |
 | Chunk task timeout | `{:error, {:task_exit, :timeout}}` — document abandoned | per-chunk `ChunkError`, survivors keep flowing | requests bounded by HTTP timeout; failures stay per-chunk |
 | Runner shutdown | n/a | n/a | in-flight finish within `drain_timeout`; unstarted chunks → `ChunkError{reason: :drained}` |
