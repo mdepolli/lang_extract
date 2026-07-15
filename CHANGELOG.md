@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Mermaid diagrams for the hard flows** — the README and guides now
+  render diagrams for streaming completion order, chunk fan-out with
+  partial failure, the four alignment phases, and the runner's failure
+  semantics (shared 429 pause, retry budgets, drain).
+
 ## [0.9.0] - 2026-07-09
 
 ### Added
