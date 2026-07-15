@@ -194,11 +194,12 @@ sequenceDiagram
     LE->>C0: extract (bytes 0..N)
     LE->>C1: extract (bytes N..M)
     LE->>C2: extract (bytes M..end)
-    Note over C1: finishes first
-    C1-->>App: ok ChunkResult (byte_start N)
-    Note over C0: times out
-    C0-->>App: error ChunkError (task_exit timeout)
-    C2-->>App: ok ChunkResult (byte_start M)
+    C1-->>LE: finishes first
+    LE-->>App: ok ChunkResult (byte_start N)
+    C0-->>LE: LLM reply fails to parse
+    LE-->>App: error ChunkError (bytes 0..N)
+    C2-->>LE: done
+    LE-->>App: ok ChunkResult (byte_start M)
     Note over App: completion order is not document order — sort on byte_start if you need order
 ```
 
