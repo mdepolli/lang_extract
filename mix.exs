@@ -138,6 +138,9 @@ defmodule LangExtract.MixProject do
     ]
   end
 
+  # Copied verbatim from ex_doc's README (0.40.x), mermaid pin included.
+  # To upgrade, adopt the recipe of whatever ExDoc version we're on —
+  # don't bump mermaid independently.
   defp before_closing_body_tag(:html) do
     """
     <script defer src="https://cdn.jsdelivr.net/npm/mermaid@10.2.3/dist/mermaid.min.js"></script>
