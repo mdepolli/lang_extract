@@ -30,7 +30,7 @@ template =
     ]
   )
 
-{:ok, %LangExtract.Result{spans: spans}} = LangExtract.run(client, "Romeo and Juliet was written by William Shakespeare.", template)
+%LangExtract.Result{spans: spans} = LangExtract.run(client, "Romeo and Juliet was written by William Shakespeare.", template)
 
 for span <- spans do
   IO.puts("#{span.class}: \"#{span.text}\" [bytes #{span.byte_start}..#{span.byte_end}] (#{span.status})")
@@ -135,12 +135,13 @@ through verbatim. The underlying structs (`LangExtract.Template`,
 ```elixir
 source = "The patient presents with hypertension and is taking lisinopril daily."
 
-{:ok, %LangExtract.Result{spans: spans, errors: errors}} = LangExtract.run(client, source, template)
+%LangExtract.Result{spans: spans, errors: errors} = LangExtract.run(client, source, template)
 ```
 
-When some chunks fail to parse, the successful spans are still returned alongside
-the errors. Check `errors` to detect failures. Infrastructure failures (task exits,
-timeouts) return `{:error, reason}` instead.
+`run/4` cannot fail — `Result.errors` is the failure channel. Every failure
+stays per-chunk: chunks that fail to parse or time out land in `errors`
+with their byte ranges, and the surviving chunks' spans are still
+returned. Check `errors` to detect failures.
 
 Each span contains:
 
@@ -206,8 +207,8 @@ sequenceDiagram
 Failure semantics differ from `run/4` deliberately: in stream mode every
 failure stays per-chunk. A timed-out chunk arrives as
 `{:error, %ChunkError{reason: {:task_exit, :timeout}}}` with its byte range
-and the surviving chunks keep flowing, where `run/4` abandons the document
-with `{:error, {:task_exit, reason}}`.
+and the surviving chunks keep flowing — `run/4` is exactly this stream,
+collected and restored to document order.
 
 ## Chunking
 
@@ -215,7 +216,7 @@ For documents that exceed LLM token limits, pass `:max_chunk_chars` to split the
 source into sentence-aware chunks and process them in parallel:
 
 ```elixir
-{:ok, %LangExtract.Result{spans: spans, errors: errors}} = LangExtract.run(client, long_document, template,
+%LangExtract.Result{spans: spans, errors: errors} = LangExtract.run(client, long_document, template,
   max_chunk_chars: 4000,
   max_concurrency: 5
 )
@@ -294,7 +295,7 @@ stripped automatically.
 Store a full run faithfully — spans, errors, and usage together:
 
 ```elixir
-{:ok, result} = LangExtract.run(client, source, template)
+result = LangExtract.run(client, source, template)
 
 map = LangExtract.Serializer.result_to_map(source, result)
 # %{"text" => "...", "extractions" => [...], "errors" => [...], "usage" => %{...}}
@@ -374,10 +375,9 @@ delivery is bounded so slow consumers throttle admission; and shutdown
 drains gracefully — in-flight requests finish, unstarted chunks come back
 as `%ChunkError{reason: :drained}`.
 
-Despite the matching shapes, `Runner.run/4` is not a drop-in for
-`LangExtract.run/4`: the runner retries failures into per-chunk errors and
-never returns `{:error, _}`, while the standalone function abandons the
-document on a task exit. See the
+`Runner.run/4` shares `LangExtract.run/4`'s contract exactly — both return
+a bare `%Result{}` and funnel every failure into per-chunk errors — the
+runner just adds retries and the shared budget on the way there. See the
 [production guide](guides/production.md) for sizing and the full
 failure-semantics table.
 

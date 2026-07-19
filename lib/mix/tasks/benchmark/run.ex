@@ -213,13 +213,7 @@ defmodule Mix.Tasks.Benchmark.Run do
   @doc false
   def document_result(slug, task_name, run_result, elapsed_ms, usage \\ nil)
 
-  def document_result(
-        slug,
-        task_name,
-        {:ok, %Result{spans: spans, errors: errors}},
-        elapsed_ms,
-        usage
-      ) do
+  def document_result(slug, task_name, %Result{spans: spans, errors: errors}, elapsed_ms, usage) do
     %{
       "source" => slug,
       "task" => task_name,
@@ -229,10 +223,6 @@ defmodule Mix.Tasks.Benchmark.Run do
       "usage" => usage,
       "errors" => Enum.map(errors, &Serializer.chunk_error_to_map/1)
     }
-  end
-
-  def document_result(slug, task_name, {:error, reason}, _elapsed_ms, _usage) do
-    failure_result(slug, task_name, inspect(reason))
   end
 
   defp failure_result(slug, task_name, reason) do

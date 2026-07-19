@@ -80,16 +80,17 @@ defmodule LangExtract do
   @doc """
   Runs the full extraction pipeline: prompt → LLM → parse → align.
 
-  Returns `{:ok, %Result{}}` on success — document-ordered spans plus
-  per-chunk errors. When some chunks fail to parse, the successful spans
-  are still returned alongside the errors. Returns `{:error, reason}` only
-  for infrastructure failures (task exits, timeouts).
+  Returns a `%Result{}` — document-ordered spans plus per-chunk errors.
+  This function cannot fail; `Result.errors` is the failure channel.
+  Every failure stays per-chunk: a chunk that fails to parse or times
+  out lands in `errors` as a `%ChunkError{}` with its byte range, and
+  the surviving chunks' spans are still returned. Chunk tasks run
+  linked, so a bug-level crash inside one propagates to the caller.
 
-  Not a drop-in swap with `LangExtract.Runner.run/4` despite the matching
-  shape: the runner retries failures into per-chunk errors and never
-  returns `{:error, _}`, while this function abandons the document on a
-  task exit. See the failure-semantics table in the "Running in
-  Production" guide.
+  `LangExtract.Runner.run/4` shares this return contract, adding
+  retries, a shared request budget, and crash isolation (its supervised
+  tasks report crashes as `ChunkError`s too) on top. See the
+  failure-semantics table in the "Running in Production" guide.
 
   ## Options
 
@@ -109,12 +110,11 @@ defmodule LangExtract do
       client = LangExtract.new(:claude, api_key: "sk-...")
       template = LangExtract.template!("Extract entities.")
 
-      {:ok, %LangExtract.Result{spans: spans, errors: errors}} =
+      %LangExtract.Result{spans: spans, errors: errors} =
         LangExtract.run(client, "the quick brown fox", template)
 
   """
-  @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
-          {:ok, Result.t()} | {:error, {:task_exit, term()}}
+  @spec run(Client.t(), String.t(), Template.t(), keyword()) :: Result.t()
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     Orchestrator.run(client, source, template, opts)
   end
@@ -129,11 +129,11 @@ defmodule LangExtract do
   Nothing runs until the stream is consumed, and a slow consumer naturally
   limits how many chunk requests are in flight.
 
-  Failure semantics differ from `run/4` deliberately: every failure stays
-  per-chunk. A chunk whose task times out is reported as
+  Failure semantics match `run/4`: every failure stays per-chunk. A chunk
+  whose task times out is reported as
   `{:error, %ChunkError{reason: {:task_exit, :timeout}}}` with its byte
-  range, and the remaining chunks keep flowing — where `run/4` abandons
-  the document and returns `{:error, {:task_exit, reason}}`.
+  range, and the remaining chunks keep flowing — `run/4` is exactly this
+  stream, collected and restored to document order.
 
   Takes the same options as `run/4`.
 
@@ -324,7 +324,8 @@ defmodule LangExtract do
   Raises `ArgumentError` on an unknown provider or unbuildable HTTP client
   (e.g. missing API key). The raise is deliberate: misconfiguration here is
   a programmer error caught at client construction, while runtime failures
-  during extraction (`run/4`, `extract/3`) return tagged tuples.
+  during extraction stay data — per-chunk errors in `run/4`'s `Result`,
+  tagged tuples from `extract/3`.
 
   ## Examples
 

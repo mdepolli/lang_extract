@@ -75,7 +75,7 @@ defmodule LangExtract.OrchestratorTest do
                %{input_tokens: 10, output_tokens: 10}
              ]
 
-      assert {:ok, %Result{usage: %{input_tokens: 20, output_tokens: 20}}} =
+      assert %Result{usage: %{input_tokens: 20, output_tokens: 20}} =
                LangExtract.run(claude_client(), @two_chunk_source, template(), opts)
     end
 
@@ -83,7 +83,7 @@ defmodule LangExtract.OrchestratorTest do
       counting_stub(self())
       opts = [max_chunk_chars: 25, max_concurrency: 2]
 
-      assert {:ok, %Result{spans: run_spans, errors: []}} =
+      assert %Result{spans: run_spans, errors: []} =
                LangExtract.run(claude_client(), @two_chunk_source, template(), opts)
 
       stream_spans =
@@ -209,7 +209,7 @@ defmodule LangExtract.OrchestratorTest do
         ])
       )
 
-      assert {:ok, %Result{spans: [span], errors: [], usage: nil}} =
+      assert %Result{spans: [span], errors: [], usage: nil} =
                LangExtract.run(claude_client(), "the quick brown fox", template("Extract words."))
 
       assert span.class == "word"
@@ -223,7 +223,7 @@ defmodule LangExtract.OrchestratorTest do
     test "propagates provider error" do
       stub_claude(%{"error" => "unauthorized"}, status: 401)
 
-      assert {:ok, %Result{spans: [], errors: [%ChunkError{reason: :unauthorized} = error]}} =
+      assert %Result{spans: [], errors: [%ChunkError{reason: :unauthorized} = error]} =
                LangExtract.run(claude_client(), "some text", template())
 
       assert error.byte_start == 0
@@ -239,8 +239,7 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:ok,
-              %Result{spans: [], errors: [%ChunkError{reason: :missing_extractions} = error]}} =
+      assert %Result{spans: [], errors: [%ChunkError{reason: :missing_extractions} = error]} =
                LangExtract.run(claude_client(), "some text", template())
 
       assert error.byte_start == 0
@@ -254,8 +253,7 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:ok,
-              %Result{spans: [], errors: [%ChunkError{reason: {:invalid_format, _raw}} = error]}} =
+      assert %Result{spans: [], errors: [%ChunkError{reason: {:invalid_format, _raw}} = error]} =
                LangExtract.run(claude_client(), "some text", template())
 
       assert error.byte_start == 0
@@ -265,7 +263,7 @@ defmodule LangExtract.OrchestratorTest do
     test "returns ok with empty list when LLM returns no extractions" do
       stub_claude(claude_extraction_response([]))
 
-      assert {:ok, %Result{spans: [], errors: []}} =
+      assert %Result{spans: [], errors: []} =
                LangExtract.run(claude_client(), "some text", template())
     end
 
@@ -274,7 +272,7 @@ defmodule LangExtract.OrchestratorTest do
         claude_extraction_response([%{"thing" => "nonexistent", "thing_attributes" => %{}}])
       )
 
-      assert {:ok, %Result{spans: [span], errors: []}} =
+      assert %Result{spans: [span], errors: []} =
                LangExtract.run(claude_client(), "hello world", template())
 
       assert span.status == :not_found
@@ -287,7 +285,7 @@ defmodule LangExtract.OrchestratorTest do
       )
 
       # High coverage bar with lesser disabled — not_found (2/3 = 0.67 < 0.75)
-      assert {:ok, %Result{spans: [span], errors: []}} =
+      assert %Result{spans: [span], errors: []} =
                LangExtract.run(claude_client(), "the quick brown fox jumps", template(),
                  accept_lesser: false
                )
@@ -295,7 +293,7 @@ defmodule LangExtract.OrchestratorTest do
       assert span.status == :not_found
 
       # Low threshold — fuzzy match
-      assert {:ok, %Result{spans: [span], errors: []}} =
+      assert %Result{spans: [span], errors: []} =
                LangExtract.run(claude_client(), "the quick brown fox jumps", template(),
                  fuzzy_threshold: 0.6,
                  accept_lesser: false
@@ -326,7 +324,7 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:ok, %Result{spans: spans, errors: []}} =
+      assert %Result{spans: spans, errors: []} =
                LangExtract.run(claude_client(), source, template("Extract words."),
                  max_chunk_chars: 25
                )
@@ -363,7 +361,7 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:ok, %Result{spans: spans, errors: []}} =
+      assert %Result{spans: spans, errors: []} =
                LangExtract.run(claude_client(), source, template("Extract words."),
                  max_chunk_chars: 25,
                  max_concurrency: 2
@@ -396,7 +394,7 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:ok, %Result{spans: [span], errors: []}} =
+      assert %Result{spans: [span], errors: []} =
                LangExtract.run(claude_client(), source, template(), max_chunk_chars: 40)
 
       assert span.status == :exact
@@ -426,7 +424,7 @@ defmodule LangExtract.OrchestratorTest do
         })
       end)
 
-      assert {:ok, %Result{spans: [], errors: []}} =
+      assert %Result{spans: [], errors: []} =
                LangExtract.run(claude_client(), source, template(), max_chunk_chars: 600)
 
       assert_receive {[:lang_extract, :document, :start], _, %{source_bytes: ^source_bytes}}
@@ -477,7 +475,7 @@ defmodule LangExtract.OrchestratorTest do
           req_options: @req_options
         )
 
-      assert {:ok, %Result{spans: _spans, errors: []}} =
+      assert %Result{spans: _spans, errors: []} =
                LangExtract.run(census_client, census_source, template(),
                  max_chunk_chars: 600,
                  max_concurrency: 2
@@ -527,7 +525,7 @@ defmodule LangExtract.OrchestratorTest do
       source = "Unparseable census payload."
       source_bytes = byte_size(source)
 
-      assert {:ok, %Result{spans: [], errors: [%ChunkError{}]}} =
+      assert %Result{spans: [], errors: [%ChunkError{}]} =
                LangExtract.run(claude_client(), source, template())
 
       assert_receive {[:lang_extract, :chunk, :stop], %{span_count: 0},
@@ -537,20 +535,25 @@ defmodule LangExtract.OrchestratorTest do
                       %{source_bytes: ^source_bytes}}
     end
 
-    test "chunk task timeout returns {:error, {:task_exit, :timeout}}" do
-      Req.Test.stub(__MODULE__, fn conn ->
-        Process.sleep(200)
-        Req.Test.json(conn, %{"content" => [%{"type" => "text", "text" => "{}"}]})
-      end)
+    test "a timed-out chunk lands in errors with its byte range; survivors are kept" do
+      counting_stub(self())
 
-      assert {:error, {:task_exit, :timeout}} =
-               LangExtract.run(claude_client(), "some text", template(), task_timeout: 50)
+      assert %Result{spans: spans, errors: [%ChunkError{} = error]} =
+               LangExtract.run(claude_client(), @two_chunk_source, template(),
+                 max_chunk_chars: 25,
+                 max_concurrency: 2,
+                 task_timeout: 100
+               )
+
+      assert error.reason == {:task_exit, :timeout}
+      assert error.byte_start == 0
+      assert [%{text: "Second"}] = spans
     end
 
     test "auto-chunks by default (short text fits in one chunk)" do
       stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
 
-      assert {:ok, %Result{spans: [span], errors: []}} =
+      assert %Result{spans: [span], errors: []} =
                LangExtract.run(claude_client(), "the quick brown fox", template())
 
       assert span.status == :exact
@@ -559,7 +562,7 @@ defmodule LangExtract.OrchestratorTest do
     test "not_found span byte offsets are not adjusted in chunked mode" do
       stub_claude(claude_extraction_response([%{"thing" => "absent", "thing_attributes" => %{}}]))
 
-      assert {:ok, %Result{spans: spans, errors: []}} =
+      assert %Result{spans: spans, errors: []} =
                LangExtract.run(claude_client(), "Hello world. Goodbye world.", template(),
                  max_chunk_chars: 15
                )
@@ -596,7 +599,7 @@ defmodule LangExtract.OrchestratorTest do
         end
       end)
 
-      assert {:ok, %Result{spans: spans, errors: errors}} =
+      assert %Result{spans: spans, errors: errors} =
                LangExtract.run(claude_client(), "First sentence. Second sentence.", template(),
                  max_chunk_chars: 20,
                  max_concurrency: 1
@@ -607,17 +610,16 @@ defmodule LangExtract.OrchestratorTest do
       assert error.byte_start > 0
     end
 
-    test "provider error in chunked mode fails entire run" do
+    test "provider error in every chunk yields one chunk error per chunk, no spans" do
       stub_claude(%{"error" => "unauthorized"}, status: 401)
 
-      assert {:ok,
-              %Result{
-                spans: [],
-                errors: [
-                  %ChunkError{reason: :unauthorized},
-                  %ChunkError{reason: :unauthorized}
-                ]
-              }} =
+      assert %Result{
+               spans: [],
+               errors: [
+                 %ChunkError{reason: :unauthorized},
+                 %ChunkError{reason: :unauthorized}
+               ]
+             } =
                LangExtract.run(claude_client(), "First sentence. Second sentence.", template(),
                  max_chunk_chars: 20
                )
@@ -631,7 +633,7 @@ defmodule LangExtract.OrchestratorTest do
         ])
       )
 
-      assert {:ok, %Result{spans: [fox, dog], errors: []}} =
+      assert %Result{spans: [fox, dog], errors: []} =
                LangExtract.run(
                  claude_client(),
                  "the quick brown fox jumps over the lazy dog",

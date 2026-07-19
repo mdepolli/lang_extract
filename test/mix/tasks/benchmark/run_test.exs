@@ -34,8 +34,7 @@ defmodule Mix.Tasks.Benchmark.RunTest do
     end
 
     defp ok_extractor(source, _template) do
-      {:ok,
-       %Result{spans: [%Span{@span | text: source |> String.split() |> List.last()}], errors: []}}
+      %Result{spans: [%Span{@span | text: source |> String.split() |> List.last()}], errors: []}
     end
 
     defp run_args(corpus, out, extra \\ []) do
@@ -86,7 +85,7 @@ defmodule Mix.Tasks.Benchmark.RunTest do
       extractor = fn source, _template ->
         if source =~ "fox",
           do: raise("boom on alpha"),
-          else: {:ok, %Result{spans: [@span], errors: []}}
+          else: %Result{spans: [@span], errors: []}
       end
 
       Run.do_run(run_args(corpus, out), extractor)
@@ -123,11 +122,10 @@ defmodule Mix.Tasks.Benchmark.RunTest do
           %{provider: :claude, model: "test", status: 429}
         )
 
-        {:ok,
-         %Result{
-           spans: [%Span{@span | text: source |> String.split() |> List.last()}],
-           errors: []
-         }}
+        %Result{
+          spans: [%Span{@span | text: source |> String.split() |> List.last()}],
+          errors: []
+        }
       end
 
       Run.do_run(run_args(corpus, out, ["--document", "alpha"]), emitting_extractor)
@@ -185,7 +183,7 @@ defmodule Mix.Tasks.Benchmark.RunTest do
   describe "document_result/4" do
     test "clean success has empty errors list and timing" do
       result =
-        Run.document_result("slug", "dialogue", {:ok, %Result{spans: [@span], errors: []}}, 1200)
+        Run.document_result("slug", "dialogue", %Result{spans: [@span], errors: []}, 1200)
 
       assert result["source"] == "slug"
       assert result["task"] == "dialogue"
@@ -199,7 +197,7 @@ defmodule Mix.Tasks.Benchmark.RunTest do
       error = %ChunkError{byte_start: 0, byte_end: 1000, reason: :rate_limited}
 
       result =
-        Run.document_result("slug", "ner", {:ok, %Result{spans: [@span], errors: [error]}}, 900)
+        Run.document_result("slug", "ner", %Result{spans: [@span], errors: [error]}, 900)
 
       assert length(result["extractions"]) == 1
       assert result["timing"] == %{"total_ms" => 900}
@@ -209,21 +207,10 @@ defmodule Mix.Tasks.Benchmark.RunTest do
              ]
     end
 
-    test "total failure has null timing and a single null-offset error" do
-      result = Run.document_result("slug", "ner", {:error, :timeout}, 500)
-
-      assert result["extractions"] == []
-      assert result["timing"] == nil
-
-      assert result["errors"] == [
-               %{"byte_start" => nil, "byte_end" => nil, "reason" => ":timeout"}
-             ]
-    end
-
     test "result encodes to JSON" do
       assert {:ok, _} =
                "slug"
-               |> Run.document_result("dialogue", {:ok, %Result{spans: [@span], errors: []}}, 1)
+               |> Run.document_result("dialogue", %Result{spans: [@span], errors: []}, 1)
                |> Jason.encode()
     end
   end

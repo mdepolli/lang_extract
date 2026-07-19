@@ -43,7 +43,7 @@ defmodule LangExtract.Runner do
 
   use Supervisor
 
-  alias LangExtract.{ChunkError, ChunkResult, Client, Orchestrator, Result, Template}
+  alias LangExtract.{Client, Orchestrator, Result, Template}
   alias LangExtract.Runner.{Delivery, Limiter, Request}
 
   @type option ::
@@ -138,31 +138,18 @@ defmodule LangExtract.Runner do
   @doc """
   Runs a full extraction through the runner's shared budget.
 
-  Collects `stream/4` and restores document order. Always returns
-  `{:ok, %LangExtract.Result{}}`: in runner mode every failure is
-  per-chunk (a crashed or timed-out chunk task lands in the result's
-  `errors` with reason `{:task_exit, reason}`), so there is no
-  abandon-the-document error path.
-
-  Not a drop-in swap with `LangExtract.run/4` despite the matching shape:
-  the standalone function abandons the document on a task exit and returns
-  `{:error, {:task_exit, reason}}`, which this function never does. Code
-  written against one entry point must not assume the other's outcome
-  space. See the failure-semantics table in the "Running in Production"
-  guide.
+  Collects `stream/4` and restores document order. Returns a
+  `%LangExtract.Result{}` — the same contract as `LangExtract.run/4`,
+  with retries and the shared request budget on top. Every failure is
+  per-chunk: a crashed or timed-out chunk task lands in the result's
+  `errors` with reason `{:task_exit, reason}`, so this function cannot
+  fail and `Result.errors` is the failure channel.
   """
-  @spec run(Supervisor.supervisor(), String.t(), Template.t(), keyword()) ::
-          {:ok, Result.t()}
+  @spec run(Supervisor.supervisor(), String.t(), Template.t(), keyword()) :: Result.t()
   def run(runner, source, %Template{} = template, opts \\ []) do
-    {results, errors} =
-      runner
-      |> stream(source, template, opts)
-      |> Enum.reduce({[], []}, fn
-        {:ok, %ChunkResult{} = result}, {results, errors} -> {[result | results], errors}
-        {:error, %ChunkError{} = error}, {results, errors} -> {results, [error | errors]}
-      end)
-
-    {:ok, Orchestrator.assemble_results(results, errors)}
+    runner
+    |> stream(source, template, opts)
+    |> Orchestrator.collect()
   end
 
   @doc """

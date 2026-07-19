@@ -16,6 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Both `run/4`s return a bare `Result` and cannot fail** (**breaking**) —
+  `LangExtract.run/4` no longer abandons the document on a chunk task
+  exit: the halt clause is gone, and a timed-out chunk task lands in
+  `Result.errors` as a `%ChunkError{reason: {:task_exit, :timeout}}`
+  with its byte range (which the stream layer always had and the halt
+  discarded), while surviving chunks' spans are kept. With the last error
+  return unreachable, the `{:ok, _}` wrapper came off both entry points:
+  `LangExtract.run/4` and `Runner.run/4` now return `%Result{}` bare and
+  share one collector (`Orchestrator.collect/1`) — one return contract,
+  the runner keeping retries, the shared budget, and crash isolation
+  (standalone chunk tasks stay linked, so a bug-level crash propagates;
+  the runner's supervised tasks report it as a `ChunkError`). Callers
+  change `{:ok, result} = run(...)` to `result = run(...)`; the
+  `{:error, {:task_exit, _}}` branch is gone.
+
 - **`:lesser` is a fourth `Span` status** (**breaking**) — the aligner's
   lesser phase (prefix-anchored partial matches, upstream `MATCH_LESSER`)
   now reports `:lesser` instead of folding into `:fuzzy`. The two inexact

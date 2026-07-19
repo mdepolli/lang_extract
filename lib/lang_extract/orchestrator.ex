@@ -37,35 +37,33 @@ defmodule LangExtract.Orchestrator do
   alias Provider.Response
 
   # run/4 is literally a consumer of stream/4 — one code path, no drift.
-  # Halting on a task-exit error kills outstanding tasks through the
-  # stream's own cleanup and preserves the documented abandon-the-document
-  # contract; document telemetry comes from the stream's events.
-  @spec run(Client.t(), String.t(), Template.t(), keyword()) ::
-          {:ok, Result.t()} | {:error, {:task_exit, term()}}
+  # Every failure is per-chunk: a task exit arrives from the stream as a
+  # ChunkError carrying its byte range and accumulates like any other
+  # error, so collect/1 cannot fail and returns the Result bare.
+  @spec run(Client.t(), String.t(), Template.t(), keyword()) :: Result.t()
   def run(%Client{} = client, source, %Template{} = template, opts \\ []) do
     client
     |> stream(source, template, opts)
-    |> Enum.reduce_while({[], []}, fn
-      {:ok, %ChunkResult{} = result}, {results, errors} ->
-        {:cont, {[result | results], errors}}
-
-      {:error, %ChunkError{reason: {:task_exit, reason}}}, _acc ->
-        {:halt, {:error, {:task_exit, reason}}}
-
-      {:error, %ChunkError{} = error}, {results, errors} ->
-        {:cont, {results, [error | errors]}}
-    end)
-    |> case do
-      {:error, _} = error -> error
-      {results, errors} -> {:ok, assemble_results(results, errors)}
-    end
+    |> collect()
   end
 
-  # Document order restored from unordered per-chunk events — shared by
-  # Runner.run/4, whose collect differs only in never halting.
+  # The one collector behind both run/4s: LangExtract.run/4 and
+  # Runner.run/4 differ only in which stream they hand it.
   @doc false
+  @spec collect(Enumerable.t()) :: Result.t()
+  def collect(events) do
+    {results, errors} =
+      Enum.reduce(events, {[], []}, fn
+        {:ok, %ChunkResult{} = result}, {results, errors} -> {[result | results], errors}
+        {:error, %ChunkError{} = error}, {results, errors} -> {results, [error | errors]}
+      end)
+
+    assemble_results(results, errors)
+  end
+
+  # Document order restored from unordered per-chunk events.
   @spec assemble_results([ChunkResult.t()], [ChunkError.t()]) :: Result.t()
-  def assemble_results(results, errors) do
+  defp assemble_results(results, errors) do
     spans =
       results
       |> Enum.sort_by(& &1.byte_start)
@@ -142,7 +140,9 @@ defmodule LangExtract.Orchestrator do
   end
 
   # Task-level failures stay per-chunk in stream mode: the surviving chunks
-  # keep flowing, and the dead one is reported with its byte range.
+  # keep flowing, and the dead one is reported with its byte range. Only
+  # :timeout reaches this clause — the stream is linked, so a crashing task
+  # exits the caller (the Runner's nolink Delivery is what converts crashes).
   defp public_event({:exit, {chunk, reason}}) do
     {:error, ChunkError.from_chunk(chunk, {:task_exit, reason})}
   end

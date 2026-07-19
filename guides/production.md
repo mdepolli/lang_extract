@@ -133,18 +133,20 @@ sequenceDiagram
 
 ## Failure semantics by mode
 
-`LangExtract.run/4` and `Runner.run/4` look the same at the call site but
-are **not** drop-in substitutes — the runner retries failures into
-per-chunk errors and never returns `{:error, _}`, while the standalone
-function can abandon the whole document on a task exit:
+`LangExtract.run/4` and `Runner.run/4` share one return contract: both
+return a bare `%Result{}` and funnel failures — parse errors, HTTP
+errors, timed-out chunk tasks — into per-chunk `ChunkError`s. Neither
+can fail; they differ in what happens *before* a failure lands in
+`Result.errors` (the runner retries under a shared budget, the standalone
+function does not) and in crash isolation: standalone chunk tasks are
+linked, so a bug-level crash inside one propagates to the caller, while
+the runner's supervised tasks report a crash as one more `ChunkError`:
 
 ```mermaid
 flowchart TD
     Start([Chunk fails]) --> Mode{Entry point?}
 
-    Mode -->|LangExtract.run/4| KindR{Failure kind?}
-    KindR -->|parse or HTTP error| CE1["ChunkError in Result.errors<br/>survivors kept"]
-    KindR -->|task exit or timeout| Err["error task_exit<br/>document abandoned"]
+    Mode -->|LangExtract.run/4| CE1["ChunkError in Result.errors<br/>survivors kept"]
 
     Mode -->|LangExtract.stream/4| CE2["error ChunkError event<br/>survivors keep flowing"]
 
@@ -164,7 +166,8 @@ flowchart TD
 | Parse / HTTP error on a chunk | `ChunkError` in the errors list | `{:error, %ChunkError{}}` event | same, after the runner's retry policy |
 | 429 | Req transient retry inside the request | same | global pause until `retry-after`, retried without consuming budget, capped at `rate_limit_retries` |
 | 5xx / transport | Req transient retry inside the request | same | jittered backoff, consumes `chunk_retries`; exhaustion → `ChunkError` |
-| Chunk task timeout | `{:error, {:task_exit, :timeout}}` — document abandoned | per-chunk `ChunkError`, survivors keep flowing | requests bounded by HTTP timeout; failures stay per-chunk |
+| Chunk task timeout | `ChunkError{reason: {:task_exit, :timeout}}` in the errors list, survivors kept | per-chunk `ChunkError`, survivors keep flowing | requests bounded by HTTP timeout; failures stay per-chunk |
+| Chunk task crash (bug-level raise) | propagates — chunk tasks are linked | propagates — chunk tasks are linked | `ChunkError{reason: {:task_exit, reason}}`, survivors kept |
 | Runner shutdown | n/a | n/a | in-flight finish within `drain_timeout`; unstarted chunks → `ChunkError{reason: :drained}` |
 
 The two retry regimes are deliberate and mutually exclusive: standalone
