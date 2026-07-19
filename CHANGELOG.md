@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   partial failure, the four alignment phases, and the runner's failure
   semantics (shared 429 pause, retry budgets, drain).
 
+### Changed
+
+- **`:lesser` is a fourth `Span` status** (**breaking**) — the aligner's
+  lesser phase (prefix-anchored partial matches, upstream `MATCH_LESSER`)
+  now reports `:lesser` instead of folding into `:fuzzy`. The two inexact
+  statuses fail in different directions: `:lesser` means the model
+  over-extracted or stitched fragments and the span covers the verbatim
+  prefix that exists; `:fuzzy` means an LCS match over stemmed tokens.
+  `Span.located?/1` counts `:lesser` as grounded, the serializer
+  round-trips `"lesser"`, and both benchmark runners report it natively
+  (the Python side no longer squashes `match_lesser` into `"fuzzy"`).
+  Breaking for exhaustive matches on `Span.status` and for consumers of
+  serialized `"status"` values.
+
 ## [0.9.0] - 2026-07-09
 
 ### Added

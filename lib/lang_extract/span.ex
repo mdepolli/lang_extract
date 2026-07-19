@@ -5,9 +5,21 @@ defmodule LangExtract.Span do
   `byte_start` and `byte_end` are `nil` when `status` is `:not_found` —
   the aligner refused to guess rather than ground the extraction at wrong
   offsets. Guard offset arithmetic with `located?/1`.
+
+  Statuses, from strongest to weakest grounding:
+
+    * `:exact` — the extraction's tokens appear verbatim and contiguously
+      in the source
+    * `:lesser` — only the extraction's opening run grounds (upstream's
+      `MATCH_LESSER`): the model over-extracted or stitched fragments, and
+      the span covers the prefix that exists in the source
+    * `:fuzzy` — an order-preserving subsequence match over lightly
+      stemmed tokens; the span covers the matched region
+    * `:not_found` — no acceptable grounding
+
   """
 
-  @type status :: :exact | :fuzzy | :not_found
+  @type status :: :exact | :lesser | :fuzzy | :not_found
 
   @type t :: %__MODULE__{
           text: String.t(),
@@ -22,8 +34,8 @@ defmodule LangExtract.Span do
   defstruct [:text, :byte_start, :byte_end, :status, :class, attributes: %{}]
 
   @doc """
-  Whether the aligner grounded this span — `status` is `:exact` or
-  `:fuzzy`, so the byte offsets are present.
+  Whether the aligner grounded this span — `status` is `:exact`,
+  `:lesser`, or `:fuzzy`, so the byte offsets are present.
 
   The filtering idiom for consumers doing offset arithmetic:
 
@@ -36,5 +48,5 @@ defmodule LangExtract.Span do
 
   """
   @spec located?(t()) :: boolean()
-  def located?(%__MODULE__{status: status}), do: status in [:exact, :fuzzy]
+  def located?(%__MODULE__{status: status}), do: status in [:exact, :lesser, :fuzzy]
 end

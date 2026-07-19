@@ -34,7 +34,7 @@ defmodule LangExtract.Alignment.AlignerParityTest do
   @known_divergences %{
     {"dp_out_of_order_emission", 0} => %{status: :exact, byte_start: 10, byte_end: 13},
     {"dp_contested_overlap", 1} => %{status: :exact, byte_start: 4, byte_end: 11},
-    {"dp_paraphrase_among_repeats", 2} => %{status: :fuzzy, byte_start: 0, byte_end: 8}
+    {"dp_paraphrase_among_repeats", 2} => %{status: :lesser, byte_start: 0, byte_end: 8}
   }
 
   for fixture <- @fixtures do

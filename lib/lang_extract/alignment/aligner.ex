@@ -16,7 +16,7 @@ defmodule LangExtract.Alignment.Aligner do
   2. **Lesser** — difflib-style block decomposition: if a matching block is
      anchored at the extraction's first token, its source run grounds the
      extraction (upstream `MATCH_LESSER`). Blocks elsewhere in the extraction
-     do not qualify. Status `:fuzzy`.
+     do not qualify. Status `:lesser`.
   3. **LCS fuzzy** — for extractions sharing no token run at all, an LCS
      subsequence match over lightly stemmed tokens, accepted when coverage
      (matched / extraction tokens) ≥ `:fuzzy_threshold` and density
@@ -223,7 +223,7 @@ defmodule LangExtract.Alignment.Aligner do
         :no_match
 
       {start_idx, block_len} ->
-        {:ok, found_span(extraction, index.words, start_idx, start_idx + block_len - 1, :fuzzy)}
+        {:ok, found_span(extraction, index.words, start_idx, start_idx + block_len - 1, :lesser)}
     end
   end
 

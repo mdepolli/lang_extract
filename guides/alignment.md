@@ -16,7 +16,7 @@ Every alignment produces a `LangExtract.Span`:
 | `attributes` | Metadata the LLM attached                             |
 | `byte_start` | Inclusive byte offset in source (`nil` if not found)  |
 | `byte_end`   | Exclusive byte offset in source (`nil` if not found)  |
-| `status`     | `:exact`, `:fuzzy`, or `:not_found`                   |
+| `status`     | `:exact`, `:lesser`, `:fuzzy`, or `:not_found`        |
 
 The offsets always refer to the **original document**, even when the source
 was chunked — chunk-relative positions are adjusted before spans are
@@ -55,19 +55,25 @@ depend on how a consumer counts characters.
 
 - **`:exact`** — the extraction's word tokens were found as a contiguous,
   case-insensitive run in the source. The span covers precisely that run.
+- **`:lesser`** — only the extraction's opening fragment exists in the
+  source (upstream's `MATCH_LESSER`). The model over-extracted: typically
+  it stitched two separated quotes into one extraction, or appended words
+  the source doesn't have. The span covers the prefix that *is* there —
+  its bytes are verbatim source text, but shorter than the extraction.
 - **`:fuzzy`** — the extraction couldn't be matched verbatim, but a
-  confident approximate match was found. The span is *grounded but
-  approximate*: it may cover only the extraction's opening fragment (when
-  the model stitched two separated quotes into one extraction) or a window
-  whose tokens differ slightly (smart quotes vs ASCII apostrophes, singular
-  vs plural).
+  confident approximate match was found: a window whose tokens differ
+  slightly (smart quotes vs ASCII apostrophes, singular vs plural) or that
+  interleaves extraction tokens with source-only ones.
 - **`:not_found`** — no source region met the acceptance thresholds. The
   offsets are `nil`. Typical cause: the model paraphrased or invented text
   instead of quoting it.
 
-Treat `:fuzzy` offsets as approximate. Metrics or highlighting can use them
-directly; anything that must be verbatim-faithful should re-check the span
-text against the source bytes.
+The two inexact statuses fail in different directions, which matters for
+anything surfacing spans to a reviewer: a `:lesser` span says "the model's
+text says more than the source here," while a `:fuzzy` span says "the
+source says roughly this, worded differently." Metrics or highlighting can
+use both directly; anything that must be verbatim-faithful should re-check
+the span text against the source bytes.
 
 ## How alignment works
 
@@ -87,8 +93,8 @@ flowchart TD
     end
     DP -->|unplaced| Exact
     Exact -->|hit| ExactOut
-    Prefix -->|hit| FuzzyOut["status: fuzzy"]
-    LCS -->|"coverage and density ok"| FuzzyOut
+    Prefix -->|hit| LesserOut["status: lesser"]
+    LCS -->|"coverage and density ok"| FuzzyOut["status: fuzzy"]
     LCS -->|below thresholds| NF["status: not_found<br/>offsets: nil"]
 ```
 
@@ -104,7 +110,7 @@ flowchart TD
    contiguous run in the source tokens. First occurrence wins.
 2. **Lesser (prefix match)** — the longest matching token block anchored at
    the extraction's *first* token. This grounds stitched or truncated
-   extractions to their opening fragment. Status `:fuzzy`.
+   extractions to their opening fragment. Status `:lesser`.
 3. **LCS fuzzy** — a longest-common-subsequence dynamic program over
    normalized tokens (downcased, lightly stemmed). The tightest source
    window is accepted when coverage ≥ `:fuzzy_threshold` and token density
@@ -124,4 +130,4 @@ All alignment options are accepted by `LangExtract.run/4`,
 
 Raising `:fuzzy_threshold` trades recall for precision: more `:not_found`,
 fewer questionable `:fuzzy` spans. Disabling `:accept_lesser` does the same
-specifically for stitched-quote fragments.
+specifically for `:lesser` spans (stitched-quote fragments).

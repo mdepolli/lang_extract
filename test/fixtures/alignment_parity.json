@@ -87,7 +87,7 @@
     ],
     "results": [
       {
-        "status": "fuzzy",
+        "status": "lesser",
         "raw_status": "match_lesser",
         "byte_start": 3,
         "byte_end": 17
@@ -135,7 +135,7 @@
     ],
     "results": [
       {
-        "status": "fuzzy",
+        "status": "lesser",
         "raw_status": "match_lesser",
         "byte_start": 0,
         "byte_end": 5
@@ -151,7 +151,7 @@
     ],
     "results": [
       {
-        "status": "fuzzy",
+        "status": "lesser",
         "raw_status": "match_lesser",
         "byte_start": 8,
         "byte_end": 11

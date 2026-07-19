@@ -65,14 +65,14 @@ defmodule LangExtract.Prompt.ValidatorTest do
       assert issue.status == :not_found
     end
 
-    test "returns error with :fuzzy when extraction partially matches" do
+    test "returns error with :lesser when a prefix of the extraction matches" do
       template = %Template{
         description: "Extract.",
         examples: [
           %Example{
             text: "the quick brown fox jumps",
             extractions: [
-              # 2 of 3 tokens match — fuzzy at low threshold
+              # "quick brown" grounds as a prefix-anchored partial run
               %Extraction{class: "phrase", text: "quick brown dog", attributes: %{}}
             ]
           }
@@ -80,6 +80,29 @@ defmodule LangExtract.Prompt.ValidatorTest do
       }
 
       assert {:error, [issue]} = Validator.validate(template, fuzzy_threshold: 0.6)
+      assert issue.status == :lesser
+    end
+
+    test "returns error with :fuzzy when the extraction matches via LCS" do
+      template = %Template{
+        description: "Extract.",
+        examples: [
+          %Example{
+            text: "Findings consistent with degenerative disc disease at L5-S1.",
+            extractions: [
+              # "mild" is absent, so no prefix-anchored block exists; the
+              # shared run grounds via LCS (coverage 3/4)
+              %Extraction{
+                class: "finding",
+                text: "mild degenerative disc disease",
+                attributes: %{}
+              }
+            ]
+          }
+        ]
+      }
+
+      assert {:error, [issue]} = Validator.validate(template)
       assert issue.status == :fuzzy
     end
 

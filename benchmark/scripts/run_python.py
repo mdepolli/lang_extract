@@ -144,8 +144,9 @@ class ClaudeProvider(base_model.BaseLanguageModel):
 
 STATUS_MAP = {
     "match_exact": "exact",
+    # match_greater is defined upstream but never assigned; mapped defensively.
     "match_greater": "fuzzy",
-    "match_lesser": "fuzzy",
+    "match_lesser": "lesser",
     "match_fuzzy": "fuzzy",
 }
 

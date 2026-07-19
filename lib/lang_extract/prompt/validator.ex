@@ -27,7 +27,7 @@ defmodule LangExtract.Prompt.Validator do
             example_text: String.t(),
             extraction_text: String.t(),
             extraction_class: String.t(),
-            status: :fuzzy | :not_found
+            status: :lesser | :fuzzy | :not_found
           }
 
     @fields [

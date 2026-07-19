@@ -132,8 +132,9 @@ CASES = [
 
 STATUS_MAP = {
     AlignmentStatus.MATCH_EXACT: "exact",
+    # MATCH_GREATER is defined upstream but never assigned; mapped defensively.
     AlignmentStatus.MATCH_GREATER: "fuzzy",
-    AlignmentStatus.MATCH_LESSER: "fuzzy",
+    AlignmentStatus.MATCH_LESSER: "lesser",
     AlignmentStatus.MATCH_FUZZY: "fuzzy",
     None: "not_found",
 }

@@ -192,6 +192,28 @@ defmodule LangExtract.SerializerTest do
       assert not_found.byte_start == nil
     end
 
+    test "round-trips lesser and fuzzy spans distinctly" do
+      map = %{
+        "text" => @source,
+        "extractions" => [
+          %{
+            "text" => "quick brown dog",
+            "status" => "lesser",
+            "byte_start" => 4,
+            "byte_end" => 15
+          },
+          %{"text" => "foxes", "status" => "fuzzy", "byte_start" => 16, "byte_end" => 19}
+        ]
+      }
+
+      assert {:ok, {@source, [lesser, fuzzy]}} = Serializer.from_map(map)
+      assert lesser.status == :lesser
+      assert fuzzy.status == :fuzzy
+
+      assert %{"status" => "lesser"} = Serializer.span_to_map(lesser)
+      assert %{"status" => "fuzzy"} = Serializer.span_to_map(fuzzy)
+    end
+
     test "returns error for missing text key" do
       assert {:error, :invalid_data} = Serializer.from_map(%{"extractions" => []})
     end

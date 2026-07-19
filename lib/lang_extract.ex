@@ -98,7 +98,7 @@ defmodule LangExtract do
     * `:task_timeout` - per-chunk task timeout (default `:infinity`)
     * `:fuzzy_threshold` - minimum LCS coverage for fuzzy match (default `0.75`)
     * `:min_density` - minimum matched-token density of a fuzzy span (default `1/3`)
-    * `:accept_lesser` - allow prefix-fragment grounding (default `true`)
+    * `:accept_lesser` - allow prefix-fragment grounding as `:lesser` spans (default `true`)
     * `:exact_algorithm` - `:dp` (occurrence DP, default) or `:first_occurrence`
 
   Chunk size is measured in characters; span offsets are always bytes.

@@ -240,7 +240,7 @@ defmodule LangExtract.Serializer do
   defp validate_offsets(:not_found, nil, nil), do: :ok
 
   defp validate_offsets(status, byte_start, byte_end)
-       when status in [:exact, :fuzzy] and is_integer(byte_start) and byte_start >= 0 and
+       when status in [:exact, :lesser, :fuzzy] and is_integer(byte_start) and byte_start >= 0 and
               is_integer(byte_end) and byte_end >= 0,
        do: :ok
 
@@ -251,6 +251,7 @@ defmodule LangExtract.Serializer do
   defp validate_attributes(_attributes), do: {:error, :invalid_data}
 
   defp parse_status("exact"), do: {:ok, :exact}
+  defp parse_status("lesser"), do: {:ok, :lesser}
   defp parse_status("fuzzy"), do: {:ok, :fuzzy}
   defp parse_status("not_found"), do: {:ok, :not_found}
   defp parse_status(_), do: {:error, :invalid_data}

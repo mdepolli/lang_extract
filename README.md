@@ -151,7 +151,7 @@ Each span contains:
 | `attributes` | Arbitrary metadata the LLM attached                  |
 | `byte_start` | Inclusive byte offset in source (`nil` if not found) |
 | `byte_end`   | Exclusive byte offset in source (`nil` if not found) |
-| `status`     | `:exact`, `:fuzzy`, or `:not_found`                  |
+| `status`     | `:exact`, `:lesser`, `:fuzzy`, or `:not_found`       |
 
 Verify byte offsets round-trip:
 
@@ -419,7 +419,7 @@ phases (see the [alignment guide](guides/alignment.md) for the full flow):
   contiguous run in the source tokens. First occurrence wins.
 - **Lesser (prefix match)**: When the model stitches or truncates a span, the
   longest matching token block anchored at the extraction's first token
-  grounds it to its opening fragment in the source (status `:fuzzy`;
+  grounds it to its opening fragment in the source (status `:lesser`;
   disable with `accept_lesser: false`).
 - **LCS fuzzy**: Longest-common-subsequence dynamic program over normalized
   (stemmed, downcased) tokens. Accepts the tightest source window with
@@ -490,7 +490,7 @@ Key differences:
 | Offsets            | Character positions               | Byte positions                       |
 | Parallelism        | ThreadPoolExecutor                | Task.async_stream                    |
 | Chunking           | Always-on (1000 chars)            | Always-on (1000 chars, configurable) |
-| Alignment statuses | 4 (exact, lesser, greater, fuzzy) | 3 (exact, fuzzy, not_found)          |
+| Alignment statuses | exact, lesser, greater (unused), fuzzy; `None` when unaligned | exact, lesser, fuzzy, not_found |
 | Prompt validation  | Built-in severity levels          | Caller decides                       |
 
 Not ported: visualization (HTML output), multi-pass extraction,

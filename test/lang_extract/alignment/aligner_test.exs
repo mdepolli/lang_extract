@@ -170,7 +170,7 @@ defmodule LangExtract.Alignment.AlignerTest do
       # so the span covers exactly those tokens (bytes 4..15).
       extraction = "quick brown dog"
 
-      assert [%Span{byte_start: 4, byte_end: 15, status: :fuzzy}] =
+      assert [%Span{byte_start: 4, byte_end: 15, status: :lesser}] =
                Aligner.align(source, [extraction])
     end
 
@@ -184,7 +184,7 @@ defmodule LangExtract.Alignment.AlignerTest do
       extraction = "You young dog, what fat cheeks you ha’ got."
 
       [span] = Aligner.align(source, [extraction])
-      assert span.status == :fuzzy
+      assert span.status == :lesser
 
       extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
       assert extracted =~ "You young dog"
@@ -199,10 +199,12 @@ defmodule LangExtract.Alignment.AlignerTest do
     end
 
     test "prefix token grounds even when the rest is absent" do
+      # Only "alpha" is anchored at the extraction's first token; "beta"
+      # appears in the source but can't extend a prefix-anchored block.
       source = "alpha one two three four five six beta"
 
       [span] = Aligner.align(source, ["alpha beta gamma"])
-      assert span.status == :fuzzy
+      assert span.status == :lesser
 
       extracted = binary_part(source, span.byte_start, span.byte_end - span.byte_start)
       assert extracted == "alpha"

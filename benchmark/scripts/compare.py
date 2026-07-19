@@ -10,9 +10,13 @@ Result schema (identical for both libraries — see CLAUDE.md):
   - extraction byte offsets are null for "not_found" status
 
 Offset metrics are restricted to pairs where BOTH sides report "exact":
-fuzzy spans are not positionally comparable (Python's match_lesser maps to
-"fuzzy" with spans smaller than the extraction; Elixir fuzzy spans are the
-best sliding-window, often larger).
+inexact spans are not positionally comparable across phases. Both runners
+report upstream-parity statuses ("lesser" for prefix-anchored partial
+matches, "fuzzy" for LCS matches), so status distributions compare 1:1 —
+but only between runs stamped with the same runner_commit. Results written
+before the "lesser" status split report those spans as "fuzzy", so a
+cross-version comparison shows status disagreements that are pure schema
+artifacts (a warning is printed when the stamps differ).
 
 Attribute agreement is strict dict equality over matched pairs that carry
 attributes. Both libraries pass attributes through verbatim, so for
@@ -109,7 +113,7 @@ def match_extractions(
 
 
 def status_counts(extractions: list[dict]) -> dict[str, int]:
-    counts = {"exact": 0, "fuzzy": 0, "not_found": 0}
+    counts = {"exact": 0, "lesser": 0, "fuzzy": 0, "not_found": 0}
     for e in extractions:
         counts[e["status"]] = counts.get(e["status"], 0) + 1
     return counts
@@ -128,8 +132,8 @@ def compare_task(
         "elixir_only": 0,
         "python_only": 0,
     }
-    elixir_statuses = {"exact": 0, "fuzzy": 0, "not_found": 0}
-    python_statuses = {"exact": 0, "fuzzy": 0, "not_found": 0}
+    elixir_statuses = {"exact": 0, "lesser": 0, "fuzzy": 0, "not_found": 0}
+    python_statuses = {"exact": 0, "lesser": 0, "fuzzy": 0, "not_found": 0}
     class_agreements = class_total = 0
     status_agreements = status_total = 0
     attr_agreements = attr_total = 0
@@ -299,7 +303,7 @@ def print_summary(s: dict):
     match_pct = round(s["matched"] / max(s["total_elixir"], s["total_python"], 1) * 100)
 
     def statuses(d: dict) -> str:
-        return f"{d['exact']}e/{d['fuzzy']}f/{d['not_found']}n"
+        return f"{d['exact']}e/{d['lesser']}l/{d['fuzzy']}f/{d['not_found']}n"
 
     print(f"\n=== {s['task'].upper()} Task ===")
     print(f"{'':22s} {'Elixir':>12s} {'Python':>12s} {'Agreement':>12s}")
@@ -307,7 +311,7 @@ def print_summary(s: dict):
     print(f"{'Failed documents:':22s} {s['failures']['elixir']:>12d} {s['failures']['python']:>12d}")
     print(f"{'Chunk errors:':22s} {s['chunk_errors']['elixir']:>12d} {s['chunk_errors']['python']:>12d}")
     print(f"{'Total extractions:':22s} {s['total_elixir']:>12d} {s['total_python']:>12d}")
-    print(f"{'By status (e/f/n):':22s} {statuses(s['elixir_statuses']):>12s} {statuses(s['python_statuses']):>12s}")
+    print(f"{'By status (e/l/f/n):':22s} {statuses(s['elixir_statuses']):>12s} {statuses(s['python_statuses']):>12s}")
     print(f"{'Matched:':22s} {s['matched']:>12d} {'':>12s} {match_pct:>10d}%")
     print(f"{'Library-only:':22s} {s['elixir_only']:>12d} {s['python_only']:>12d}")
     print(f"{'Class agreement:':22s} {'':>12s} {'':>12s} {s['class_agreement_pct']:>10.1f}%")
@@ -359,6 +363,17 @@ def main():
 
     elixir_results = load_results(Path(args.elixir))
     python_results = load_results(Path(args.python))
+
+    elixir_commit = first_meta(elixir_results).get("runner_commit")
+    python_commit = first_meta(python_results).get("runner_commit")
+    if elixir_commit and python_commit and elixir_commit != python_commit:
+        print(
+            f"WARNING: results come from different runner commits "
+            f"(elixir {elixir_commit[:12]}, python {python_commit[:12]}); "
+            'status semantics may differ — runs predating the "lesser" '
+            'status split report those spans as "fuzzy".',
+            file=sys.stderr,
+        )
 
     all_tasks = sorted(set(elixir_results) | set(python_results))
 
