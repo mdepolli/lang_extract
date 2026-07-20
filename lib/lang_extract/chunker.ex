@@ -28,7 +28,10 @@ defmodule LangExtract.Chunker do
 
   ## Options
 
-    * `:max_chunk_chars` — maximum characters per chunk (required)
+    * `:max_chunk_chars` — maximum characters per chunk (required).
+      Char-denominated to mirror upstream's `max_char_buffer`, so chunk
+      boundaries land identically across the two libraries — the
+      cross-library benchmarks depend on that. Output offsets are bytes.
 
   """
   @spec chunk(String.t(), keyword()) :: [Chunk.t()]

@@ -216,9 +216,13 @@ source into sentence-aware chunks and process them in parallel:
 )
 ```
 
-Chunk size is measured in characters (`String.length/1`); span offsets are
-always bytes. Byte offsets in the returned spans are adjusted to reference
-the original source, not individual chunks.
+Chunk size is measured in characters, not bytes, because upstream
+langextract's `max_char_buffer` counts characters: counting the same way
+keeps chunk boundaries identical across the two libraries, which the
+cross-library benchmarks depend on. Span offsets are always bytes, and
+chunking is sentence-aware, so boundaries can't be computed from the
+budget in either unit anyway. Byte offsets in the returned spans are
+adjusted to reference the original source, not individual chunks.
 
 ```mermaid
 sequenceDiagram

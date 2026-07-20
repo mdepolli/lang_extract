@@ -102,8 +102,14 @@ defmodule LangExtract do
     * `:accept_lesser` - allow prefix-fragment grounding as `:lesser` spans (default `true`)
     * `:exact_algorithm` - `:dp` (occurrence DP, default) or `:first_occurrence`
 
-  Chunk size is measured in characters; span offsets are always bytes.
-  See the "Alignment and Spans" guide for what the alignment options tune.
+  The chunk budget is measured in characters because it mirrors upstream
+  langextract's `max_char_buffer`: counting the same way keeps chunk
+  boundaries identical across the two libraries, which the cross-library
+  benchmarks depend on. Every output offset is bytes, and since chunking
+  is sentence-aware, boundaries can't be computed from the budget in
+  either unit — the byte ranges on results are the boundary source of
+  truth. See the "Alignment and Spans" guide for what the alignment
+  options tune.
 
   ## Examples
 
