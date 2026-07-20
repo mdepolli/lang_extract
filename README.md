@@ -103,10 +103,9 @@ model to invent all of that.
 
 Each extraction's `text` must appear verbatim in its example's `text`: the
 examples double as alignment ground truth, and `LangExtract.template!/2`
-checks this at construction — a template that builds is a template whose
-examples align. (Pass `validate: false` to skip the check, or use
-`LangExtract.template/2` for tagged tuples instead of raises when the
-task definition arrives at runtime.)
+checks this at construction, unconditionally — a template that builds is a
+template whose examples align. (Use `LangExtract.template/2` for tagged
+tuples instead of raises when the task definition arrives at runtime.)
 
 ```elixir
 template =
@@ -249,8 +248,8 @@ sequenceDiagram
 ## Prompt Validation
 
 `LangExtract.template!/2` validates at construction, so most code never calls
-the validator directly. It stays public for templates built with
-`validate: false` or assembled as structs by hand:
+the validator directly. It stays public for templates assembled as structs
+by hand and for re-checking under custom aligner options:
 
 ```elixir
 # Returns :ok or {:error, [issues]}

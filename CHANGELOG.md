@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   partial failure, the four alignment phases, and the runner's failure
   semantics (shared 429 pause, retry budgets, drain).
 
+### Removed
+
+- **The `validate: false` option on `template/2` and `template!/2`**
+  (**breaking**) — it was the only hole in the "a template that
+  constructs is a template whose examples align" invariant, and its sole
+  consumer in the tree was the test exercising the option itself. The
+  invariant is now unconditional. Templates whose alignment ground truth
+  legitimately can't hold should be assembled as structs by hand (they
+  remain public for matching) — if a real use case for unvalidated
+  construction appears, it will be designed for deliberately rather than
+  through a skip flag.
+
 ### Changed
 
 - **Gemini API key moves from the URL to the `x-goog-api-key` header** —

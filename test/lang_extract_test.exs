@@ -65,18 +65,6 @@ defmodule LangExtractTest do
       end
     end
 
-    test "validate: false skips alignment checking" do
-      template =
-        LangExtract.template!("Extract.",
-          examples: [
-            %{text: "the quick brown fox", extractions: [%{class: "x", text: "purple elephant"}]}
-          ],
-          validate: false
-        )
-
-      assert %Template{} = template
-    end
-
     test "missing required keys raise ArgumentError naming the owner" do
       assert_raise ArgumentError, ~r/example is missing required key :text/, fn ->
         LangExtract.template!("Extract.", examples: [%{extractions: []}])

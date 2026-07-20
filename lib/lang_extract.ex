@@ -162,9 +162,9 @@ defmodule LangExtract do
   extraction texts are validated against the example text using the
   production aligner; misaligned examples raise
   `LangExtract.Prompt.Validator.ValidationError` — a template that
-  constructs is a template whose examples align. Pass `validate: false`
-  to skip. For runtime data where raising is inappropriate, `template/2`
-  returns tagged tuples instead.
+  constructs is a template whose examples align, unconditionally. For
+  runtime data where raising is inappropriate, `template/2` returns
+  tagged tuples instead.
 
   ## Examples
 
@@ -208,11 +208,10 @@ defmodule LangExtract do
           {:ok, Template.t()} | {:error, Exception.t()}
   def template(description, opts \\ []) when is_binary(description) do
     examples = Keyword.get(opts, :examples, [])
-    validate = Keyword.get(opts, :validate, true)
 
     case normalize_all(examples, &normalize_example/1) do
       {:ok, examples} ->
-        validate_template(%Template{description: description, examples: examples}, validate)
+        validate_template(%Template{description: description, examples: examples})
 
       {:error, _} = error ->
         error
@@ -307,9 +306,7 @@ defmodule LangExtract do
     Map.get(map, key) || Map.get(map, Atom.to_string(key)) || default
   end
 
-  defp validate_template(template, false), do: {:ok, template}
-
-  defp validate_template(template, true) do
+  defp validate_template(template) do
     case Validator.validate(template) do
       :ok -> {:ok, template}
       {:error, issues} -> {:error, ValidationError.exception(issues: issues)}
