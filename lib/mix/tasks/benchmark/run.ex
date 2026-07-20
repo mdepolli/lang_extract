@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
   use Mix.Task
 
-  alias LangExtract.{Result, Serializer}
+  alias LangExtract.{ChunkError, Result, Serializer}
 
   @default_corpus "benchmark/corpus"
   @default_out "benchmark/results/elixir"
@@ -221,7 +221,18 @@ defmodule Mix.Tasks.Benchmark.Run do
       "extractions" => Enum.map(spans, &Serializer.span_to_map/1),
       "timing" => %{"total_ms" => elapsed_ms},
       "usage" => usage,
-      "errors" => Enum.map(errors, &Serializer.chunk_error_to_map/1)
+      "errors" => Enum.map(errors, &benchmark_error/1)
+    }
+  end
+
+  # The benchmark schema keeps reasons as display strings — Python writes
+  # str(e), and compare.py never reads them. The Serializer's tagged
+  # encoding is for faithful reload, which result files don't need.
+  defp benchmark_error(%ChunkError{} = error) do
+    %{
+      "byte_start" => error.byte_start,
+      "byte_end" => error.byte_end,
+      "reason" => inspect(error.reason)
     }
   end
 

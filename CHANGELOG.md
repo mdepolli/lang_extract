@@ -16,6 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Error reasons serialize as tagged maps** — `Serializer` now encodes
+  the known `ChunkError` reason shapes as
+  `%{"tag" => "task_exit", "detail" => "timeout"}`-style maps instead of
+  one-way `inspect/1` strings, so persisted results can programmatically
+  distinguish a timeout from a parse failure after reload. Loaded reasons
+  keep their outer shape — `{:task_exit, _}`, `{:api_error, status, _}`,
+  bare atoms — so the same patterns match live and loaded errors; tuple
+  payloads come back as strings where the original term wasn't one.
+  Reasons outside the known set fall back to
+  `%{"tag" => "other", "detail" => inspect(term)}` and load as the bare
+  detail string; plain string reasons from files written by earlier
+  versions still load unchanged. Benchmark result files are unaffected —
+  their `reason` stays a display string, matching the Python runner.
+
 - **Both `run/4`s return a bare `Result` and cannot fail** (**breaking**) —
   `LangExtract.run/4` no longer abandons the document on a chunk task
   exit: the halt clause is gone, and a timed-out chunk task lands in

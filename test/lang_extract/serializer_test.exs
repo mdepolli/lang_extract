@@ -53,20 +53,120 @@ defmodule LangExtract.SerializerTest do
       assert [%ChunkError{byte_start: 0, byte_end: 1000}] = loaded.errors
     end
 
-    test "error reasons serialize as their inspect rendering and stay JSON-encodable" do
-      result = %Result{spans: [], errors: [@chunk_error], usage: nil}
+    test "known reason shapes serialize as tagged maps and load matchably" do
+      errors = [
+        %ChunkError{byte_start: 0, byte_end: 10, reason: {:task_exit, :timeout}},
+        %ChunkError{byte_start: 10, byte_end: 20, reason: {:invalid_format, "not json"}},
+        %ChunkError{byte_start: 20, byte_end: 30, reason: {:rate_limited, 3000}},
+        %ChunkError{
+          byte_start: 30,
+          byte_end: 40,
+          reason: {:api_error, 500, %{"error" => "boom"}}
+        },
+        %ChunkError{byte_start: 40, byte_end: 50, reason: :unauthorized}
+      ]
 
-      map = Serializer.result_to_map(@source, result)
+      map = Serializer.result_to_map(@source, %Result{spans: [], errors: errors, usage: nil})
 
-      assert [%{"byte_start" => 0, "byte_end" => 1000, "reason" => "{:task_exit, :timeout}"}] =
-               map["errors"]
+      assert [
+               %{"reason" => %{"tag" => "task_exit", "detail" => "timeout"}},
+               %{"reason" => %{"tag" => "invalid_format", "detail" => "not json"}},
+               %{"reason" => %{"tag" => "rate_limited", "retry_after" => 3000}},
+               %{"reason" => %{"tag" => "api_error", "status" => 500, "detail" => detail}},
+               %{"reason" => %{"tag" => "unauthorized"}}
+             ] = map["errors"]
 
-      # the point of inspect: arbitrary reason terms must not break encoding
+      assert detail =~ "boom"
       assert {:ok, _json} = Jason.encode(map)
 
-      # round-trip carries the rendered string, not the original term
+      # Loaded reasons keep their outer shape, so the same patterns match
+      # live and loaded errors; payloads come back as strings where the
+      # original term wasn't one.
+      assert {:ok, {_source, loaded}} = Serializer.result_from_map(map)
+
+      assert [
+               %ChunkError{reason: {:task_exit, "timeout"}},
+               %ChunkError{reason: {:invalid_format, "not json"}},
+               %ChunkError{reason: {:rate_limited, 3000}},
+               %ChunkError{reason: {:api_error, 500, _body}},
+               %ChunkError{reason: :unauthorized}
+             ] = loaded.errors
+    end
+
+    test "open reason terms fall back to tag other and load as the detail string" do
+      reason = {:custom_provider_reason, :weird, [1, 2]}
+      error = %ChunkError{byte_start: 0, byte_end: 5, reason: reason}
+
+      map = Serializer.result_to_map(@source, %Result{spans: [], errors: [error], usage: nil})
+
+      assert [%{"reason" => %{"tag" => "other", "detail" => detail}}] = map["errors"]
+      assert detail == inspect(reason)
+      assert {:ok, _json} = Jason.encode(map)
+
+      assert {:ok, {_source, loaded}} = Serializer.result_from_map(map)
+      assert [%ChunkError{reason: ^detail}] = loaded.errors
+    end
+
+    test "re-serializing a loaded result is stable" do
+      errors = [
+        %ChunkError{byte_start: 0, byte_end: 5, reason: {:custom_provider_reason, :weird}},
+        %ChunkError{
+          byte_start: 5,
+          byte_end: 10,
+          reason: {:request_error, %RuntimeError{message: "boom"}}
+        }
+      ]
+
+      result = %Result{spans: [], errors: errors, usage: nil}
+
+      load = fn map ->
+        json = Jason.encode!(map)
+        assert {:ok, {_source, loaded}} = Serializer.result_from_map(Jason.decode!(json))
+        loaded
+      end
+
+      first = load.(Serializer.result_to_map(@source, result))
+      second = load.(Serializer.result_to_map(@source, first))
+
+      assert second.errors == first.errors
+
+      assert [
+               %ChunkError{reason: "{:custom_provider_reason, :weird}"},
+               %ChunkError{reason: {:request_error, "boom"}}
+             ] = second.errors
+    end
+
+    test "string reasons from pre-tagged files still load" do
+      map = %{
+        "text" => @source,
+        "extractions" => [],
+        "errors" => [
+          %{"byte_start" => 0, "byte_end" => 5, "reason" => "{:task_exit, :timeout}"}
+        ]
+      }
+
       assert {:ok, {_source, loaded}} = Serializer.result_from_map(map)
       assert [%ChunkError{reason: "{:task_exit, :timeout}"}] = loaded.errors
+    end
+
+    test "malformed tagged reasons are rejected" do
+      for bad <- [
+            %{"tag" => "task_exit"},
+            %{"tag" => "frobnicate", "detail" => "x"},
+            %{"tag" => 42, "detail" => "x"},
+            %{"tag" => "rate_limited", "retry_after" => "soon"},
+            %{"tag" => "api_error", "status" => "500", "detail" => "x"},
+            %{"detail" => "no tag"}
+          ] do
+        map = %{
+          "text" => @source,
+          "extractions" => [],
+          "errors" => [%{"byte_start" => 0, "byte_end" => 5, "reason" => bad}]
+        }
+
+        assert {:error, :invalid_data} = Serializer.result_from_map(map),
+               "expected rejection of #{inspect(bad)}"
+      end
     end
 
     test "nil usage round-trips as nil" do

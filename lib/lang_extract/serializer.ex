@@ -8,9 +8,15 @@ defmodule LangExtract.Serializer do
   usage); `to_map/2` / `from_map/1` cover bare span lists (e.g. from
   `LangExtract.align/3`).
 
-  Error reasons are open terms, so they serialize as their `inspect/1`
-  rendering — JSON-safe, but one-way: a loaded `ChunkError` carries the
-  rendered string, not the original term.
+  Known error-reason shapes serialize as tagged maps
+  (`%{"tag" => "task_exit", "detail" => "timeout"}`), so a loaded
+  `ChunkError` distinguishes failure kinds programmatically: loaded
+  reasons keep their outer shape (`{:task_exit, _}`, `{:api_error,
+  status, _}`, bare atoms), with payloads coming back as strings where
+  the original term wasn't one. Reasons outside the known set fall back
+  to `%{"tag" => "other", "detail" => inspect(term)}` and load as the
+  bare detail string — as do plain string reasons from files written
+  before the tagged encoding.
   """
 
   alias LangExtract.ChunkError
@@ -50,8 +56,9 @@ defmodule LangExtract.Serializer do
 
   Returns `{:error, :invalid_data}` if the shape or field types are wrong —
   validation is strict, so a decoded struct upholds the same invariants as
-  a pipeline-produced one. Error reasons come back as the `inspect/1`
-  strings `result_to_map/2` wrote.
+  a pipeline-produced one. Tagged error reasons decode to matchable terms
+  (see the moduledoc); plain string reasons pass through for files written
+  before the tagged encoding.
   """
   @spec result_from_map(term()) :: {:ok, {String.t(), Result.t()}} | {:error, :invalid_data}
   def result_from_map(%{"text" => text, "extractions" => extractions, "errors" => errors} = map)
@@ -68,15 +75,16 @@ defmodule LangExtract.Serializer do
   @doc """
   Converts a `LangExtract.ChunkError` to a plain map with string keys.
 
-  The open `reason` term is rendered with `inspect/1` so the map is always
-  JSON-encodable.
+  Known reason shapes become tagged maps; open terms fall back to
+  `%{"tag" => "other", "detail" => inspect(term)}` — either way the map
+  is always JSON-encodable.
   """
   @spec chunk_error_to_map(ChunkError.t()) :: map()
   def chunk_error_to_map(%ChunkError{} = error) do
     %{
       "byte_start" => error.byte_start,
       "byte_end" => error.byte_end,
-      "reason" => inspect(error.reason)
+      "reason" => reason_to_map(error.reason)
     }
   end
 
@@ -188,11 +196,122 @@ defmodule LangExtract.Serializer do
          "reason" => reason
        })
        when is_integer(byte_start) and byte_start >= 0 and is_integer(byte_end) and
-              byte_end >= 0 and is_binary(reason) do
-    {:ok, %ChunkError{byte_start: byte_start, byte_end: byte_end, reason: reason}}
+              byte_end >= 0 do
+    case reason_from_map(reason) do
+      {:ok, reason} ->
+        {:ok, %ChunkError{byte_start: byte_start, byte_end: byte_end, reason: reason}}
+
+      {:error, _} = error ->
+        error
+    end
   end
 
   defp map_to_chunk_error(_), do: {:error, :invalid_data}
+
+  # The known reason vocabulary: every shape the library itself produces
+  # (see Provider.error/0, the pipeline errors, and the task layer). Atom
+  # reasons round-trip exactly; tuple payloads flatten to strings where
+  # the term wasn't one, keeping the outer shape matchable after a load.
+  @atom_reasons %{
+    "missing_api_key" => :missing_api_key,
+    "empty_response" => :empty_response,
+    "unauthorized" => :unauthorized,
+    "server_error" => :server_error,
+    "drained" => :drained,
+    "missing_extractions" => :missing_extractions
+  }
+  @atom_tags Map.new(@atom_reasons, fn {tag, atom} -> {atom, tag} end)
+
+  defp reason_to_map(reason) when is_map_key(@atom_tags, reason) do
+    %{"tag" => @atom_tags[reason]}
+  end
+
+  defp reason_to_map({:task_exit, detail}) do
+    %{"tag" => "task_exit", "detail" => detail_string(detail)}
+  end
+
+  defp reason_to_map({:invalid_format, raw}) when is_binary(raw) do
+    %{"tag" => "invalid_format", "detail" => raw}
+  end
+
+  defp reason_to_map({:bad_request, detail}) do
+    %{"tag" => "bad_request", "detail" => detail_string(detail)}
+  end
+
+  defp reason_to_map({:rate_limited, retry_after})
+       when is_integer(retry_after) or is_nil(retry_after) do
+    %{"tag" => "rate_limited", "retry_after" => retry_after}
+  end
+
+  defp reason_to_map({:api_error, status, body}) when is_integer(status) do
+    %{"tag" => "api_error", "status" => status, "detail" => detail_string(body)}
+  end
+
+  defp reason_to_map({:request_error, exception}) when is_exception(exception) do
+    %{"tag" => "request_error", "detail" => Exception.message(exception)}
+  end
+
+  # Loaded reasons re-serialize stably: a request_error's exception loads as
+  # its message string, and "other"/legacy reasons load as bare strings —
+  # both must encode back without gaining a layer of inspect quoting.
+  defp reason_to_map({:request_error, message}) when is_binary(message) do
+    %{"tag" => "request_error", "detail" => message}
+  end
+
+  defp reason_to_map(reason) when is_binary(reason) do
+    %{"tag" => "other", "detail" => reason}
+  end
+
+  defp reason_to_map(other), do: %{"tag" => "other", "detail" => inspect(other)}
+
+  defp detail_string(detail) when is_binary(detail), do: detail
+  defp detail_string(detail) when is_atom(detail), do: Atom.to_string(detail)
+  defp detail_string(detail), do: inspect(detail)
+
+  # Plain strings pass through: "other"-tagged loads and pre-tagged files.
+  defp reason_from_map(reason) when is_binary(reason), do: {:ok, reason}
+  defp reason_from_map(%{"tag" => tag} = map), do: reason_from_tag(tag, map)
+  defp reason_from_map(_), do: {:error, :invalid_data}
+
+  defp reason_from_tag(tag, map) when is_map_key(@atom_reasons, tag) do
+    if map_size(map) == 1 do
+      {:ok, @atom_reasons[tag]}
+    else
+      {:error, :invalid_data}
+    end
+  end
+
+  defp reason_from_tag("task_exit", %{"detail" => detail}) when is_binary(detail) do
+    {:ok, {:task_exit, detail}}
+  end
+
+  defp reason_from_tag("invalid_format", %{"detail" => detail}) when is_binary(detail) do
+    {:ok, {:invalid_format, detail}}
+  end
+
+  defp reason_from_tag("bad_request", %{"detail" => detail}) when is_binary(detail) do
+    {:ok, {:bad_request, detail}}
+  end
+
+  defp reason_from_tag("rate_limited", %{"retry_after" => retry_after})
+       when is_integer(retry_after) or is_nil(retry_after) do
+    {:ok, {:rate_limited, retry_after}}
+  end
+
+  defp reason_from_tag("api_error", %{"status" => status, "detail" => detail})
+       when is_integer(status) and is_binary(detail) do
+    {:ok, {:api_error, status, detail}}
+  end
+
+  defp reason_from_tag("request_error", %{"detail" => detail}) when is_binary(detail) do
+    {:ok, {:request_error, detail}}
+  end
+
+  defp reason_from_tag("other", %{"detail" => detail}) when is_binary(detail) do
+    {:ok, detail}
+  end
+
+  defp reason_from_tag(_tag, _map), do: {:error, :invalid_data}
 
   defp map_spans(extractions) do
     extractions
