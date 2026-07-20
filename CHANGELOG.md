@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Gemini API key moves from the URL to the `x-goog-api-key` header** —
+  the key is baked into the Req client at `new/2` like the other two
+  providers, request URLs no longer contain the secret, and the
+  key-in-URL logging warning is gone from the docs. No API change —
+  the Gemini API accepts both transports.
+
 - **Error reasons serialize as tagged maps** — `Serializer` now encodes
   the known `ChunkError` reason shapes as
   `%{"tag" => "task_exit", "detail" => "timeout"}`-style maps instead of

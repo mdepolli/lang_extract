@@ -2,12 +2,9 @@ defmodule LangExtract.Provider.Gemini do
   @moduledoc """
   Gemini (Google) provider for LLM inference.
 
-  Calls the Gemini generateContent API via Req.
-
-  Note: the Gemini API takes the key as a URL query parameter (unlike
-  Claude and OpenAI, which use headers), so request URLs contain the
-  secret. Avoid logging request URLs (e.g. via custom Req steps or
-  verbose HTTP logging) when using this provider.
+  Calls the Gemini generateContent API via Req. The API key is sent via
+  the `x-goog-api-key` header, like the other providers' header auth —
+  never as a URL query parameter, so request URLs stay loggable.
   """
 
   @behaviour LangExtract.Provider
@@ -21,14 +18,18 @@ defmodule LangExtract.Provider.Gemini do
     base_url: "https://generativelanguage.googleapis.com"
   ]
 
-  # Gemini passes API key as a query param per request (not a header), so it can't
-  # be baked into the Req struct. We still validate the key here for fail-fast at new/2.
   @impl true
   @spec build_http_client(keyword()) :: {:ok, Req.Request.t()} | {:error, :missing_api_key}
   def build_http_client(opts) do
-    with {:ok, _api_key} <- Provider.fetch_api_key(opts, "GEMINI_API_KEY") do
+    with {:ok, api_key} <- Provider.fetch_api_key(opts, "GEMINI_API_KEY") do
       %{base_url: base_url} = Provider.common_opts(opts, @defaults)
-      req_opts = Provider.req_options(opts, base_url: base_url)
+
+      req_opts =
+        Provider.req_options(opts,
+          base_url: base_url,
+          headers: %{"x-goog-api-key" => api_key}
+        )
+
       {:ok, Req.new(req_opts)}
     end
   end
@@ -52,8 +53,7 @@ defmodule LangExtract.Provider.Gemini do
   @spec build_request(String.t(), keyword()) ::
           {:ok, {Req.Request.t(), keyword()}} | {:error, :missing_api_key}
   def build_request(prompt, opts) do
-    with {:ok, req} <- Provider.resolve_http_client(opts, &build_http_client/1),
-         {:ok, api_key} <- Provider.fetch_api_key(opts, "GEMINI_API_KEY") do
+    with {:ok, req} <- Provider.resolve_http_client(opts, &build_http_client/1) do
       %{model: model, max_tokens: max_tokens, temperature: temperature} =
         Provider.common_opts(opts, @defaults)
 
@@ -68,7 +68,7 @@ defmodule LangExtract.Provider.Gemini do
         }
       }
 
-      {:ok, {req, [url: path, params: [key: api_key], json: payload]}}
+      {:ok, {req, [url: path, json: payload]}}
     end
   end
 

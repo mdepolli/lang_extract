@@ -25,11 +25,12 @@ defmodule LangExtract.Provider.GeminiTest do
                Gemini.build_request("Extract entities.", api_key: "test-key")
 
       assert request_opts[:url] == "/v1beta/models/gemini-3.5-flash:generateContent"
-      assert request_opts[:params] == [key: "test-key"]
       assert req.options.base_url == "https://generativelanguage.googleapis.com"
       assert req.options.receive_timeout == 120_000
       assert req.options.retry == :transient
-      # No auth header — key is in query params
+      # Key travels as Gemini's dedicated header, never in the URL
+      assert req.headers["x-goog-api-key"] == ["test-key"]
+      refute request_opts[:params]
       refute Map.has_key?(req.headers, "authorization")
       refute Map.has_key?(req.headers, "x-api-key")
 
@@ -63,18 +64,18 @@ defmodule LangExtract.Provider.GeminiTest do
     test "api_key from opts takes precedence over env var" do
       System.put_env("GEMINI_API_KEY", "env-key")
 
-      assert {:ok, {_req, request_opts}} =
+      assert {:ok, {req, _request_opts}} =
                Gemini.build_request("prompt", api_key: "opts-key")
 
-      assert request_opts[:params] == [key: "opts-key"]
+      assert req.headers["x-goog-api-key"] == ["opts-key"]
     end
 
     test "falls back to GEMINI_API_KEY env var" do
       System.put_env("GEMINI_API_KEY", "env-key")
 
-      assert {:ok, {_req, request_opts}} = Gemini.build_request("prompt", [])
+      assert {:ok, {req, _request_opts}} = Gemini.build_request("prompt", [])
 
-      assert request_opts[:params] == [key: "env-key"]
+      assert req.headers["x-goog-api-key"] == ["env-key"]
     end
 
     test "returns error when api key is missing" do
@@ -210,8 +211,11 @@ defmodule LangExtract.Provider.GeminiTest do
       :ok
     end
 
-    test "full pipeline returns extracted text" do
+    test "full pipeline returns extracted text with the key on the wire as a header" do
       Req.Test.stub(__MODULE__, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "x-goog-api-key") == ["gm-test"]
+        assert conn.query_string == ""
+
         Req.Test.json(conn, %{
           "candidates" => [
             %{
