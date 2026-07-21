@@ -161,6 +161,17 @@ defmodule LangExtract.Alignment.AlignerTest do
       assert [%Span{status: :not_found}] =
                Aligner.align("hi", ["this is much longer than source"])
     end
+
+    test "CRLF source: offsets stay byte-exact past the \\r bytes" do
+      source = "First line here.\r\nThe quick brown fox jumps."
+
+      [span] = Aligner.align(source, ["quick brown fox"])
+
+      assert span.status == :exact
+
+      assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) ==
+               "quick brown fox"
+    end
   end
 
   describe "lesser matching (partial contiguous runs)" do

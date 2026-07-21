@@ -192,5 +192,21 @@ defmodule LangExtract.ChunkerTest do
       sentences = Chunker.find_sentences(text)
       assert Enum.join(sentences) == text
     end
+
+    test "CRLF line endings: chunk byte ranges tile the source exactly" do
+      # Windows corpora arrive with \r\n; every offset downstream depends
+      # on chunk ranges slicing the original bytes back out verbatim.
+      text = "First sentence here.\r\nSecond sentence there.\r\nThird one closes it."
+      chunks = Chunker.chunk(text, max_chunk_chars: 25)
+
+      assert length(chunks) > 1
+
+      for chunk <- chunks do
+        assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
+                 chunk.text
+      end
+
+      assert Enum.map_join(chunks, & &1.text) == text
+    end
   end
 end
