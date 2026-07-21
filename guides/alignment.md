@@ -13,7 +13,7 @@ Every alignment produces a `LangExtract.Span`:
 | ------------ | ----------------------------------------------------- |
 | `text`       | The extracted text as the LLM returned it             |
 | `class`      | Entity class (`nil` when aligning plain strings)      |
-| `attributes` | Metadata the LLM attached                             |
+| `attributes` | Metadata the LLM attached — not byte-grounded, untrusted |
 | `byte_start` | Inclusive byte offset in source (`nil` if not found)  |
 | `byte_end`   | Exclusive byte offset in source (`nil` if not found)  |
 | `status`     | `:exact`, `:lesser`, `:fuzzy`, or `:not_found`        |

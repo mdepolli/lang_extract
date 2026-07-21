@@ -17,6 +17,9 @@ defmodule LangExtract.Span do
       stemmed tokens; the span covers the matched region
     * `:not_found` — no acceptable grounding
 
+  Only `text` is grounded: `attributes` are free-form model output with
+  no byte anchoring, so treat them as untrusted before use in any
+  sensitive sink.
   """
 
   @type status :: :exact | :lesser | :fuzzy | :not_found

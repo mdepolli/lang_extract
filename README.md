@@ -143,7 +143,7 @@ Each span contains:
 | ------------ | ---------------------------------------------------- |
 | `text`       | The extracted text as returned by the LLM            |
 | `class`      | Entity type (e.g., `"condition"`, `"medication"`)    |
-| `attributes` | Arbitrary metadata the LLM attached                  |
+| `attributes` | Metadata the LLM attached — not byte-grounded; untrusted model output |
 | `byte_start` | Inclusive byte offset in source (`nil` if not found) |
 | `byte_end`   | Exclusive byte offset in source (`nil` if not found) |
 | `status`     | `:exact`, `:lesser`, `:fuzzy`, or `:not_found`       |
