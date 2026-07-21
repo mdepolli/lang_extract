@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   partial failure, the four alignment phases, and the runner's failure
   semantics (shared 429 pause, retry budgets, drain).
 
+### Fixed
+
+- **`Serializer.load_jsonl/1` no longer pins the whole file in memory** —
+  decoded strings of 64+ bytes were sub-binaries of the entire file
+  binary, so keeping any loaded span alive retained the full file until
+  GC. Strings are now copied at decode (`Jason.decode(..., strings:
+  :copy)`); a regression test pins the retention bound via
+  `:binary.referenced_byte_size/1`.
+
 ### Removed
 
 - **The `validate: false` option on `template/2` and `template!/2`**
@@ -27,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through a skip flag.
 
 ### Changed
+
+- **Runner crash reasons are sanitized before becoming data** — a crashed
+  chunk task's `ChunkError` now carries `{:task_exit, banner_or_atom}`
+  (e.g. `"** (RuntimeError) boom"`, `:killed`) instead of the raw
+  `{exception, stacktrace}` exit term. Raw exit reasons can embed the
+  crashing frame's arguments — including the `Req.Request` whose headers
+  hold the API key, which Req's `Inspect` does not redact for
+  `x-api-key`/`x-goog-api-key` — so the reason is reduced to a
+  header-free summary at the delivery boundary. Consumers matching
+  `{:task_exit, _}` are unaffected; only code destructuring the raw
+  exception tuple needs updating.
 
 - **Gemini API key moves from the URL to the `x-goog-api-key` header** —
   the key is baked into the Req client at `new/2` like the other two
