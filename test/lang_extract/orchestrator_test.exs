@@ -550,6 +550,31 @@ defmodule LangExtract.OrchestratorTest do
       assert [%{text: "Second"}] = spans
     end
 
+    # Pins the documented residual asymmetry from the run/4 convergence:
+    # standalone chunk tasks are linked, so a bug-level crash propagates
+    # to the caller — only the Runner's nolink Delivery converts crashes
+    # to ChunkErrors. A refactor that silently swallowed the crash here
+    # would go green everywhere else.
+    @tag capture_log: true
+    test "a bug-level crash in a chunk task propagates to the caller" do
+      Req.Test.stub(__MODULE__, fn _conn -> raise "provider bug" end)
+      test_pid = self()
+
+      # The crash arrives as a link signal, so it must be observed from a
+      # sacrificial process — catch_exit can't intercept link exits.
+      {pid, ref} =
+        spawn_monitor(fn ->
+          # Req.Test resolves stubs through $callers, which raw spawns
+          # don't inherit — restore the chain by hand.
+          Process.put(:"$callers", [test_pid])
+          LangExtract.run(claude_client(), "some text", template())
+        end)
+
+      assert_receive {:DOWN, ^ref, :process, ^pid,
+                      {%RuntimeError{message: "provider bug"}, _stack}},
+                     2_000
+    end
+
     test "auto-chunks by default (short text fits in one chunk)" do
       stub_claude(claude_extraction_response([%{"word" => "fox", "word_attributes" => %{}}]))
 
