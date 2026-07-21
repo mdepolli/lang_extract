@@ -141,8 +141,25 @@ defmodule LangExtract.Runner.Delivery do
   defp to_event(_chunk, {:error, %ChunkError{} = error}), do: {:error, error}
 
   defp crash_event(chunk, reason) do
-    {:error, ChunkError.from_chunk(chunk, {:task_exit, reason})}
+    {:error, ChunkError.from_chunk(chunk, {:task_exit, sanitize(reason)})}
   end
+
+  # A raw exit reason can embed the crashing frame's arguments — including
+  # the Req.Request whose headers hold the API key (Req's Inspect redacts
+  # only `authorization`, and OTP crash logs bypass Inspect entirely) — so
+  # the reason is reduced to a header-free summary before it becomes data.
+  defp sanitize({reason, [{mod, fun, _args, _info} | _]}) when is_atom(mod) and is_atom(fun) do
+    scrub(reason)
+  end
+
+  defp sanitize(reason), do: scrub(reason)
+
+  defp scrub(reason) when is_atom(reason), do: reason
+
+  defp scrub(exception) when is_exception(exception),
+    do: Exception.format_banner(:error, exception)
+
+  defp scrub(other), do: inspect(other, limit: 20, printable_limit: 256)
 
   defp drained_event(chunk) do
     {:error, ChunkError.from_chunk(chunk, :drained)}

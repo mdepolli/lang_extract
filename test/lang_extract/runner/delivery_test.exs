@@ -54,7 +54,7 @@ defmodule LangExtract.Runner.DeliveryTest do
 
   # The deliberate raise produces a task crash report.
   @tag capture_log: true
-  test "a crashing task becomes a per-chunk task_exit error", %{sup: sup} do
+  test "a crashing task becomes a sanitized per-chunk task_exit error", %{sup: sup} do
     process = fn
       %Chunk{byte_start: 100} -> raise "boom"
       chunk -> {:ok, ChunkResult.from_chunk(chunk, [])}
@@ -62,10 +62,33 @@ defmodule LangExtract.Runner.DeliveryTest do
 
     events = sup |> Delivery.stream_events(chunks(3), process, buffer: 3) |> Enum.to_list()
 
-    assert [{:error, %ChunkError{byte_start: 100, reason: {:task_exit, {%RuntimeError{}, _}}}}] =
+    # The reason carries the exception banner, never the raw {exception,
+    # stacktrace} exit term — stacktrace frames can embed the crashing
+    # call's arguments (e.g. a Req.Request whose headers hold the API key).
+    assert [{:error, %ChunkError{byte_start: 100, reason: {:task_exit, banner}}}] =
              Enum.filter(events, &match?({:error, _}, &1))
 
+    assert banner == "** (RuntimeError) boom"
+
     assert events |> Enum.filter(&match?({:ok, _}, &1)) |> length() == 2
+  end
+
+  # An exit with a bare term (no stacktrace) keeps atoms intact and bounds
+  # everything else through inspect — no term can smuggle request state.
+  @tag capture_log: true
+  test "non-exception crash reasons sanitize to atoms or bounded strings", %{sup: sup} do
+    process = fn
+      %Chunk{byte_start: 0} -> exit({:shutdown, {:secret_struct, String.duplicate("x", 10_000)}})
+      chunk -> {:ok, ChunkResult.from_chunk(chunk, [])}
+    end
+
+    events = sup |> Delivery.stream_events(chunks(2), process, buffer: 2) |> Enum.to_list()
+
+    assert [{:error, %ChunkError{reason: {:task_exit, detail}}}] =
+             Enum.filter(events, &match?({:error, _}, &1))
+
+    assert is_binary(detail)
+    assert byte_size(detail) < 1024
   end
 
   test "chunk-level errors pass through untouched", %{sup: sup} do
