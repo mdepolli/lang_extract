@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Docs demote bare `align/3` as a product path** — README no longer has an
+  "Alignment Without an LLM" section. The front door matches upstream:
+  `run/4` / `stream/4` for documents, `extract/3` for replaying stored model
+  JSON. `align/3` remains on the facade as a thin helper over the alignment
+  engine (tests/tooling); grounding itself is still the core product, via
+  the pipeline. Guide and Serializer wording updated to match.
+
 ## [0.10.0] - 2026-07-20
 
 ### Added

@@ -12,7 +12,7 @@ Every alignment produces a `LangExtract.Span`:
 | Field        | Description                                           |
 | ------------ | ----------------------------------------------------- |
 | `text`       | The extracted text as the LLM returned it             |
-| `class`      | Entity class (`nil` when aligning plain strings)      |
+| `class`      | Entity class — always set by the pipeline (`nil` for bare `align/3` spans) |
 | `attributes` | Metadata the LLM attached — not byte-grounded, untrusted |
 | `byte_start` | Inclusive byte offset in source (`nil` if not found)  |
 | `byte_end`   | Exclusive byte offset in source (`nil` if not found)  |
@@ -37,9 +37,9 @@ which real prose does (curly quotes, em dashes, accented names):
 
 ```elixir
 source = "café au lait"
-[span] = LangExtract.align(source, ["au lait"])
-{span.byte_start, span.byte_end}
-#=> {6, 13}   — "café " is 5 characters but 6 bytes ("é" is 2 bytes)
+# A span grounded to "au lait" (as from run/4 or extract/3):
+# %Span{text: "au lait", byte_start: 6, byte_end: 13, status: :exact}
+# "café " is 5 graphemes but 6 bytes ("é" is 2 bytes).
 
 binary_part(source, 6, 13 - 6)
 #=> "au lait"   # correct
@@ -118,8 +118,9 @@ flowchart TD
 
 ## Tuning
 
-All alignment options are accepted by `LangExtract.run/4`,
-`LangExtract.extract/3`, and `LangExtract.align/3`:
+All alignment options are accepted by `LangExtract.run/4` and
+`LangExtract.extract/3`, and by the underlying
+`LangExtract.Alignment.Aligner` directly:
 
 | Option             | Default | Effect                                                        |
 | ------------------ | ------- | ------------------------------------------------------------- |

@@ -5,8 +5,10 @@ defmodule LangExtract do
 
   This module is the main entry point: `new/2` builds a client,
   `template!/2` builds a validated task definition (`template/2` is its
-  non-raising twin for runtime task data), `run/4` executes the full
-  pipeline, and `align/3` / `extract/3` expose the lower-level steps.
+  non-raising twin for runtime task data), and `run/4` / `stream/4`
+  execute the full pipeline (chunk → LLM → parse → align). For replaying
+  stored model output without another API call, see `extract/3`.
+
   Beyond the facade:
 
     * `LangExtract.Prompt.Validator` — pre-flight check that few-shot
@@ -15,6 +17,9 @@ defmodule LangExtract do
       for storage or interop
     * `LangExtract.Extraction` — the extraction struct used in template
       examples and parsed LLM output
+    * `LangExtract.Alignment.Aligner` — the grounding engine the pipeline
+      already runs for you (public but best-effort; see Stability in the
+      README)
   """
 
   alias LangExtract.{
@@ -33,19 +38,25 @@ defmodule LangExtract do
   alias LangExtract.Prompt.Validator.ValidationError
 
   @doc """
-  Aligns extraction strings to byte spans in source text.
+  Lower-level: aligns bare extraction strings to byte spans in source text.
 
-  Returns a list of `%LangExtract.Span{}` structs, one per extraction.
+  Prefer `run/4` / `stream/4` for documents (they chunk, then ground) and
+  `extract/3` when you already have model JSON. This is a thin wrapper over
+  `LangExtract.Alignment.Aligner` for tests, tooling, and callers who need
+  the engine directly — the same engine the pipeline uses on each chunk.
+  It aligns against the source as given: the fuzzy fallthrough phases scale
+  super-linearly in source tokens, so a book-length source can cost seconds
+  per unmatched extraction where the pipeline's ~200-token chunks stay fast.
 
-  Designed for chunk-scale sources (the pipeline aligns against ~200-token
-  chunks). The fallthrough fuzzy phases scale super-linearly in source
-  tokens, so calling this directly on a book-length source can cost
-  seconds per unmatched extraction — for whole-document grounding, use
-  `run/4` or `stream/4`, which chunk first.
+  Returns a list of `%LangExtract.Span{}` structs, one per extraction
+  (`class` is always `nil` and `attributes` always empty).
 
   ## Options
 
     * `:fuzzy_threshold` - minimum overlap ratio for fuzzy match (default `0.75`)
+    * `:min_density` - minimum matched-token density for fuzzy (default `1/3`)
+    * `:accept_lesser` - accept prefix partial matches (default `true`)
+    * `:exact_algorithm` - `:dp` (default) or `:first_occurrence`
 
   ## Examples
 
@@ -59,8 +70,11 @@ defmodule LangExtract do
   end
 
   @doc """
-  Parses LLM output, aligns extractions against source text, and returns
-  enriched spans with class and attributes.
+  Parses raw LLM output, aligns extractions against source text, and returns
+  spans with class and attributes.
+
+  Use this to replay or re-ground a stored model response without calling the
+  provider again. For live extraction from a document, use `run/4`.
 
   Accepts both canonical and dynamic-key format (where each entry uses
   the class name as the key). JSON only (since 0.7.0). Strips markdown fences
@@ -69,6 +83,9 @@ defmodule LangExtract do
   ## Options
 
     * `:fuzzy_threshold` - minimum overlap ratio for fuzzy match (default `0.75`)
+    * `:min_density` - minimum matched-token density for fuzzy (default `1/3`)
+    * `:accept_lesser` - accept prefix partial matches (default `true`)
+    * `:exact_algorithm` - `:dp` (default) or `:first_occurrence`
 
   ## Examples
 

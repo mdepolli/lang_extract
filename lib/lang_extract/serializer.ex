@@ -5,8 +5,7 @@ defmodule LangExtract.Serializer do
   Converts between LangExtract structs and plain maps/JSON for storage,
   debugging, and interop with external systems. `result_to_map/2` /
   `result_from_map/1` cover the full `LangExtract.Result` (spans, errors,
-  usage); `to_map/2` / `from_map/1` cover bare span lists (e.g. from
-  `LangExtract.align/3`).
+  usage); `to_map/2` / `from_map/1` cover bare span lists (no errors/usage).
 
   Known error-reason shapes serialize as tagged maps
   (`%{"tag" => "task_exit", "detail" => "timeout"}`), so a loaded

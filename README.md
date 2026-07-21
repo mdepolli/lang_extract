@@ -266,18 +266,9 @@ by hand and for re-checking under custom aligner options:
 Validation uses the production aligner, so a passing template predicts how
 the same extractions align at runtime.
 
-## Alignment Without an LLM
+## Replaying model output
 
-If you already have extraction strings (e.g., from a different source), you can
-align them against source text directly:
-
-```elixir
-spans = LangExtract.align("the quick brown fox", ["quick brown", "fox"])
-# [%Span{text: "quick brown", byte_start: 4, byte_end: 15, status: :exact},
-#  %Span{text: "fox", byte_start: 16, byte_end: 19, status: :exact}]
-```
-
-Or parse raw LLM output and align in one step:
+To re-ground a stored LLM response without another provider call:
 
 ```elixir
 raw = ~s({"extractions": [{"class": "animal", "text": "fox"}]})
@@ -286,7 +277,8 @@ raw = ~s({"extractions": [{"class": "animal", "text": "fox"}]})
 
 Both canonical format (`class`/`text`/`attributes` keys) and dynamic-key format
 (`"animal": "fox"`) are accepted. Markdown fences and `<think>` tags are
-stripped automatically.
+stripped automatically. Live document extraction goes through `run/4` (or
+`Runner`), which chunks first and grounds each chunk for you.
 
 ## Serialization
 
@@ -308,7 +300,7 @@ strings where the original term wasn't one (e.g. `{:task_exit, :timeout}`
 loads as `{:task_exit, "timeout"}`). Reasons outside the known vocabulary
 fall back to their `inspect/1` rendering and load as that bare string.
 
-For bare span lists (e.g. from `align/3`), the span-level pair applies:
+For bare span lists (without errors/usage), the span-level pair applies:
 
 ```elixir
 map = LangExtract.Serializer.to_map(source, spans)
