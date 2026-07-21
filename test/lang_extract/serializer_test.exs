@@ -81,11 +81,12 @@ defmodule LangExtract.SerializerTest do
 
       # Loaded reasons keep their outer shape, so the same patterns match
       # live and loaded errors; payloads come back as strings where the
-      # original term wasn't one.
+      # original term wasn't one, except common exit atoms, which
+      # round-trip exactly.
       assert {:ok, {_source, loaded}} = Serializer.result_from_map(map)
 
       assert [
-               %ChunkError{reason: {:task_exit, "timeout"}},
+               %ChunkError{reason: {:task_exit, :timeout}},
                %ChunkError{reason: {:invalid_format, "not json"}},
                %ChunkError{reason: {:rate_limited, 3000}},
                %ChunkError{reason: {:api_error, 500, _body}},
@@ -136,6 +137,19 @@ defmodule LangExtract.SerializerTest do
              ] = second.errors
     end
 
+    test "common exit atoms round-trip exactly through task_exit details" do
+      # {:task_exit, :timeout} is the reason live code matches on; loading
+      # it back as {:task_exit, "timeout"} would silently break exact
+      # matches on persisted results.
+      for detail <- [:timeout, :killed, :shutdown] do
+        error = %ChunkError{byte_start: 0, byte_end: 5, reason: {:task_exit, detail}}
+        map = Serializer.result_to_map(@source, %Result{spans: [], errors: [error], usage: nil})
+
+        assert {:ok, {_source, loaded}} = Serializer.result_from_map(map)
+        assert [%ChunkError{reason: {:task_exit, ^detail}}] = loaded.errors
+      end
+    end
+
     test "string reasons from pre-tagged files still load" do
       map = %{
         "text" => @source,
@@ -156,6 +170,7 @@ defmodule LangExtract.SerializerTest do
             %{"tag" => 42, "detail" => "x"},
             %{"tag" => "rate_limited", "retry_after" => "soon"},
             %{"tag" => "api_error", "status" => "500", "detail" => "x"},
+            %{"tag" => "task_exit", "detail" => "x", "extra" => 1},
             %{"detail" => "no tag"}
           ] do
         map = %{

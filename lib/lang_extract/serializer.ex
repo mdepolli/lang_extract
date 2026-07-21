@@ -13,7 +13,10 @@ defmodule LangExtract.Serializer do
   `ChunkError` distinguishes failure kinds programmatically: loaded
   reasons keep their outer shape (`{:task_exit, _}`, `{:api_error,
   status, _}`, bare atoms), with payloads coming back as strings where
-  the original term wasn't one. Reasons outside the known set fall back
+  the original term wasn't one — except the common exit atoms
+  (`:timeout`, `:killed`, `:shutdown`), which round-trip exactly so
+  `{:task_exit, :timeout}` matches the same live and loaded. Reasons
+  outside the known set fall back
   to `%{"tag" => "other", "detail" => inspect(term)}` and load as the
   bare detail string — as do plain string reasons from files written
   before the tagged encoding.
@@ -284,33 +287,43 @@ defmodule LangExtract.Serializer do
     end
   end
 
-  defp reason_from_tag("task_exit", %{"detail" => detail}) when is_binary(detail) do
-    {:ok, {:task_exit, detail}}
+  # The exit atoms the pipeline itself produces round-trip exactly, so
+  # {:task_exit, :timeout} matches the same before and after a load;
+  # sanitized banners and other free-form details stay strings.
+  @exit_atoms %{"timeout" => :timeout, "killed" => :killed, "shutdown" => :shutdown}
+
+  defp reason_from_tag("task_exit", %{"detail" => detail} = map)
+       when is_binary(detail) and map_size(map) == 2 do
+    {:ok, {:task_exit, Map.get(@exit_atoms, detail, detail)}}
   end
 
-  defp reason_from_tag("invalid_format", %{"detail" => detail}) when is_binary(detail) do
+  defp reason_from_tag("invalid_format", %{"detail" => detail} = map)
+       when is_binary(detail) and map_size(map) == 2 do
     {:ok, {:invalid_format, detail}}
   end
 
-  defp reason_from_tag("bad_request", %{"detail" => detail}) when is_binary(detail) do
+  defp reason_from_tag("bad_request", %{"detail" => detail} = map)
+       when is_binary(detail) and map_size(map) == 2 do
     {:ok, {:bad_request, detail}}
   end
 
-  defp reason_from_tag("rate_limited", %{"retry_after" => retry_after})
-       when is_integer(retry_after) or is_nil(retry_after) do
+  defp reason_from_tag("rate_limited", %{"retry_after" => retry_after} = map)
+       when (is_integer(retry_after) or is_nil(retry_after)) and map_size(map) == 2 do
     {:ok, {:rate_limited, retry_after}}
   end
 
-  defp reason_from_tag("api_error", %{"status" => status, "detail" => detail})
-       when is_integer(status) and is_binary(detail) do
+  defp reason_from_tag("api_error", %{"status" => status, "detail" => detail} = map)
+       when is_integer(status) and is_binary(detail) and map_size(map) == 3 do
     {:ok, {:api_error, status, detail}}
   end
 
-  defp reason_from_tag("request_error", %{"detail" => detail}) when is_binary(detail) do
+  defp reason_from_tag("request_error", %{"detail" => detail} = map)
+       when is_binary(detail) and map_size(map) == 2 do
     {:ok, {:request_error, detail}}
   end
 
-  defp reason_from_tag("other", %{"detail" => detail}) when is_binary(detail) do
+  defp reason_from_tag("other", %{"detail" => detail} = map)
+       when is_binary(detail) and map_size(map) == 2 do
     {:ok, detail}
   end
 
