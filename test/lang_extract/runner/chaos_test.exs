@@ -113,7 +113,9 @@ defmodule LangExtract.Runner.ChaosTest do
 
     completed = Enum.count(events, &match?({:ok, %ChunkResult{}}, &1))
     drained = Enum.count(events, &match?({:error, %ChunkError{reason: :drained}}, &1))
-    other = length(events) - completed - drained
+
+    task_exits =
+      Enum.count(events, &match?({:error, %ChunkError{reason: {:task_exit, _}}}, &1))
 
     # No chunk is lost: every one is accounted for exactly once.
     assert length(events) == expected
@@ -121,7 +123,9 @@ defmodule LangExtract.Runner.ChaosTest do
     assert completed >= 2
     # Chunks never started are reported as drained.
     assert drained >= 2
-    assert other <= expected - completed - drained + 2
+    # Every event is one of the three shutdown outcomes — completed,
+    # drained, or killed mid-grace — nothing else and nothing lost.
+    assert completed + drained + task_exits == expected
 
     byte_starts =
       events
