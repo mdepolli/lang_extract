@@ -45,3 +45,9 @@ __pycache__/
 .env
 .env.*
 .envrc
+
+# Generated analysis output
+xref_graph.dot
+
+# Python benchmark virtualenv
+benchmark/.venv/
