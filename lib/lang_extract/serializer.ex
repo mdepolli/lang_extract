@@ -155,8 +155,11 @@ defmodule LangExtract.Serializer do
     end
   end
 
+  # strings: :copy — decoded strings ≥ 64 bytes would otherwise be
+  # sub-binaries of the whole file, pinning it in memory for as long as
+  # any loaded span lives.
   defp parse_jsonl_line(line, acc) do
-    with {:ok, map} <- Jason.decode(line),
+    with {:ok, map} <- Jason.decode(line, strings: :copy),
          {:ok, result} <- from_map(map) do
       {:cont, [result | acc]}
     else

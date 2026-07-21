@@ -453,6 +453,24 @@ defmodule LangExtract.SerializerTest do
     end
 
     @tag :tmp_dir
+    test "loaded strings do not retain the whole file binary", %{tmp_dir: tmp_dir} do
+      # A span text decoded as a sub-binary would pin the entire file in
+      # memory for as long as any loaded span lives — referenced_byte_size
+      # exposes the size of the parent binary a sub-binary holds onto.
+      # The text must be ≥ 64 bytes: the VM copies smaller matched
+      # segments to the heap, so only larger strings hit the pinning path.
+      big_source = String.duplicate("filler sentence goes here. ", 10_000)
+      text = String.duplicate("a grounded extraction span text ", 3)
+      span = %Span{text: text, status: :exact, byte_start: 0, byte_end: byte_size(text)}
+      path = Path.join(tmp_dir, "retention.jsonl")
+
+      assert :ok = Serializer.save_jsonl([{big_source, [span]}], path)
+      assert {:ok, [{_source, [loaded]}]} = Serializer.load_jsonl(path)
+
+      assert :binary.referenced_byte_size(loaded.text) < 1024
+    end
+
+    @tag :tmp_dir
     test "empty results list produces empty file", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "empty.jsonl")
 
