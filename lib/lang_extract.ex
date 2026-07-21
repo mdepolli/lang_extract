@@ -37,6 +37,12 @@ defmodule LangExtract do
 
   Returns a list of `%LangExtract.Span{}` structs, one per extraction.
 
+  Designed for chunk-scale sources (the pipeline aligns against ~200-token
+  chunks). The fallthrough fuzzy phases scale super-linearly in source
+  tokens, so calling this directly on a book-length source can cost
+  seconds per unmatched extraction — for whole-document grounding, use
+  `run/4` or `stream/4`, which chunk first.
+
   ## Options
 
     * `:fuzzy_threshold` - minimum overlap ratio for fuzzy match (default `0.75`)
