@@ -159,7 +159,28 @@ defmodule LangExtract.Runner.Delivery do
   defp scrub(exception) when is_exception(exception),
     do: Exception.format_banner(:error, exception)
 
-  defp scrub(other), do: inspect(other, limit: 20, printable_limit: 256)
+  defp scrub(other), do: other |> strip_values() |> inspect(limit: 20)
+
+  # Erlang error terms are tag + culprit value ({:badmatch, v},
+  # {:case_clause, v}) — the tag is the information, the value is where
+  # request state (and its unredacted auth headers) hides. Keep the
+  # shape, drop every value: structs reduce to their module name,
+  # binaries and maps to placeholders.
+  defp strip_values(%struct{}), do: struct
+  defp strip_values(term) when is_atom(term) or is_number(term), do: term
+  defp strip_values(term) when is_pid(term) or is_reference(term) or is_port(term), do: term
+  defp strip_values(term) when is_binary(term), do: :__binary__
+  defp strip_values(term) when is_map(term), do: :__map__
+
+  defp strip_values(term) when is_tuple(term) do
+    term |> Tuple.to_list() |> Enum.map(&strip_values/1) |> List.to_tuple()
+  end
+
+  defp strip_values(term) when is_list(term) do
+    term |> Enum.take(10) |> Enum.map(&strip_values/1)
+  end
+
+  defp strip_values(_term), do: :__term__
 
   defp drained_event(chunk) do
     {:error, ChunkError.from_chunk(chunk, :drained)}

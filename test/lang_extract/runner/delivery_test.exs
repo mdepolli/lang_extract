@@ -73,10 +73,10 @@ defmodule LangExtract.Runner.DeliveryTest do
     assert events |> Enum.filter(&match?({:ok, _}, &1)) |> length() == 2
   end
 
-  # An exit with a bare term (no stacktrace) keeps atoms intact and bounds
-  # everything else through inspect — no term can smuggle request state.
+  # An exit with a bare term (no stacktrace) keeps atoms intact and reduces
+  # everything else to a structure-only summary — values never survive.
   @tag capture_log: true
-  test "non-exception crash reasons sanitize to atoms or bounded strings", %{sup: sup} do
+  test "non-exception crash reasons sanitize to atoms or structure summaries", %{sup: sup} do
     process = fn
       %Chunk{byte_start: 0} -> exit({:shutdown, {:secret_struct, String.duplicate("x", 10_000)}})
       chunk -> {:ok, ChunkResult.from_chunk(chunk, [])}
@@ -89,6 +89,29 @@ defmodule LangExtract.Runner.DeliveryTest do
 
     assert is_binary(detail)
     assert byte_size(detail) < 1024
+    refute detail =~ "xxx"
+  end
+
+  # Erlang error terms ({:badmatch, v}, {:case_clause, v}) carry the culprit
+  # value — which can be the Req.Request itself. Req's Inspect redacts only
+  # `authorization`, so the summary must drop field values entirely.
+  @tag capture_log: true
+  test "a crash reason embedding a Req.Request never leaks header values", %{sup: sup} do
+    req = Req.new(headers: %{"x-api-key" => "sk-fake-leak-canary"})
+
+    process = fn
+      %Chunk{byte_start: 0} -> exit({:badmatch, req})
+      chunk -> {:ok, ChunkResult.from_chunk(chunk, [])}
+    end
+
+    events = sup |> Delivery.stream_events(chunks(2), process, buffer: 2) |> Enum.to_list()
+
+    assert [{:error, %ChunkError{reason: {:task_exit, detail}}}] =
+             Enum.filter(events, &match?({:error, _}, &1))
+
+    assert detail =~ "badmatch"
+    assert detail =~ "Req.Request"
+    refute detail =~ "sk-fake-leak-canary"
   end
 
   test "chunk-level errors pass through untouched", %{sup: sup} do
