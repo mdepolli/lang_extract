@@ -41,12 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chunk task's `ChunkError` now carries `{:task_exit, banner_or_atom}`
   (e.g. `"** (RuntimeError) boom"`, `:killed`) instead of the raw
   `{exception, stacktrace}` exit term. Raw exit reasons can embed the
-  crashing frame's arguments — including the `Req.Request` whose headers
-  hold the API key, which Req's `Inspect` does not redact for
-  `x-api-key`/`x-goog-api-key` — so the reason is reduced to a
-  header-free summary at the delivery boundary. Consumers matching
-  `{:task_exit, _}` are unaffected; only code destructuring the raw
-  exception tuple needs updating.
+  crashing frame's arguments or an error term's culprit value — including
+  the `Req.Request` whose headers hold the API key, which Req's `Inspect`
+  does not redact for `x-api-key`/`x-goog-api-key` — so the reason is
+  reduced to a value-free summary at the delivery boundary: exceptions
+  become their banner, atoms pass through, and any other term keeps only
+  its structure (structs reduce to module names, binaries and maps to
+  placeholders). Consumers matching `{:task_exit, _}` are unaffected;
+  only code destructuring the raw exception tuple needs updating.
+
+- **`req` 0.6.2 → 0.6.3** (patch bump, no code changes).
 
 - **Gemini API key moves from the URL to the `x-goog-api-key` header** —
   the key is baked into the Req client at `new/2` like the other two
@@ -61,7 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distinguish a timeout from a parse failure after reload. Loaded reasons
   keep their outer shape — `{:task_exit, _}`, `{:api_error, status, _}`,
   bare atoms — so the same patterns match live and loaded errors; tuple
-  payloads come back as strings where the original term wasn't one.
+  payloads come back as strings where the original term wasn't one,
+  except the common exit atoms (`:timeout`, `:killed`, `:shutdown`),
+  which round-trip exactly.
   Reasons outside the known set fall back to
   `%{"tag" => "other", "detail" => inspect(term)}` and load as the bare
   detail string; plain string reasons from files written by earlier

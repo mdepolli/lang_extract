@@ -231,7 +231,7 @@ defmodule LangExtract.Orchestrator do
 
   # The ChunkError reason can embed the raw LLM payload; keep it out of
   # event metadata so handlers can log freely.
-  defp result_status({:ok, _spans}), do: :ok
+  defp result_status({:ok, _chunk_result}), do: :ok
   defp result_status({:error, _chunk_error}), do: :error
 
   defp adjust_offsets(spans, byte_offset) do
