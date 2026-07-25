@@ -28,6 +28,9 @@ lang_extract-*.tar
 # Dev specs and plans
 /docs/
 
+# Local git worktrees
+.worktrees/
+
 # Claude Code
 .claude/
 CLAUDE.md
