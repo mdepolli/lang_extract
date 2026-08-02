@@ -156,10 +156,24 @@ defmodule LangExtract.Runner.Delivery do
 
   defp scrub(reason) when is_atom(reason), do: reason
 
+  # A banner is safe only after the struct's fields are scrubbed:
+  # KeyError, MatchError, and friends compute their message by
+  # inspecting the culprit term — the same value hiding place as the
+  # erlang error tuples below. An authored `:message` string survives;
+  # every other field is value-stripped before formatting.
   defp scrub(exception) when is_exception(exception),
-    do: Exception.format_banner(:error, exception)
+    do: Exception.format_banner(:error, scrub_fields(exception))
 
   defp scrub(other), do: other |> strip_values() |> inspect(limit: 20)
+
+  defp scrub_fields(exception) do
+    exception
+    |> Map.from_struct()
+    |> Enum.reduce(exception, fn
+      {:message, message}, acc when is_binary(message) -> acc
+      {field, value}, acc -> Map.put(acc, field, strip_values(value))
+    end)
+  end
 
   # Erlang error terms are tag + culprit value ({:badmatch, v},
   # {:case_clause, v}) — the tag is the information, the value is where

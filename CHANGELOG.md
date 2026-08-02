@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Crash sanitizer scrubs raised exception structs** — the Runner's
+  crash-reason sanitizer formatted exceptions via `Exception.format_banner/2`
+  unscrubbed, so value-carrying exceptions (`KeyError`, `MatchError`, …)
+  raised inside a chunk task printed their culprit term — the same place
+  unredacted request headers hide — into `ChunkError.reason`. Struct fields
+  are now value-stripped before formatting; an authored `:message` string
+  survives.
+
 ### Changed
 
 - **Docs demote bare `align/3` as a product path** — README no longer has an

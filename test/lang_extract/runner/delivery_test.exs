@@ -114,6 +114,28 @@ defmodule LangExtract.Runner.DeliveryTest do
     refute detail =~ "sk-fake-leak-canary"
   end
 
+  # Raised exceptions reach the sanitizer as structs, not {:badmatch, v}
+  # tuples — but KeyError/MatchError et al. compute their message by
+  # inspecting the culprit term, so formatting them unscrubbed prints the
+  # same request state the tuple path strips.
+  @tag capture_log: true
+  test "a raised exception embedding request state never leaks values", %{sup: sup} do
+    headers = %{"x-api-key" => ["sk-fake-leak-canary"]}
+
+    process = fn
+      %Chunk{byte_start: 0} -> raise KeyError, key: "content-type", term: headers
+      chunk -> {:ok, ChunkResult.from_chunk(chunk, [])}
+    end
+
+    events = sup |> Delivery.stream_events(chunks(2), process, buffer: 2) |> Enum.to_list()
+
+    assert [{:error, %ChunkError{reason: {:task_exit, detail}}}] =
+             Enum.filter(events, &match?({:error, _}, &1))
+
+    assert detail =~ "KeyError"
+    refute detail =~ "sk-fake-leak-canary"
+  end
+
   test "chunk-level errors pass through untouched", %{sup: sup} do
     error = %ChunkError{byte_start: 0, byte_end: 100, reason: :rate_limited}
     process = fn _chunk -> {:error, error} end
