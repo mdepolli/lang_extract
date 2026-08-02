@@ -135,6 +135,25 @@ defmodule LangExtract.ProviderTest do
                )
     end
 
+    # A negative retry-after is malformed per RFC 9110 (delay-seconds is
+    # non-negative) and would violate the {:rate_limited, non_neg_integer()}
+    # error type — treated like any other unparseable value.
+    test "a negative retry-after parses as nil", %{model: model} do
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "-7")
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(429, "{}")
+      end)
+
+      assert {:error, {:rate_limited, nil}} =
+               Claude.infer("prompt",
+                 api_key: "sk-test",
+                 model: model,
+                 req_options: [plug: {Req.Test, __MODULE__}, retry: false]
+               )
+    end
+
     test "transport errors emit stop with :transport_error status", %{model: model} do
       Req.Test.stub(__MODULE__, fn conn -> Req.Test.transport_error(conn, :timeout) end)
 

@@ -10,9 +10,11 @@ defmodule LangExtract.Runner.Request do
       deadline and retry. Rate-limit waits never consume the chunk's retry
       budget: the server asked us to wait, not to give up. When
       `retry-after` is absent the pause escalates exponentially from one
-      backoff period (capped at 30s), and after `:rate_limit_retries`
-      429s on one chunk (default 10) the chunk fails with the rate-limit
-      error — bounded, unlike a budget, only by persistence of the 429s.
+      backoff period; either way the Limiter clamps each pause to its 30s
+      ceiling, so a hostile deadline delays a run, never hangs it. After
+      `:rate_limit_retries` 429s on one chunk (default 10) the chunk fails
+      with the rate-limit error — bounded, unlike a budget, only by
+      persistence of the 429s.
     * `5xx` / transport error — jittered exponential backoff, consumes one
       unit of `chunk_retries`; budget exhausted returns the last error.
     * any other error (4xx, parse-level) — returned immediately; a bad
@@ -32,7 +34,6 @@ defmodule LangExtract.Runner.Request do
   alias LangExtract.Runner.Limiter
 
   @max_backoff_ms 10_000
-  @max_pause_ms 30_000
   @default_rate_limit_retries 10
 
   @spec infer(GenServer.server(), Client.t(), String.t(), keyword()) ::
@@ -101,9 +102,10 @@ defmodule LangExtract.Runner.Request do
   end
 
   # Absent a server deadline, escalate: a persistently throttled endpoint
-  # should slow us down geometrically, not sustain a hot retry loop.
+  # should slow us down geometrically, not sustain a hot retry loop. The
+  # Limiter clamps every pause to its ceiling, so growth here is unbounded.
   defp rate_limit_pause(s) do
-    min(s.backoff * Integer.pow(2, s.rate_limited), @max_pause_ms)
+    s.backoff * Integer.pow(2, s.rate_limited)
   end
 
   defp backoff_ms(s) do

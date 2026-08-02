@@ -108,6 +108,25 @@ defmodule LangExtract.Runner.LimiterTest do
       assert_receive {:acquired, ^waiter}, 500
       assert System.monotonic_time(:millisecond) - started >= 100
     end
+
+    # retry-after is unauthenticated server input: proxies echoing an epoch
+    # timestamp (a recurring server bug class) would otherwise hold every
+    # caller for decades — and overflow the wake timer, crashing the
+    # limiter. The ceiling turns garbage deadlines into a bounded stall.
+    test "pauses clamp to the ceiling instead of trusting the deadline" do
+      clock = start_supervised!({Agent, fn -> 0 end})
+      clock_fun = fn -> Agent.get(clock, & &1) end
+      limiter = start_supervised!({Limiter, [max_in_flight: 10, clock: clock_fun]})
+
+      Limiter.pause(limiter, 1_000_000_000_000_000)
+      # pause/2 is a cast; sync before moving the clock so the deadline
+      # is computed from virtual time zero.
+      _ = :sys.get_state(limiter)
+      Agent.update(clock, fn _ -> 30_001 end)
+
+      waiter = blocked_acquire(limiter)
+      assert_receive {:acquired, ^waiter}, 500
+    end
   end
 
   describe "rpm token bucket" do

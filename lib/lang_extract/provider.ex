@@ -225,8 +225,11 @@ defmodule LangExtract.Provider do
   defp retry_after_ms(response) do
     case Req.Response.get_header(response, "retry-after") do
       [seconds | _] ->
+        # Negative delay-seconds is malformed per RFC 9110 (and would
+        # violate the {:rate_limited, non_neg_integer()} error type) —
+        # treated like any other unparseable value.
         case Integer.parse(seconds) do
-          {s, ""} -> s * 1000
+          {s, ""} when s >= 0 -> s * 1000
           _ -> nil
         end
 

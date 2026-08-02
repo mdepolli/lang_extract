@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`retry-after` deadlines are bounded** — the Limiter clamps every pause
+  to a 30-second ceiling (repeated 429s still extend it window by window),
+  and a negative `retry-after` now parses as `nil` like any other malformed
+  value. Previously a server-supplied header was obeyed verbatim: an echoed
+  epoch timestamp paused all admission for decades — silently hanging every
+  `Runner.run/4` sharing the cell — and larger garbage overflowed the wake
+  timer, crashing the runner cell. The backoff-escalation cap moved from
+  `Request` into the Limiter, the single place pauses sleep.
+
 - **Crash sanitizer scrubs raised exception structs** — the Runner's
   crash-reason sanitizer formatted exceptions via `Exception.format_banner/2`
   unscrubbed, so value-carrying exceptions (`KeyError`, `MatchError`, …)

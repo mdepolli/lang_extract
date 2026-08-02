@@ -25,6 +25,13 @@ defmodule LangExtract.Runner.Limiter do
 
   use GenServer
 
+  # Ceiling on any single pause. A retry-after deadline is unauthenticated
+  # server input — proxies echo epoch timestamps into it — and obeying it
+  # verbatim would hold every caller of a shared runner indefinitely (and
+  # overflow the wake timer). Persistent throttling still stalls admission:
+  # each new 429 re-pauses, extending the deadline another window.
+  @max_pause_ms 30_000
+
   @type option ::
           {:rpm, pos_integer() | :infinity}
           | {:max_in_flight, pos_integer()}
@@ -59,6 +66,8 @@ defmodule LangExtract.Runner.Limiter do
   Pauses all admission for `ms` milliseconds (a `retry-after` deadline).
 
   Repeated pauses extend to the furthest deadline; they never shorten it.
+  A single pause is clamped to a 30-second ceiling — repeated 429s extend
+  it window by window, but no one header value can stall a run for hours.
   """
   @spec pause(GenServer.server(), non_neg_integer()) :: :ok
   def pause(limiter, ms) do
@@ -109,7 +118,7 @@ defmodule LangExtract.Runner.Limiter do
   end
 
   def handle_cast({:pause, ms}, state) do
-    deadline = state.clock.() + ms
+    deadline = state.clock.() + min(ms, @max_pause_ms)
 
     # No `|| 0` floor here: monotonic time can be (and on the BEAM, is)
     # negative, which would make 0 a far-future deadline.
