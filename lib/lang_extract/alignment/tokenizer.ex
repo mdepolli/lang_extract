@@ -21,6 +21,10 @@ defmodule LangExtract.Alignment.Tokenizer do
   # The backreference makes symbol runs same-character only.
   @token_pattern ~r/[^\W\d_]+|\d+|([^\w\s]|_)\1*|\s+/u
   @unicode_letter ~r/^\p{L}/u
+  # Must agree with the token pattern's \s+ alternative: any whitespace the
+  # regex groups into a run has to classify as :whitespace, or the run
+  # survives into the aligner as a phantom :punctuation token.
+  @unicode_whitespace ~r/^\s/u
 
   @spec tokenize(String.t()) :: [Token.t()]
   def tokenize(text) when is_binary(text) do
@@ -40,13 +44,17 @@ defmodule LangExtract.Alignment.Tokenizer do
   end
 
   # ASCII fast path — first byte < 128 is fully classified without regex.
-  # Non-ASCII first byte (>= 128) falls through to Unicode regex for \p{L}.
+  # Non-ASCII first byte (>= 128) falls through to the Unicode regexes.
   defp classify(<<c, _::binary>>) when c in ?A..?Z or c in ?a..?z, do: :word
   defp classify(<<c, _::binary>>) when c in ?0..?9, do: :number
-  defp classify(<<c, _::binary>>) when c in [?\s, ?\t, ?\n, ?\r], do: :whitespace
+  defp classify(<<c, _::binary>>) when c in [?\s, ?\t, ?\n, ?\r, ?\f, ?\v], do: :whitespace
   defp classify(<<c, _::binary>>) when c < 128, do: :punctuation
 
   defp classify(text) do
-    if Regex.match?(@unicode_letter, text), do: :word, else: :punctuation
+    cond do
+      Regex.match?(@unicode_letter, text) -> :word
+      Regex.match?(@unicode_whitespace, text) -> :whitespace
+      true -> :punctuation
+    end
   end
 end

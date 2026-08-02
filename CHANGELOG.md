@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Exotic whitespace no longer breaks alignment** — the tokenizer's
+  classifier only knew the four ASCII whitespace bytes, so NBSP, formfeed,
+  vertical tab, and Unicode spaces (all matched by the token pattern's
+  `\s+` alternative) were typed `:punctuation` and survived into the
+  aligner as phantom tokens. An extraction whose whitespace the model
+  normalized to ASCII spaces — the same habit as smart quotes — then
+  degraded from `:exact` to `:lesser` over a one-token prefix, where
+  upstream (which skips all whitespace gaps) matches exactly. Gutenberg
+  corpus texts use formfeed page breaks, so this affected the benchmark
+  corpus itself. Whitespace now classifies by character against `\s`.
+
 - **`retry-after` deadlines are bounded** — the Limiter clamps every pause
   to a 30-second ceiling (repeated 429s still extend it window by window),
   and a negative `retry-after` now parses as `nil` like any other malformed

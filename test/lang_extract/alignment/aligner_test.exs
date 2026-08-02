@@ -162,6 +162,25 @@ defmodule LangExtract.Alignment.AlignerTest do
                Aligner.align("hi", ["this is much longer than source"])
     end
 
+    # LLMs normalize exotic whitespace to ASCII spaces — the same habit as
+    # smart quotes. The whitespace gap must not block an exact token match.
+    test "NBSP in source still grounds an ASCII-space extraction exactly" do
+      source = "Take 5 mg daily"
+
+      [span] = Aligner.align(source, ["5 mg"])
+
+      assert span.status == :exact
+
+      assert binary_part(source, span.byte_start, span.byte_end - span.byte_start) ==
+               "5 mg"
+    end
+
+    test "formfeed page break does not split an extraction" do
+      [span] = Aligner.align("hello\fworld", ["hello world"])
+
+      assert span.status == :exact
+    end
+
     test "CRLF source: offsets stay byte-exact past the \\r bytes" do
       source = "First line here.\r\nThe quick brown fox jumps."
 

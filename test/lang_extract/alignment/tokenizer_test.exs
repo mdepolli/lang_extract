@@ -54,6 +54,23 @@ defmodule LangExtract.Alignment.TokenizerTest do
       assert %Token{text: "  ", byte_start: 1, byte_end: 3} = ws
     end
 
+    # The token regex's \s+ alternative matches all Unicode whitespace, so
+    # classification must agree — a run typed :punctuation would survive
+    # into the aligner as a phantom token that blocks otherwise exact
+    # matches (upstream has no whitespace tokens at all; gaps are skipped).
+    test "exotic whitespace classifies as whitespace, not punctuation" do
+      # formfeed, vertical tab, NBSP, thin space, ideographic space
+      for ws <- ["\f", "\v", " ", " ", "　"] do
+        tokens = Tokenizer.tokenize("a#{ws}b")
+
+        assert [
+                 %Token{type: :word, text: "a"},
+                 %Token{type: :whitespace, text: ^ws},
+                 %Token{type: :word, text: "b"}
+               ] = tokens
+      end
+    end
+
     test "handles multibyte UTF-8 characters with correct byte offsets" do
       # é is 2 bytes in UTF-8, ñ is 2 bytes
       tokens = Tokenizer.tokenize("café señor")
