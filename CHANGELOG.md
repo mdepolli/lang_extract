@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Result.spans` are sorted by `byte_start` within a chunk** — collect
+  only ordered chunks before flat-mapping, so model emission order could
+  leave later source spans first inside a chunk despite the "document
+  order" contract. Located spans now sort by offset; `:not_found` (`nil`
+  offsets) sorts after every located span.
+
+- **Runner validates retry and drain options at startup** —
+  `chunk_retries` / `rate_limit_retries` / `drain_timeout` accept
+  non-negative integers (zero = no retries / no shutdown grace);
+  `retry_backoff_ms` must be positive. A negative retry budget never
+  equalled `spent` in `retry_or_give_up` and would loop forever against
+  a persistent 5xx; a negative backoff crashed mid-chunk in
+  `Process.sleep`.
+
+- **Gemini thought parts are skipped when joining multi-part text** —
+  thought summaries also carry `"text"` with `"thought" => true`; joining
+  every text part prepended prose onto the JSON answer and failed the
+  chunk as `{:invalid_format, _}`. Non-thought text parts still join as
+  before (long completions stay intact).
+
 - **`req_options` header merge covers every Req header shape** — the
   per-key auth-preserving merge only fired when both provider and user
   headers were maps; a list/tuple or keyword-list `headers:` (Req's other
