@@ -17,7 +17,8 @@ defmodule LangExtract.Alignment.Aligner do
      anchored at the extraction's first token, its source run grounds the
      extraction (upstream `MATCH_LESSER`). Blocks elsewhere in the extraction
      do not qualify. Status `:lesser`.
-  3. **LCS fuzzy** — for extractions sharing no token run at all, an LCS
+  3. **LCS fuzzy** — for extractions the lesser phase couldn't anchor
+     (no matching block at the extraction's first token), an LCS
      subsequence match over lightly stemmed tokens, accepted when coverage
      (matched / extraction tokens) ≥ `:fuzzy_threshold` and density
      (matched / span length) ≥ `:min_density`, preferring the tightest span.
@@ -56,7 +57,9 @@ defmodule LangExtract.Alignment.Aligner do
 
   # The source representations every phase reads: word tokens with byte
   # offsets (span construction), their downcased texts (matching), and
-  # stemmed texts (LCS phase only). Tuples for O(1) indexed access.
+  # stemmed texts (LCS phase only). Words and texts are tuples for O(1)
+  # indexed access; stemmed stays a list — it is only ever walked
+  # sequentially by the LCS scan.
   defp index_source(source) do
     words = source |> Tokenizer.tokenize() |> reject_whitespace()
     texts = Enum.map(words, &String.downcase(&1.text))
