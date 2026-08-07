@@ -141,9 +141,14 @@ defmodule LangExtract.Runner do
   Collects `stream/4` and restores document order. Returns a
   `%LangExtract.Result{}` — the same contract as `LangExtract.run/4`,
   with retries and the shared request budget on top. Every failure is
-  per-chunk: a crashed or timed-out chunk task lands in the result's
-  `errors` with reason `{:task_exit, reason}`, so this function cannot
-  fail and `Result.errors` is the failure channel.
+  per-chunk: a crashed chunk task lands in the result's `errors` with
+  reason `{:task_exit, reason}`, so this function cannot fail and
+  `Result.errors` is the failure channel.
+
+  The runner has no per-chunk deadline: `:task_timeout` belongs to the
+  standalone path and is ignored here. Each attempt is bounded by the
+  client's HTTP timeouts and the retry policy instead, and a shutdown
+  converts still-running chunks to errors within `drain_timeout`.
   """
   @spec run(Supervisor.supervisor(), String.t(), Template.t(), keyword()) :: Result.t()
   def run(runner, source, %Template{} = template, opts \\ []) do

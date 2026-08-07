@@ -119,7 +119,9 @@ defmodule LangExtract do
 
     * `:max_chunk_chars` - chunk size in characters (default `1000`)
     * `:max_concurrency` - parallel chunk requests (default `10`)
-    * `:task_timeout` - per-chunk task timeout (default `:infinity`)
+    * `:task_timeout` - per-chunk task timeout (default `:infinity`).
+      Standalone `run/4`/`stream/4` only — `LangExtract.Runner` ignores
+      it; its requests are bounded by HTTP timeouts and the retry policy
     * `:fuzzy_threshold` - minimum LCS coverage for fuzzy match (default `0.75`)
     * `:min_density` - minimum matched-token density of a fuzzy span (default `1/3`)
     * `:accept_lesser` - allow prefix-fragment grounding as `:lesser` spans (default `true`)
