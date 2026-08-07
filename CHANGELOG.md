@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Gemini responses join every text part** — `parse_response/1` read only
+  the first element of `parts`, but Gemini splits long completions across
+  several. Long replies were truncated mid-JSON and failed the chunk as
+  `{:invalid_format, _}` — a systematic, length-correlated failure that
+  looked like a model problem. All text parts now concatenate (as the
+  official SDKs do); non-text parts are skipped.
+
 - **Sanitizers no longer corrupt payloads containing fences or think
   tags** — the fence/think regexes ran unconditionally over the raw reply
   with no JSON-string awareness, so an extraction string containing

@@ -116,20 +116,47 @@ defmodule LangExtract.Provider.GeminiTest do
       assert {:ok, "extracted data"} = Gemini.parse_response({:ok, response})
     end
 
-    test "extracts first text part from multiple parts" do
+    # Gemini splits long completions across parts; standard clients
+    # (including the Python SDK) concatenate every text part. Taking only
+    # the first truncated the JSON payload mid-document, failing the chunk
+    # as :invalid_format in a way that looked like a model problem.
+    test "joins all text parts of a multi-part response" do
       response = %Req.Response{
         status: 200,
         body: %{
           "candidates" => [
             %{
-              "content" => %{"parts" => [%{"text" => "first"}, %{"text" => "second"}]},
+              "content" => %{
+                "parts" => [%{"text" => ~s({"extractions")}, %{"text" => ~s(: []})}]
+              },
               "finishReason" => "STOP"
             }
           ]
         }
       }
 
-      assert {:ok, "first"} = Gemini.parse_response({:ok, response})
+      assert {:ok, ~s({"extractions": []})} = Gemini.parse_response({:ok, response})
+    end
+
+    test "non-text parts are skipped when joining" do
+      response = %Req.Response{
+        status: 200,
+        body: %{
+          "candidates" => [
+            %{
+              "content" => %{
+                "parts" => [
+                  %{"functionCall" => %{"name" => "noop"}},
+                  %{"text" => "payload"}
+                ]
+              },
+              "finishReason" => "STOP"
+            }
+          ]
+        }
+      }
+
+      assert {:ok, "payload"} = Gemini.parse_response({:ok, response})
     end
 
     test "returns empty_response when candidates is empty" do
