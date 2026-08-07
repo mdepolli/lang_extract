@@ -399,6 +399,25 @@ defmodule LangExtract.WireFormatTest do
 
       assert Enum.at(parsed, 1) == %Extraction{class: "drug", text: "lisinopril", attributes: %{}}
     end
+
+    # Regression pin for the composed drop: before the multi-key expansion,
+    # normalize passed a merged entry through whole and Parser's
+    # class/text guard skipped it — both halves individually tested, the
+    # seam between them not, and every extraction in the entry vanished
+    # with only a log line.
+    test "a merged multi-class entry yields all its extractions through Parser" do
+      alias LangExtract.Pipeline.Parser
+
+      input = Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "dosage" => "100mg"}]})
+
+      assert {:ok, normalized} = WireFormat.normalize(input)
+      assert {:ok, parsed} = Parser.parse(normalized)
+
+      assert [
+               %Extraction{class: "dosage", text: "100mg"},
+               %Extraction{class: "drug", text: "aspirin"}
+             ] = parsed
+    end
   end
 
   describe "normalize/1 with JSON responses" do
