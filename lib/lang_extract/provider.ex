@@ -104,6 +104,12 @@ defmodule LangExtract.Provider do
     redirect: false
   ]
 
+  # Defense-in-depth after the body is fully received (Req has no portable
+  # streaming size cap). 2 MiB is well above any sane extraction JSON
+  # reply; a compromised endpoint or mis-set base_url cannot force the
+  # BEAM to retain multi-megabyte binaries per concurrent chunk.
+  @max_response_body_bytes 2 * 1024 * 1024
+
   @doc """
   Merges caller-supplied `:req_options` into the provider's Req options.
 
@@ -155,15 +161,34 @@ defmodule LangExtract.Provider do
   def request(req, request_opts, metadata, parse_response) do
     :telemetry.span([:lang_extract, :request], metadata, fn ->
       raw = Req.post(req, request_opts)
-      usage = usage_measurements(raw)
 
-      {
-        wrap_response(parse_response.(raw), usage),
-        usage,
-        Map.put(metadata, :status, response_status(raw))
-      }
+      case reject_oversize_body(raw) do
+        :ok ->
+          usage = usage_measurements(raw)
+
+          {
+            wrap_response(parse_response.(raw), usage),
+            usage,
+            Map.put(metadata, :status, response_status(raw))
+          }
+
+        {:error, _} = error ->
+          {error, %{}, Map.put(metadata, :status, :body_too_large)}
+      end
     end)
   end
+
+  # Binary bodies only: JSON responses are already decoded maps by the time
+  # they reach us, and a decoded map has already paid the allocation cost.
+  # Cap still stops plain-text floods and decode_body: false paths.
+  defp reject_oversize_body({:ok, %Req.Response{body: body}})
+       when is_binary(body) and byte_size(body) > @max_response_body_bytes do
+    {:error,
+     {:api_error, 413,
+      "response body exceeds #{@max_response_body_bytes} bytes (got #{byte_size(body)})"}}
+  end
+
+  defp reject_oversize_body(_raw), do: :ok
 
   # Usage rides the success value as well as the telemetry measurements:
   # the same keys, nil instead of empty when the API reported nothing.
