@@ -67,9 +67,11 @@ defmodule LangExtract.WireFormat do
     end)
   end
 
-  # A valid document is a non-empty JSON object. No "extractions" key is
-  # still valid here — Parser reports :missing_extractions for those.
-  defp check_document(%{} = decoded) when decoded != %{}, do: {:ok, decoded}
+  # Any JSON object is a valid document — one without an "extractions"
+  # key (including the empty object) is Parser's :missing_extractions,
+  # one taxonomy for one semantic condition. Non-objects are
+  # :invalid_format.
+  defp check_document(%{} = decoded), do: {:ok, decoded}
   defp check_document(_decoded), do: :error
 
   defp normalize_extractions(%{"extractions" => entries} = document) when is_list(entries) do

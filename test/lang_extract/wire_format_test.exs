@@ -365,6 +365,15 @@ defmodule LangExtract.WireFormatTest do
       assert {:ok, %{"other" => 1}} = WireFormat.normalize(~s({"other": 1}))
     end
 
+    # {} is the same semantic condition as any other extractions-less
+    # object; splitting the taxonomy ({} as :invalid_format, {"other":1}
+    # as :missing_extractions) made consumers branching on reason shape
+    # treat one model behavior two ways.
+    test "empty object routes to :missing_extractions like any extractions-less object" do
+      assert WireFormat.normalize("{}") == {:ok, %{}}
+      assert LangExtract.extract("source", "{}") == {:error, :missing_extractions}
+    end
+
     # Encode/decode agreement: what format_extractions emits, decoding
     # recovers intact — Parser.parse states the result as structs.
     test "format_extractions |> normalize |> Parser.parse returns same extractions" do
