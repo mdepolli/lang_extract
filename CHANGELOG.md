@@ -37,7 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Headers are now normalized to maps, merged per-key, and attached once
   *before* the keyword merge so that path never touches them. One-sided
   list headers normalize to maps; empty user lists keep provider auth;
-  non-header overrides still merge independently.
+  non-header overrides still merge independently. Header names normalize
+  exactly as Req normalizes them — atom underscores become dashes,
+  everything downcases — so `user_agent:` reaches the wire as
+  `user-agent` and a `"Authorization"` user key overrides the provider's
+  `"authorization"` instead of riding alongside it (Req would send both
+  values). Duplicate names in a list concatenate in order like Req; a
+  `:headers` value that is neither map nor list raises `ArgumentError`
+  instead of being silently dropped.
 
 - **OpenAI omits `temperature` unless the caller sets it** —
   `max_completion_tokens` alone was not enough for o-series/reasoning

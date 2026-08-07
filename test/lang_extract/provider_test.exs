@@ -115,6 +115,45 @@ defmodule LangExtract.ProviderTest do
                "anthropic-version" => "2023-06-01"
              }
     end
+
+    # Req translates atom underscores to dashes (headers: [user_agent: _]
+    # is the shape its own docs use); resolving headers before Req sees
+    # them must not change the wire name.
+    test "atom header names normalize like Req: underscores to dashes, downcased" do
+      opts = [req_options: [headers: [user_agent: "mine"]]]
+
+      assert Provider.req_options(opts, @provider_map)[:headers] == %{
+               "x-api-key" => "sk-test",
+               "anthropic-version" => "2023-06-01",
+               "user-agent" => "mine"
+             }
+    end
+
+    # Without downcasing, Map.merge keeps both casings and Req then
+    # concatenates the values — broken auth, the exact class this merge
+    # exists to prevent.
+    test "mixed-case user header names override the provider's lowercase key" do
+      provider = [headers: %{"authorization" => "Bearer PROVIDER"}]
+      opts = [req_options: [headers: %{"Authorization" => "Bearer USER"}]]
+
+      assert Provider.req_options(opts, provider)[:headers] == %{
+               "authorization" => "Bearer USER"
+             }
+    end
+
+    test "duplicate names in list headers concatenate values like Req" do
+      opts = [req_options: [headers: [{"accept", "a"}, {"accept", "b"}]]]
+
+      assert Provider.req_options(opts, [])[:headers] == %{"accept" => ["a", "b"]}
+    end
+
+    test "non-map non-list headers raise instead of silently vanishing" do
+      opts = [req_options: [headers: "garbage"]]
+
+      assert_raise ArgumentError, ~r/headers must be a map or a list/, fn ->
+        Provider.req_options(opts, @provider_map)
+      end
+    end
   end
 
   describe "[:lang_extract, :request] telemetry span" do

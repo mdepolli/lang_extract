@@ -136,21 +136,37 @@ defmodule LangExtract.Provider do
   defp merge_headers(%{} = provider, %{} = user), do: Map.merge(provider, user)
   defp merge_headers(%{} = provider, nil), do: provider
   defp merge_headers(nil, %{} = user), do: user
-  defp merge_headers(_provider, _user), do: nil
+  defp merge_headers(nil, nil), do: nil
 
   defp put_headers(opts, nil), do: opts
   defp put_headers(opts, headers), do: Keyword.put(opts, :headers, headers)
 
-  defp normalize_headers(headers) when is_map(headers), do: headers
+  # Header names normalize exactly as Req.Fields does — atom underscores
+  # become dashes, everything downcases — so the per-key merge sees one
+  # key per header and Req never receives two casings of the same name
+  # (it would concatenate both values: broken auth again). Duplicate
+  # names in a list concatenate in order, also matching Req.
+  defp normalize_headers(nil), do: nil
 
-  defp normalize_headers(headers) when is_list(headers) do
-    Map.new(headers, fn
-      {key, value} when is_atom(key) -> {Atom.to_string(key), value}
-      {key, value} when is_binary(key) -> {key, value}
+  defp normalize_headers(headers) when is_map(headers) or is_list(headers) do
+    Enum.reduce(headers, %{}, fn {name, value}, acc ->
+      Map.update(acc, normalize_header_name(name), value, &(List.wrap(&1) ++ List.wrap(value)))
     end)
   end
 
-  defp normalize_headers(_headers), do: nil
+  defp normalize_headers(headers) do
+    raise ArgumentError,
+          "headers must be a map or a list of {name, value} pairs, got: #{inspect(headers)}"
+  end
+
+  defp normalize_header_name(name) when is_atom(name) do
+    name
+    |> Atom.to_string()
+    |> String.replace("_", "-")
+    |> String.downcase()
+  end
+
+  defp normalize_header_name(name) when is_binary(name), do: String.downcase(name)
 
   @doc """
   Posts the request and parses the response inside a
