@@ -81,11 +81,16 @@ defmodule LangExtract.Runner do
 
     config = %{
       client: disable_req_retry(client),
-      chunk_retries: Keyword.get(opts, :chunk_retries, 3),
-      retry_backoff_ms: Keyword.get(opts, :retry_backoff_ms, 200),
-      rate_limit_retries: Keyword.get(opts, :rate_limit_retries, 10),
+      # 0 retries = one attempt then fail; negative never equals spent in
+      # retry_or_give_up and would loop forever against a persistent 5xx.
+      chunk_retries: non_neg_integer!(Keyword.get(opts, :chunk_retries, 3), :chunk_retries),
+      retry_backoff_ms:
+        pos_integer!(Keyword.get(opts, :retry_backoff_ms, 200), :retry_backoff_ms),
+      rate_limit_retries:
+        non_neg_integer!(Keyword.get(opts, :rate_limit_retries, 10), :rate_limit_retries),
       buffer: buffer,
-      drain_timeout: Keyword.get(opts, :drain_timeout, 5_000)
+      # 0 = no grace on shutdown (in-flight killed immediately).
+      drain_timeout: non_neg_integer!(Keyword.get(opts, :drain_timeout, 5_000), :drain_timeout)
     }
 
     children = [
@@ -208,14 +213,19 @@ defmodule LangExtract.Runner do
   # and hide the real failure. The caller's other req_options (plugs,
   # timeouts) are preserved; the http_client is rebuilt with the merged
   # options.
-  # buffer: 0 would otherwise reach Delivery's "impossible" admit state
-  # and die as a bare CondClauseError deep in the consumer; rpm: 0 divides
-  # by zero in the limiter's refill. Misconfiguration fails at startup
-  # with the option's name attached.
+  # Misconfiguration fails at startup with the option's name attached —
+  # not deep in Delivery, the limiter refill, Request.sleep, or an
+  # unbounded retry loop.
   defp pos_integer!(value, _key) when is_integer(value) and value > 0, do: value
 
   defp pos_integer!(value, key) do
     raise ArgumentError, "#{inspect(key)} must be a positive integer, got: #{inspect(value)}"
+  end
+
+  defp non_neg_integer!(value, _key) when is_integer(value) and value >= 0, do: value
+
+  defp non_neg_integer!(value, key) do
+    raise ArgumentError, "#{inspect(key)} must be a non-negative integer, got: #{inspect(value)}"
   end
 
   defp disable_req_retry(%Client{} = client) do

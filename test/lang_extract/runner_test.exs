@@ -44,19 +44,44 @@ defmodule LangExtract.RunnerTest do
 
     # buffer: 0 would otherwise reach Delivery's "impossible" admit state
     # and die as a bare CondClauseError deep in the consumer; rpm: 0
-    # divides by zero in the limiter's refill arithmetic.
+    # divides by zero in the limiter's refill arithmetic. Negative
+    # chunk_retries never equals spent in retry_or_give_up → unbounded
+    # 5xx retries; negative backoff crashes in Process.sleep mid-chunk.
     @tag :capture_log
     test "non-positive numeric options fail startup with a descriptive error" do
       Process.flag(:trap_exit, true)
 
-      for bad <- [[max_in_flight: 0], [buffer: 0], [rpm: 0], [buffer: -1]] do
+      for {bad, pattern} <- [
+            {[max_in_flight: 0], "positive integer"},
+            {[buffer: 0], "positive integer"},
+            {[rpm: 0], "positive integer"},
+            {[buffer: -1], "positive integer"},
+            {[retry_backoff_ms: 0], "positive integer"},
+            {[retry_backoff_ms: -1], "positive integer"},
+            {[chunk_retries: -1], "non-negative integer"},
+            {[rate_limit_retries: -1], "non-negative integer"},
+            {[drain_timeout: -1], "non-negative integer"}
+          ] do
         assert {:error, {%ArgumentError{message: message}, _stacktrace}} =
                  Runner.start_link([client: client()] ++ bad)
 
         [{key, value}] = bad
-        assert message =~ "#{inspect(key)} must be a positive integer"
+        assert message =~ "#{inspect(key)} must be a #{pattern}"
         assert message =~ "got: #{value}"
       end
+    end
+
+    test "zero chunk_retries and drain_timeout are accepted at startup" do
+      runner =
+        start_supervised!(
+          {Runner, [client: client(), chunk_retries: 0, rate_limit_retries: 0, drain_timeout: 0]},
+          id: :zero_ok
+        )
+
+      config = Runner.resources(runner).config
+      assert config.chunk_retries == 0
+      assert config.rate_limit_retries == 0
+      assert config.drain_timeout == 0
     end
 
     @tag :capture_log
