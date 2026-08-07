@@ -1,7 +1,25 @@
 defmodule LangExtract.ProviderTest do
   use ExUnit.Case, async: true
 
+  alias LangExtract.Provider
   alias LangExtract.Provider.{Claude, Gemini, OpenAI, Response}
+
+  describe "req_options/2" do
+    # A caller adding one custom header must not wipe the provider's auth
+    # header — every chunk would 401, and 4xx is never retried.
+    test "user headers merge per-key instead of replacing the provider's" do
+      provider = [headers: %{"x-api-key" => "sk-test", "anthropic-version" => "2023-06-01"}]
+      opts = [req_options: [headers: %{"x-custom" => "1", "anthropic-version" => "override"}]]
+
+      merged = Provider.req_options(opts, provider)
+
+      assert merged[:headers] == %{
+               "x-api-key" => "sk-test",
+               "anthropic-version" => "override",
+               "x-custom" => "1"
+             }
+    end
+  end
 
   describe "[:lang_extract, :request] telemetry span" do
     # Telemetry handlers are global: concurrent async tests calling infer

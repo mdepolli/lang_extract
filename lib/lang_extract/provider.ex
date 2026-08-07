@@ -115,9 +115,23 @@ defmodule LangExtract.Provider do
   """
   @spec req_options(keyword(), keyword()) :: keyword()
   def req_options(opts, req_opts) do
-    @http_defaults
-    |> Keyword.merge(req_opts)
-    |> Keyword.merge(Keyword.get(opts, :req_options) || [])
+    user_opts = Keyword.get(opts, :req_options) || []
+
+    merged =
+      @http_defaults
+      |> Keyword.merge(req_opts)
+      |> Keyword.merge(user_opts)
+
+    # :headers merges per-key rather than replacing wholesale: a caller
+    # adding one custom header must not silently wipe the provider's auth
+    # header — every chunk would 401, and 4xx is never retried.
+    case {Keyword.get(req_opts, :headers), Keyword.get(user_opts, :headers)} do
+      {%{} = provider_headers, %{} = user_headers} ->
+        Keyword.put(merged, :headers, Map.merge(provider_headers, user_headers))
+
+      _ ->
+        merged
+    end
   end
 
   @doc """
