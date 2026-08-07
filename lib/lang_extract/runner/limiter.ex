@@ -99,7 +99,13 @@ defmodule LangExtract.Runner.Limiter do
 
   @impl true
   def handle_call(:acquire, {pid, _tag} = from, state) do
-    state = refill(state)
+    # Serve the queue before the newcomer: tokens accrue on the clock, so
+    # this call can arrive just after a token the queue head's wake timer
+    # was about to claim — granting the newcomer directly would steal it,
+    # and under sustained fresh arrivals the head's wait never ends.
+    # admit_waiting refills, drains in FIFO order, and re-arms the wake
+    # timer for a still-blocked head.
+    state = admit_waiting(state)
 
     case admit_check(state) do
       :ok ->

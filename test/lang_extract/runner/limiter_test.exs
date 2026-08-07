@@ -157,6 +157,30 @@ defmodule LangExtract.Runner.LimiterTest do
                       %{reason: :rpm, limiter: ^limiter}}
     end
 
+    # Tokens accrue on the clock, so a fresh acquire can land just after
+    # a token the queue head's wake timer was about to claim. Serving the
+    # newcomer first stole that token — under sustained arrivals the head
+    # waiter's wait extended indefinitely (budget caps held; fairness
+    # did not).
+    test "a fresh acquirer queues behind an earlier waiter instead of stealing its token" do
+      clock = start_supervised!({Agent, fn -> 0 end})
+      clock_fun = fn -> Agent.get(clock, & &1) end
+      limiter = start_supervised!({Limiter, [rpm: 1, max_in_flight: 10, clock: clock_fun]})
+
+      :ok = Limiter.acquire(limiter)
+      Limiter.release(limiter)
+
+      waiter = blocked_acquire(limiter)
+      refute_receive {:acquired, ^waiter}, 20
+
+      # a token has accrued, but the waiter's wake timer hasn't fired
+      Agent.update(clock, fn _ -> 60_001 end)
+      newcomer = blocked_acquire(limiter)
+
+      assert_receive {:acquired, ^waiter}, 500
+      refute_receive {:acquired, ^newcomer}, 50
+    end
+
     test "refill carries the fractional remainder instead of discarding it" do
       clock = start_supervised!({Agent, fn -> 0 end})
       clock_fun = fn -> Agent.get(clock, & &1) end
