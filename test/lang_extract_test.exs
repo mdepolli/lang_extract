@@ -106,6 +106,18 @@ defmodule LangExtractTest do
       assert message =~ "example is missing required key :text"
     end
 
+    # The whole point of the tuple variant is runtime task definitions —
+    # where a JSON file's "examples": null is routine. It must come back
+    # as data, not blow up as Protocol.UndefinedError mid-Enum.
+    test "non-list :examples returns ArgumentError instead of raising" do
+      for bad <- [nil, "not a list", %{}] do
+        assert {:error, %ArgumentError{message: message}} =
+                 LangExtract.template("Extract.", examples: bad)
+
+        assert message =~ "must be a list"
+      end
+    end
+
     test "wrong-typed fields return ArgumentError naming the field" do
       assert {:error, %ArgumentError{message: message}} =
                LangExtract.template("Extract.", examples: [%{text: 42}])

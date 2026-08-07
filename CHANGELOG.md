@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`template/2` returns an error tuple for non-list `:examples`** — a
+  runtime task definition with `"examples": null` (or any non-list) blew
+  up as `Protocol.UndefinedError` inside `Enum`, violating the tuple
+  variant's whole purpose; `template!/2` likewise raised the wrong
+  exception type. Both now produce the same `ArgumentError` shape as
+  other malformed input: `{:error, %ArgumentError{}}` from `template/2`,
+  a raised `ArgumentError` from `template!/2`.
+
 - **Gemini responses join every text part** — `parse_response/1` read only
   the first element of `parts`, but Gemini splits long completions across
   several. Long replies were truncated mid-JSON and failed the chunk as
