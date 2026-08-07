@@ -58,10 +58,14 @@ defmodule LangExtract.Provider.OpenAI do
       json_mode = Keyword.get(opts, :json_mode, true)
       messages = build_messages(prompt, json_mode)
 
+      # max_completion_tokens replaced max_tokens in chat completions;
+      # reasoning models reject the deprecated key with a 400. The
+      # library option stays :max_tokens — provider-neutral, only the
+      # wire key differs.
       payload =
         %{
           "model" => model,
-          "max_tokens" => max_tokens,
+          "max_completion_tokens" => max_tokens,
           "temperature" => temperature,
           "messages" => messages
         }

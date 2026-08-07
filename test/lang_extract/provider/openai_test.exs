@@ -32,7 +32,10 @@ defmodule LangExtract.Provider.OpenAITest do
 
       body = request_opts[:json]
       assert body["model"] == "gpt-4o-mini"
-      assert body["max_tokens"] == 4096
+      # max_completion_tokens replaced max_tokens in chat completions;
+      # reasoning models reject the deprecated key with a 400.
+      assert body["max_completion_tokens"] == 4096
+      refute Map.has_key?(body, "max_tokens")
       assert body["temperature"] == 0
       assert body["response_format"] == %{"type" => "json_object"}
 
@@ -62,7 +65,7 @@ defmodule LangExtract.Provider.OpenAITest do
 
       body = request_opts[:json]
       assert body["model"] == "gpt-4o"
-      assert body["max_tokens"] == 1024
+      assert body["max_completion_tokens"] == 1024
       assert body["temperature"] == 0.7
     end
 
