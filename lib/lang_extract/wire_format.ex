@@ -31,9 +31,7 @@ defmodule LangExtract.WireFormat do
 
   @spec normalize(String.t()) :: {:ok, map()} | {:error, {:invalid_format, String.t()}}
   def normalize(raw) when is_binary(raw) do
-    cleaned = raw |> strip_think_tags() |> strip_fences()
-
-    with {:ok, decoded} <- parse_json(cleaned),
+    with {:ok, decoded} <- parse_json(raw),
          {:ok, document} <- check_document(decoded) do
       {:ok, normalize_extractions(document)}
     else
@@ -41,11 +39,32 @@ defmodule LangExtract.WireFormat do
     end
   end
 
-  defp parse_json(json) do
-    case Jason.decode(json) do
-      {:ok, decoded} -> {:ok, decoded}
-      {:error, _} -> :error
-    end
+  # The sanitizers are regexes over the whole reply with no JSON-string
+  # awareness, so running them unconditionally corrupts payloads whose
+  # *content* carries fences or think tags — which the verbatim-span
+  # instruction makes expected. Candidates are tried in mutilation order:
+  # the raw reply untouched, then fence extraction (greedy first, so an
+  # inner fence inside a string cannot close the payload early; lazy as
+  # fallback), then the same over the think-stripped reply. First JSON
+  # parse wins.
+  defp parse_json(raw) do
+    stripped = strip_think_tags(raw)
+
+    [
+      String.trim(raw),
+      strip_fences_greedy(raw),
+      strip_fences(raw),
+      stripped,
+      strip_fences_greedy(stripped),
+      strip_fences(stripped)
+    ]
+    |> Enum.uniq()
+    |> Enum.find_value(:error, fn candidate ->
+      case Jason.decode(candidate) do
+        {:ok, decoded} -> {:ok, decoded}
+        {:error, _} -> nil
+      end
+    end)
   end
 
   # A valid document is a non-empty JSON object. No "extractions" key is
@@ -61,6 +80,7 @@ defmodule LangExtract.WireFormat do
 
   @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
   @fence_pattern ~r/```(?:json|yaml)?\s*(.*?)\s*```/s
+  @fence_pattern_greedy ~r/```(?:json|yaml)?\s*(.*)\s*```/s
 
   defp strip_think_tags(raw) do
     raw
@@ -70,6 +90,13 @@ defmodule LangExtract.WireFormat do
 
   defp strip_fences(raw) do
     case Regex.run(@fence_pattern, raw) do
+      [_, content] -> content
+      _ -> raw
+    end
+  end
+
+  defp strip_fences_greedy(raw) do
+    case Regex.run(@fence_pattern_greedy, raw) do
       [_, content] -> content
       _ -> raw
     end

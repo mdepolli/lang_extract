@@ -177,6 +177,34 @@ defmodule LangExtract.WireFormatTest do
       assert decoded == %{"extractions" => [%{"class" => "drug"}, %{"text" => "orphan"}]}
     end
 
+    # The verbatim-span instruction makes the model echo source content —
+    # including code fences and literal think tags — inside extraction
+    # strings. Sanitizer regexes have no JSON-string awareness, so they
+    # must never run on a payload that already parses (or whose fence
+    # extraction parses) without them.
+    test "fence characters inside an extraction string survive" do
+      payload =
+        Jason.encode!(%{
+          "extractions" => [
+            %{"code" => "```elixir\ndef f, do: :ok\n```", "code_attributes" => %{}}
+          ]
+        })
+
+      assert {:ok, %{"extractions" => [entry]}} =
+               WireFormat.normalize("```json\n#{payload}\n```")
+
+      assert entry["text"] == "```elixir\ndef f, do: :ok\n```"
+    end
+
+    test "a literal think tag inside an extraction string survives" do
+      payload = Jason.encode!(%{"extractions" => [%{"quote" => "he said <think> aloud"}]})
+
+      for raw <- [payload, "```json\n#{payload}\n```"] do
+        assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(raw)
+        assert entry["text"] == "he said <think> aloud"
+      end
+    end
+
     test "strips <think> tags before parsing" do
       payload =
         Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "drug_attributes" => %{}}]})

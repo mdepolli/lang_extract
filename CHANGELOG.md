@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Sanitizers no longer corrupt payloads containing fences or think
+  tags** — the fence/think regexes ran unconditionally over the raw reply
+  with no JSON-string awareness, so an extraction string containing
+  `` ``` `` (code corpora — which the verbatim-span instruction makes
+  expected) truncated the payload at the inner fence and failed the whole
+  chunk, and a literal `<think>` in extracted text deleted everything to
+  end-of-reply. `normalize/1` now tries candidates in mutilation order —
+  raw reply, greedy fence extraction (first fence to last), lazy fence,
+  each also over the think-stripped reply — and the first JSON parse wins.
+
 - **Multi-class entries and numeric values survive normalization** —
   a dynamic-key entry with several class keys
   (`{"drug": "aspirin", "dosage": "100mg"}`) was passed through whole and
