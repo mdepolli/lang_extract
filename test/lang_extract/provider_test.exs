@@ -5,46 +5,114 @@ defmodule LangExtract.ProviderTest do
   alias LangExtract.Provider.{Claude, Gemini, OpenAI, Response}
 
   describe "req_options/2" do
-    # A caller adding one custom header must not wipe the provider's auth
-    # header — every chunk would 401, and 4xx is never retried.
-    test "user headers merge per-key instead of replacing the provider's" do
-      provider = [headers: %{"x-api-key" => "sk-test", "anthropic-version" => "2023-06-01"}]
+    # Headers are resolved before the keyword merge: normalize map/list
+    # shapes, Map.merge per-key, then attach once. A caller adding one
+    # custom header must not wipe the provider's auth — every chunk would
+    # 401, and 4xx is never retried.
+
+    @provider_map [
+      headers: %{"x-api-key" => "sk-test", "anthropic-version" => "2023-06-01"}
+    ]
+
+    test "map user headers merge per-key with map provider headers" do
       opts = [req_options: [headers: %{"x-custom" => "1", "anthropic-version" => "override"}]]
 
-      merged = Provider.req_options(opts, provider)
-
-      assert merged[:headers] == %{
+      assert Provider.req_options(opts, @provider_map)[:headers] == %{
                "x-api-key" => "sk-test",
                "anthropic-version" => "override",
                "x-custom" => "1"
              }
     end
 
-    # Req documents both map and list header shapes; the wholesale
-    # Keyword.merge path must not win when the caller uses a list —
-    # that wipes auth and every chunk 401s without retry.
-    test "list-shaped user headers still preserve the provider's auth header" do
-      provider = [headers: %{"x-api-key" => "sk-test", "anthropic-version" => "2023-06-01"}]
+    test "list-tuple user headers merge per-key with map provider headers" do
       opts = [req_options: [headers: [{"x-custom", "1"}]]]
 
-      merged = Provider.req_options(opts, provider)
-
-      assert merged[:headers] == %{
+      assert Provider.req_options(opts, @provider_map)[:headers] == %{
                "x-api-key" => "sk-test",
                "anthropic-version" => "2023-06-01",
                "x-custom" => "1"
              }
     end
 
-    test "keyword-list user headers still preserve the provider's auth header" do
+    test "keyword-list user headers merge per-key with map provider headers" do
       provider = [headers: %{"authorization" => "Bearer sk-test"}]
       opts = [req_options: [headers: ["x-custom": "1"]]]
 
-      merged = Provider.req_options(opts, provider)
-
-      assert merged[:headers] == %{
+      assert Provider.req_options(opts, provider)[:headers] == %{
                "authorization" => "Bearer sk-test",
                "x-custom" => "1"
+             }
+    end
+
+    test "list provider headers merge per-key with map user headers" do
+      provider = [headers: [{"authorization", "Bearer sk"}, {"x-provider", "1"}]]
+      opts = [req_options: [headers: %{"x-custom" => "1", "x-provider" => "override"}]]
+
+      assert Provider.req_options(opts, provider)[:headers] == %{
+               "authorization" => "Bearer sk",
+               "x-provider" => "override",
+               "x-custom" => "1"
+             }
+    end
+
+    test "list provider headers merge per-key with list user headers" do
+      provider = [headers: [{"x-api-key", "sk-test"}]]
+      opts = [req_options: [headers: [{"x-custom", "1"}]]]
+
+      assert Provider.req_options(opts, provider)[:headers] == %{
+               "x-api-key" => "sk-test",
+               "x-custom" => "1"
+             }
+    end
+
+    test "provider headers alone are kept when the user omits headers" do
+      assert Provider.req_options([], @provider_map)[:headers] == %{
+               "x-api-key" => "sk-test",
+               "anthropic-version" => "2023-06-01"
+             }
+    end
+
+    test "list-shaped provider headers alone are normalized to a map" do
+      provider = [headers: [{"authorization", "Bearer sk"}]]
+
+      assert Provider.req_options([], provider)[:headers] == %{
+               "authorization" => "Bearer sk"
+             }
+    end
+
+    test "user headers alone are kept when the provider omits headers" do
+      opts = [req_options: [headers: %{"x-custom" => "1"}]]
+
+      assert Provider.req_options(opts, [])[:headers] == %{"x-custom" => "1"}
+    end
+
+    test "list-shaped user headers alone are normalized to a map" do
+      opts = [req_options: [headers: [{"x-custom", "1"}]]]
+
+      assert Provider.req_options(opts, [])[:headers] == %{"x-custom" => "1"}
+    end
+
+    test "neither side supplying headers leaves :headers unset" do
+      refute Keyword.has_key?(Provider.req_options([], []), :headers)
+    end
+
+    test "header merge does not disturb other keyword overrides" do
+      provider = [headers: %{"x-api-key" => "sk"}, receive_timeout: 30_000]
+      opts = [req_options: [headers: [{"x-custom", "1"}], receive_timeout: 5_000, retry: false]]
+
+      merged = Provider.req_options(opts, provider)
+
+      assert merged[:headers] == %{"x-api-key" => "sk", "x-custom" => "1"}
+      assert merged[:receive_timeout] == 5_000
+      assert merged[:retry] == false
+    end
+
+    test "empty list headers from the user still keep provider auth" do
+      opts = [req_options: [headers: []]]
+
+      assert Provider.req_options(opts, @provider_map)[:headers] == %{
+               "x-api-key" => "sk-test",
+               "anthropic-version" => "2023-06-01"
              }
     end
   end

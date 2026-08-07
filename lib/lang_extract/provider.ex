@@ -117,25 +117,29 @@ defmodule LangExtract.Provider do
   def req_options(opts, req_opts) do
     user_opts = Keyword.get(opts, :req_options) || []
 
-    merged =
-      @http_defaults
-      |> Keyword.merge(req_opts)
-      |> Keyword.merge(user_opts)
+    # Resolve :headers before the keyword merge: Keyword.merge replaces the
+    # whole value, which would wipe provider auth when a caller adds one
+    # custom header (every chunk 401s; 4xx is never retried). Normalize
+    # map/list shapes, Map.merge per-key, then attach once.
+    headers =
+      merge_headers(
+        normalize_headers(Keyword.get(req_opts, :headers)),
+        normalize_headers(Keyword.get(user_opts, :headers))
+      )
 
-    # :headers merges per-key rather than replacing wholesale: a caller
-    # adding one custom header must not silently wipe the provider's auth
-    # header — every chunk would 401, and 4xx is never retried. Req accepts
-    # both maps and list shapes; normalize before merging so list-shaped
-    # user headers take the same path.
-    provider_headers = normalize_headers(Keyword.get(req_opts, :headers))
-    user_headers = normalize_headers(Keyword.get(user_opts, :headers))
-
-    if is_map(provider_headers) and is_map(user_headers) do
-      Keyword.put(merged, :headers, Map.merge(provider_headers, user_headers))
-    else
-      merged
-    end
+    @http_defaults
+    |> Keyword.merge(Keyword.delete(req_opts, :headers))
+    |> Keyword.merge(Keyword.delete(user_opts, :headers))
+    |> put_headers(headers)
   end
+
+  defp merge_headers(%{} = provider, %{} = user), do: Map.merge(provider, user)
+  defp merge_headers(%{} = provider, nil), do: provider
+  defp merge_headers(nil, %{} = user), do: user
+  defp merge_headers(_provider, _user), do: nil
+
+  defp put_headers(opts, nil), do: opts
+  defp put_headers(opts, headers), do: Keyword.put(opts, :headers, headers)
 
   defp normalize_headers(headers) when is_map(headers), do: headers
 
