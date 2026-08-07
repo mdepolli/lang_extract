@@ -216,14 +216,12 @@ defmodule LangExtract do
   def template(description, opts \\ []) when is_binary(description) do
     examples = Keyword.get(opts, :examples, [])
 
-    result =
-      with {:ok, examples} <- expect_list(examples, :examples, "template"),
-           {:ok, examples} <- normalize_all(examples, &normalize_example/1) do
-        validate_template(%Template{description: description, examples: examples})
-      end
-
-    case result do
-      {:ok, template} -> template
+    with {:ok, examples} <- expect_list(examples, :examples, "template"),
+         {:ok, examples} <- normalize_all(examples, &normalize_example/1),
+         {:ok, template} <-
+           validate_template(%Template{description: description, examples: examples}) do
+      template
+    else
       {:error, exception} -> raise exception
     end
   end
