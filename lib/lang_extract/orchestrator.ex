@@ -61,13 +61,18 @@ defmodule LangExtract.Orchestrator do
     assemble_results(results, errors)
   end
 
-  # Document order restored from unordered per-chunk events.
+  # Document order restored from unordered per-chunk events. Chunks are
+  # sorted first so flatMap stays locality-friendly; spans are then sorted
+  # by byte_start because model output order within a chunk is not source
+  # order. :not_found has nil offsets — Erlang term order puts them after
+  # every located span, which matches "document order, unknowns last".
   @spec assemble_results([ChunkResult.t()], [ChunkError.t()]) :: Result.t()
   defp assemble_results(results, errors) do
     spans =
       results
       |> Enum.sort_by(& &1.byte_start)
       |> Enum.flat_map(& &1.spans)
+      |> Enum.sort_by(& &1.byte_start)
 
     %Result{
       spans: spans,

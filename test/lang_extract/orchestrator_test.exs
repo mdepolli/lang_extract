@@ -3,6 +3,7 @@ defmodule LangExtract.OrchestratorTest do
 
   alias LangExtract.ChunkError
   alias LangExtract.Client
+  alias LangExtract.Orchestrator
   alias LangExtract.Result
   alias LangExtract.Span
   alias LangExtract.Test.FakeAnthropic
@@ -371,6 +372,24 @@ defmodule LangExtract.OrchestratorTest do
 
       assert spans |> Enum.map(& &1.byte_start) |> Enum.sort() ==
                Enum.map(spans, & &1.byte_start)
+    end
+
+    # Model output order within a chunk is not document order; collect/1
+    # must sort located spans by byte_start so Result's contract holds.
+    test "collect sorts within-chunk spans by byte_start" do
+      alias LangExtract.{ChunkResult, Span}
+
+      late = %Span{text: "late", byte_start: 10, byte_end: 14, status: :exact, class: "w"}
+      early = %Span{text: "early", byte_start: 0, byte_end: 5, status: :exact, class: "w"}
+      lost = %Span{text: "lost", byte_start: nil, byte_end: nil, status: :not_found, class: "w"}
+
+      result =
+        Orchestrator.collect([
+          {:ok, %ChunkResult{byte_start: 0, byte_end: 20, spans: [late, lost, early], usage: nil}}
+        ])
+
+      assert Enum.map(result.spans, & &1.text) == ["early", "late", "lost"]
+      assert Enum.map(result.spans, & &1.byte_start) == [0, 10, nil]
     end
 
     test "multi-byte extraction in a later chunk round-trips via byte offsets" do

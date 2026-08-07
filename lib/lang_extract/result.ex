@@ -11,9 +11,11 @@ defmodule LangExtract.Result do
       %LangExtract.Result{spans: spans, errors: errors} =
         LangExtract.run(client, source, template)
 
-  `spans` are in document order (by `byte_start`); `errors` carry the byte
-  range of each failed chunk, also in document order. An empty `errors`
-  list means every chunk extracted cleanly.
+  `spans` are in document order by `byte_start` (located spans first;
+  `:not_found` spans have `nil` offsets and sort after every located
+  span). `errors` carry the byte range of each failed chunk, also in
+  document order. An empty `errors` list means every chunk extracted
+  cleanly.
 
   `usage` totals the token counts across chunks whose provider response
   reported them — `nil` when none did. Failed chunks and providers that
