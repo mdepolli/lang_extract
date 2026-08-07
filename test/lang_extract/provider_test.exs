@@ -19,6 +19,34 @@ defmodule LangExtract.ProviderTest do
                "x-custom" => "1"
              }
     end
+
+    # Req documents both map and list header shapes; the wholesale
+    # Keyword.merge path must not win when the caller uses a list —
+    # that wipes auth and every chunk 401s without retry.
+    test "list-shaped user headers still preserve the provider's auth header" do
+      provider = [headers: %{"x-api-key" => "sk-test", "anthropic-version" => "2023-06-01"}]
+      opts = [req_options: [headers: [{"x-custom", "1"}]]]
+
+      merged = Provider.req_options(opts, provider)
+
+      assert merged[:headers] == %{
+               "x-api-key" => "sk-test",
+               "anthropic-version" => "2023-06-01",
+               "x-custom" => "1"
+             }
+    end
+
+    test "keyword-list user headers still preserve the provider's auth header" do
+      provider = [headers: %{"authorization" => "Bearer sk-test"}]
+      opts = [req_options: [headers: ["x-custom": "1"]]]
+
+      merged = Provider.req_options(opts, provider)
+
+      assert merged[:headers] == %{
+               "authorization" => "Bearer sk-test",
+               "x-custom" => "1"
+             }
+    end
   end
 
   describe "[:lang_extract, :request] telemetry span" do

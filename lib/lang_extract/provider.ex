@@ -124,8 +124,11 @@ defmodule LangExtract.Provider do
 
     # :headers merges per-key rather than replacing wholesale: a caller
     # adding one custom header must not silently wipe the provider's auth
-    # header — every chunk would 401, and 4xx is never retried.
-    case {Keyword.get(req_opts, :headers), Keyword.get(user_opts, :headers)} do
+    # header — every chunk would 401, and 4xx is never retried. Req accepts
+    # both maps and list shapes; normalize before merging so list-shaped
+    # user headers take the same path.
+    case {normalize_headers(Keyword.get(req_opts, :headers)),
+          normalize_headers(Keyword.get(user_opts, :headers))} do
       {%{} = provider_headers, %{} = user_headers} ->
         Keyword.put(merged, :headers, Map.merge(provider_headers, user_headers))
 
@@ -133,6 +136,17 @@ defmodule LangExtract.Provider do
         merged
     end
   end
+
+  defp normalize_headers(headers) when is_map(headers), do: headers
+
+  defp normalize_headers(headers) when is_list(headers) do
+    Map.new(headers, fn
+      {key, value} when is_atom(key) -> {Atom.to_string(key), value}
+      {key, value} when is_binary(key) -> {key, value}
+    end)
+  end
+
+  defp normalize_headers(_headers), do: nil
 
   @doc """
   Posts the request and parses the response inside a
