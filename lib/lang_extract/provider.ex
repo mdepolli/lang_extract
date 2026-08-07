@@ -106,8 +106,11 @@ defmodule LangExtract.Provider do
 
   # Defense-in-depth after the body is fully received (Req has no portable
   # streaming size cap). 2 MiB is well above any sane extraction JSON
-  # reply; a compromised endpoint or mis-set base_url cannot force the
-  # BEAM to retain multi-megabyte binaries per concurrent chunk.
+  # reply. Binary bodies only: an endpoint answering with a JSON
+  # content-type bypasses this cap — Req decodes the body before we see
+  # it, and the decoded map's sub-binaries can still pin the full reply
+  # via {:api_error, _, body} / {:bad_request, body} reasons. The cap
+  # stops plain-text floods and decode_body: false paths, not that route.
   @max_response_body_bytes 2 * 1024 * 1024
 
   @doc """
@@ -153,7 +156,8 @@ defmodule LangExtract.Provider do
   not zero.
 
   Metadata: the caller's `provider` and `model`; `:stop` adds `status` —
-  the HTTP status code, or `:transport_error` when no response arrived.
+  the HTTP status code, `:transport_error` when no response arrived, or
+  `:body_too_large` when the response body exceeded the size cap.
   """
   @spec request(Req.Request.t(), keyword(), map(), (term() ->
                                                       {:ok, String.t()} | {:error, error()})) ::
@@ -178,9 +182,7 @@ defmodule LangExtract.Provider do
     end)
   end
 
-  # Binary bodies only: JSON responses are already decoded maps by the time
-  # they reach us, and a decoded map has already paid the allocation cost.
-  # Cap still stops plain-text floods and decode_body: false paths.
+  # Scope and limits of the binary-only check: see @max_response_body_bytes.
   defp reject_oversize_body({:ok, %Req.Response{body: body}})
        when is_binary(body) and byte_size(body) > @max_response_body_bytes do
     {:error,
