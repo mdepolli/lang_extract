@@ -20,8 +20,12 @@ the library's own benchmark suite is built on these same events.
 The last two are emitted only by the supervised Runner — see the
 [production guide](production.md).
 
-All three spans also emit `:exception` events (standard `:telemetry.span/3`
-semantics) if the wrapped work raises.
+The chunk and request spans also emit `:exception` events (standard
+`:telemetry.span/3` semantics) if the wrapped work raises. The document
+span does not: it is hand-rolled around lazy stream consumption and
+emits only `:start` and `:stop` — a crash mid-stream ends the run with
+no document-level event. Alert on the chunk/request `:exception` events;
+there is no `[:lang_extract, :document, :exception]`.
 
 ## Semantics worth knowing
 
