@@ -97,7 +97,7 @@ defmodule LangExtract.RunnerTest do
       end)
     end
 
-    defp template, do: LangExtract.template!("Extract words.")
+    defp template, do: LangExtract.template("Extract words.")
 
     test "stream/4 yields chunk results through the shared budget" do
       word_stub()

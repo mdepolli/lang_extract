@@ -19,7 +19,7 @@ granularity, and the output format:
 client = LangExtract.new(:claude, api_key: System.get_env("ANTHROPIC_API_KEY"))
 
 template =
-  LangExtract.template!("Extract literary works, people, and locations from the text.",
+  LangExtract.template("Extract literary works, people, and locations from the text.",
     examples: [
       %{text: "Dickens wrote Oliver Twist while living in London.",
         extractions: [
@@ -102,14 +102,14 @@ the examples also teach the wire format. A description alone would leave the
 model to invent all of that.
 
 Each extraction's `text` must appear verbatim in its example's `text`: the
-examples double as alignment ground truth, and `LangExtract.template!/2`
+examples double as alignment ground truth, and `LangExtract.template/2`
 checks this at construction, unconditionally — a template that builds is a
 template whose examples align. (Use `LangExtract.template/2` for tagged
 tuples instead of raises when the task definition arrives at runtime.)
 
 ```elixir
 template =
-  LangExtract.template!("Extract medical conditions and medications from clinical text.",
+  LangExtract.template("Extract medical conditions and medications from clinical text.",
     examples: [
       %{text: "Patient was diagnosed with diabetes and prescribed metformin.",
         extractions: [
@@ -251,7 +251,7 @@ sequenceDiagram
 
 ## Prompt Validation
 
-`LangExtract.template!/2` validates at construction, so most code never calls
+`LangExtract.template/2` validates at construction, so most code never calls
 the validator directly. It stays public for templates assembled as structs
 by hand and for re-checking under custom aligner options:
 
@@ -451,7 +451,7 @@ The docs group modules by tier; SemVer applies to the **Core API** tier.
 entry points. The structs they hand out are stable to match on: `Result`,
 `Span`, `ChunkError`, `ChunkResult`, and `Provider.Response` freely;
 `Template`, `Template.Example`, and `Extraction` are public for matching
-and introspection but constructed via `template!/2`, not struct literals.
+and introspection but constructed via `template/2`, not struct literals.
 `Client` is opaque — build it with `new/2`, hold it, pass it. The
 `Provider` behaviour (callbacks plus `t:LangExtract.Provider.error/0`),
 `Serializer`, `Prompt.Validator`, and the telemetry events documented in

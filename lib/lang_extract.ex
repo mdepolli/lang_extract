@@ -4,10 +4,10 @@ defmodule LangExtract do
   Maps extraction strings back to exact byte positions in source text.
 
   This module is the main entry point: `new/2` builds a client,
-  `template!/2` builds a validated task definition (`template/2` is its
-  non-raising twin for runtime task data), and `run/4` / `stream/4`
-  execute the full pipeline (chunk → LLM → parse → align). For replaying
-  stored model output without another API call, see `extract/3`.
+  `template/2` builds a validated task definition, and `run/4` /
+  `stream/4` execute the full pipeline (chunk → LLM → parse → align).
+  For replaying stored model output without another API call, see
+  `extract/3`.
 
   Beyond the facade:
 
@@ -137,7 +137,7 @@ defmodule LangExtract do
   ## Examples
 
       client = LangExtract.new(:claude, api_key: "sk-...")
-      template = LangExtract.template!("Extract entities.")
+      template = LangExtract.template("Extract entities.")
 
       %LangExtract.Result{spans: spans, errors: errors} =
         LangExtract.run(client, "the quick brown fox", template)
@@ -191,14 +191,17 @@ defmodule LangExtract do
   extraction texts are validated against the example text using the
   production aligner; misaligned examples raise
   `LangExtract.Prompt.Validator.ValidationError` — a template that
-  constructs is a template whose examples align, unconditionally. For
-  runtime data where raising is inappropriate, `template/2` returns
-  tagged tuples instead.
+  constructs is a template whose examples align, unconditionally.
+  Malformed example maps raise `ArgumentError` naming the offending field.
+
+  Raising without a bang follows the convention for single-variant
+  functions (`new/2` is the same shape): a malformed template is a
+  programmer error, caught closest to the typo.
 
   ## Examples
 
       iex> template =
-      ...>   LangExtract.template!("Extract conditions.",
+      ...>   LangExtract.template("Extract conditions.",
       ...>     examples: [
       ...>       %{text: "Patient has diabetes.",
       ...>         extractions: [%{class: "condition", text: "diabetes"}]}
@@ -209,40 +212,19 @@ defmodule LangExtract do
       [%LangExtract.Extraction{class: "condition", text: "diabetes", attributes: %{}}]
 
   """
-  @spec template!(String.t(), keyword()) :: Template.t()
-  def template!(description, opts \\ []) when is_binary(description) do
-    case template(description, opts) do
-      {:ok, template} -> template
-      {:error, exception} -> raise exception
-    end
-  end
-
-  @doc """
-  Builds a validated extraction template, returning a tagged tuple.
-
-  The non-raising twin of `template!/2` for templates built from runtime
-  data (user-uploaded or JSON-loaded task definitions). Returns
-  `{:error, exception}` where `template!/2` would raise — an
-  `ArgumentError` for malformed example maps, or a
-  `LangExtract.Prompt.Validator.ValidationError` (carrying the per-example
-  issues) for examples whose extractions don't align.
-
-  ## Examples
-
-      iex> {:error, %ArgumentError{}} =
-      ...>   LangExtract.template("Extract.", examples: [%{extractions: []}])
-
-  """
-  @spec template(String.t(), keyword()) ::
-          {:ok, Template.t()} | {:error, Exception.t()}
+  @spec template(String.t(), keyword()) :: Template.t()
   def template(description, opts \\ []) when is_binary(description) do
     examples = Keyword.get(opts, :examples, [])
 
-    with {:ok, examples} <- expect_list(examples, :examples, "template"),
-         {:ok, examples} <- normalize_all(examples, &normalize_example/1) do
-      validate_template(%Template{description: description, examples: examples})
-    else
-      {:error, _} = error -> error
+    result =
+      with {:ok, examples} <- expect_list(examples, :examples, "template"),
+           {:ok, examples} <- normalize_all(examples, &normalize_example/1) do
+        validate_template(%Template{description: description, examples: examples})
+      end
+
+    case result do
+      {:ok, template} -> template
+      {:error, exception} -> raise exception
     end
   end
 

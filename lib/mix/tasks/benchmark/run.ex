@@ -31,7 +31,7 @@ defmodule Mix.Tasks.Benchmark.Run do
     %{task: task_name, corpus: corpus_dir, out: out_dir, document: document} = parse_args!(args)
 
     task_def = load_task(task_name)
-    template = LangExtract.template!(task_def["description"], examples: task_def["examples"])
+    template = LangExtract.template(task_def["description"], examples: task_def["examples"])
     corpus_files = corpus_files!(corpus_dir, document)
 
     run_dir = create_run_dir!(out_dir, task_name)

@@ -8,11 +8,11 @@ defmodule LangExtract.Template do
   are what teach the model the class vocabulary, span granularity,
   attributes, and output format.
 
-  Build templates with `LangExtract.template!/2`, which accepts plain maps
-  for examples and validates them against the production aligner;
-  `LangExtract.template/2` is the non-raising twin for runtime task
-  definitions (user-uploaded or JSON-loaded). The struct is public for
-  pattern matching and introspection.
+  Build templates with `LangExtract.template/2`, which accepts plain maps
+  for examples (string or atom keys, so JSON-loaded task definitions work
+  verbatim) and validates them against the production aligner, raising on
+  malformed or misaligned input. The struct is public for pattern
+  matching and introspection.
   """
 
   alias LangExtract.Extraction
@@ -28,7 +28,7 @@ defmodule LangExtract.Template do
     itself — the class name becomes the JSON key in the model's reply.
 
     Each extraction's `text` must appear verbatim in this example's `text`:
-    examples double as alignment ground truth, and `LangExtract.template!/2`
+    examples double as alignment ground truth, and `LangExtract.template/2`
     checks this at construction.
     """
 

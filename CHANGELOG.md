@@ -9,13 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **`template/2` returns an error tuple for non-list `:examples`** — a
-  runtime task definition with `"examples": null` (or any non-list) blew
-  up as `Protocol.UndefinedError` inside `Enum`, violating the tuple
-  variant's whole purpose; `template!/2` likewise raised the wrong
-  exception type. Both now produce the same `ArgumentError` shape as
-  other malformed input: `{:error, %ArgumentError{}}` from `template/2`,
-  a raised `ArgumentError` from `template!/2`.
+- **Non-list `:examples` raises a named `ArgumentError`** — a task
+  definition with `"examples": null` (or any non-list) blew up as
+  `Protocol.UndefinedError` from inside `Enum`; it now raises the same
+  `ArgumentError` shape as other malformed input, naming the field.
 
 - **Gemini responses join every text part** — `parse_response/1` read only
   the first element of `parts`, but Gemini splits long completions across
@@ -86,6 +83,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   survives.
 
 ### Changed
+
+- **BREAKING: `template!/2` is now `template/2`; the tuple-returning
+  variant is gone** — the pair existed for "runtime task definitions
+  where raising is inappropriate," but that consumer never materialized:
+  the only real JSON-loading caller (the benchmark runner) used the
+  raising variant, leaving the tuple twin's sole consumers its own tests
+  (the same condition that removed `validate: false`). Per Elixir naming
+  conventions, a single-variant function carries no bang and raises on
+  programmer errors — the same shape as `new/2`. Migration:
+  `template!(...)` → `template(...)`; callers matching
+  `{:ok, _}/{:error, _}` from the old `template/2` now wrap with
+  `try/rescue` or pre-validate. If a genuine external-data consumer
+  appears, a tuple-returning variant can return additively under a
+  parse-flavored name (e.g. `Template.load/1`), designed against that
+  caller's real branching needs.
 
 - **Docs demote bare `align/3` as a product path** — README no longer has an
   "Alignment Without an LLM" section. The front door matches upstream:

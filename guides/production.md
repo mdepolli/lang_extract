@@ -51,7 +51,7 @@ defmodule MyApp.Extractor do
   def stream(source), do: Runner.stream(__MODULE__, source, template())
 
   defp template do
-    LangExtract.template!("Extract ...", examples: [...])
+    LangExtract.template("Extract ...", examples: [...])
   end
 end
 ```
