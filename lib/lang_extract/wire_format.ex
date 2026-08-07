@@ -77,14 +77,19 @@ defmodule LangExtract.WireFormat do
   defp preview_raw(raw) when byte_size(raw) <= @max_invalid_format_bytes, do: raw
 
   defp preview_raw(raw) do
-    prefix = binary_part(raw, 0, @max_invalid_format_bytes)
-
-    prefix =
-      if String.valid?(prefix),
-        do: prefix,
-        else: binary_part(raw, 0, @max_invalid_format_bytes - 3)
-
+    prefix = valid_prefix(binary_part(raw, 0, @max_invalid_format_bytes))
     prefix <> "…(#{byte_size(raw)} bytes total, truncated)"
+  end
+
+  # The cut can land mid-character; trim trailing bytes one at a time
+  # until the prefix is valid on its own — at most 3 steps for UTF-8
+  # input, since a character is at most 4 bytes.
+  defp valid_prefix(prefix) do
+    if String.valid?(prefix) do
+      prefix
+    else
+      valid_prefix(binary_part(prefix, 0, byte_size(prefix) - 1))
+    end
   end
 
   # Any JSON object is a valid document — one without an "extractions"
