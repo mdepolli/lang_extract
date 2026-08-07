@@ -222,11 +222,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Standalone `run/4` crash isolation is stated honestly** — handled
-  failures stay in `Result.errors`; bug-level linked chunk crashes still
-  exit the caller. Production mermaid matches the failure table; prefer
-  `Runner` for crash isolation.
-
 - **Serializer known-reason round-trip tests cover the full library
   shape set** — including `{:bad_request, _}`, the remaining atom reasons
   (`:missing_api_key`, `:empty_response`, `:server_error`, `:drained`,
