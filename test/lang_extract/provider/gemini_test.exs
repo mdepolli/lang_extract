@@ -183,6 +183,26 @@ defmodule LangExtract.Provider.GeminiTest do
       assert {:ok, ~s({"extractions": []})} = Gemini.parse_response({:ok, response})
     end
 
+    # MAX_TOKENS mid-thought: every part is a thought summary and no
+    # answer text exists — an empty reply, not an invalid one.
+    test "returns empty_response when all parts are thoughts" do
+      response = %Req.Response{
+        status: 200,
+        body: %{
+          "candidates" => [
+            %{
+              "content" => %{
+                "parts" => [%{"text" => "thinking about it...", "thought" => true}]
+              },
+              "finishReason" => "MAX_TOKENS"
+            }
+          ]
+        }
+      }
+
+      assert {:error, :empty_response} = Gemini.parse_response({:ok, response})
+    end
+
     test "returns empty_response when candidates is empty" do
       response = %Req.Response{status: 200, body: %{"candidates" => []}}
       assert {:error, :empty_response} = Gemini.parse_response({:ok, response})

@@ -62,7 +62,7 @@ defmodule LangExtract.Orchestrator do
   end
 
   # Document order restored from unordered per-chunk events. Chunks are
-  # sorted first so flatMap stays locality-friendly; spans are then sorted
+  # sorted first so the flat_map stays locality-friendly; spans are then sorted
   # by byte_start because model output order within a chunk is not source
   # order. :not_found has nil offsets — Erlang term order puts them after
   # every located span, which matches "document order, unknowns last".

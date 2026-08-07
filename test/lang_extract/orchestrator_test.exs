@@ -2,6 +2,7 @@ defmodule LangExtract.OrchestratorTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.ChunkError
+  alias LangExtract.ChunkResult
   alias LangExtract.Client
   alias LangExtract.Orchestrator
   alias LangExtract.Result
@@ -12,8 +13,6 @@ defmodule LangExtract.OrchestratorTest do
   @req_options [plug: {Req.Test, __MODULE__}]
 
   describe "LangExtract.stream/4" do
-    alias LangExtract.ChunkResult
-
     @two_chunk_source "First sentence here. Second sentence there."
 
     defp counting_stub(parent) do
@@ -377,8 +376,6 @@ defmodule LangExtract.OrchestratorTest do
     # Model output order within a chunk is not document order; collect/1
     # must sort located spans by byte_start so Result's contract holds.
     test "collect sorts within-chunk spans by byte_start" do
-      alias LangExtract.{ChunkResult, Span}
-
       late = %Span{text: "late", byte_start: 10, byte_end: 14, status: :exact, class: "w"}
       early = %Span{text: "early", byte_start: 0, byte_end: 5, status: :exact, class: "w"}
       lost = %Span{text: "lost", byte_start: nil, byte_end: nil, status: :not_found, class: "w"}

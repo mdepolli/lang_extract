@@ -9,11 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **`Result.spans` are sorted by `byte_start` within a chunk** — collect
-  only ordered chunks before flat-mapping, so model emission order could
-  leave later source spans first inside a chunk despite the "document
-  order" contract. Located spans now sort by offset; `:not_found` (`nil`
-  offsets) sorts after every located span.
+- **`Result.spans` are sorted by `byte_start` within a chunk** —
+  `collect/1` previously ordered only the chunks before flat-mapping, so
+  model emission order could leave later source spans first inside a
+  chunk despite the "document order" contract. Located spans now sort by
+  offset; `:not_found` (`nil` offsets) sorts after every located span.
 
 - **Runner validates retry and drain options at startup** —
   `chunk_retries` / `rate_limit_retries` / `drain_timeout` accept

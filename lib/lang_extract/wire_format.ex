@@ -34,10 +34,8 @@ defmodule LangExtract.WireFormat do
 
   @spec normalize(String.t()) :: {:ok, map()} | {:error, {:invalid_format, String.t()}}
   def normalize(raw) when is_binary(raw) do
-    with {:ok, decoded} <- parse_json(raw),
-         {:ok, document} <- check_document(decoded) do
-      {:ok, normalize_extractions(document)}
-    else
+    case parse_json(raw) do
+      {:ok, document} -> {:ok, normalize_extractions(document)}
       :error -> {:error, {:invalid_format, raw}}
     end
   end
@@ -47,9 +45,14 @@ defmodule LangExtract.WireFormat do
   # *content* carries fences or think tags — which the verbatim-span
   # instruction makes expected. Build candidates in mutilation order
   # (raw, each fenced block, greedy outer span, think-stripped variants),
-  # decode those that Jason accepts as maps, and pick by richness:
-  # longer `"extractions"` list wins so an echoed empty few-shot fence
-  # does not silence a later answer fence; ties keep the later candidate.
+  # decode those that Jason accepts as maps — only objects are documents;
+  # non-object JSON is :invalid_format, while an object without
+  # "extractions" (including {}) stays Parser's :missing_extractions —
+  # and pick by richness: longer `"extractions"` list wins so an echoed
+  # empty few-shot fence does not silence a later answer fence; ties keep
+  # the later candidate. Residual ambiguity, accepted: richness cannot
+  # tell a *non-empty* few-shot echo from a smaller (or legitimately
+  # empty) real answer — the echo wins those.
   defp parse_json(raw) do
     raw
     |> json_candidates()
@@ -105,13 +108,6 @@ defmodule LangExtract.WireFormat do
       _ -> text
     end
   end
-
-  # Any JSON object is a valid document — one without an "extractions"
-  # key (including the empty object) is Parser's :missing_extractions,
-  # one taxonomy for one semantic condition. Non-objects are
-  # :invalid_format.
-  defp check_document(%{} = decoded), do: {:ok, decoded}
-  defp check_document(_decoded), do: :error
 
   defp normalize_extractions(%{"extractions" => entries} = document) when is_list(entries) do
     %{document | "extractions" => Enum.flat_map(entries, &normalize_entry/1)}
