@@ -292,10 +292,13 @@ map = LangExtract.Serializer.result_to_map(source, result)
 
 Known error reasons (the provider error union, pipeline errors, task
 exits) serialize as tagged maps and load with their outer shape intact,
-so the same patterns match live and loaded errors — payloads flatten to
-strings where the original term wasn't one (e.g. `{:task_exit, :timeout}`
-loads as `{:task_exit, "timeout"}`). Reasons outside the known vocabulary
-fall back to their `inspect/1` rendering and load as that bare string.
+so the same patterns match live and loaded errors. Atom payloads —
+including the common exit atoms, so `{:task_exit, :timeout}` round-trips
+exactly — come back as atoms; payloads flatten to strings where the
+original term wasn't one (e.g. `{:api_error, 500, %{"error" => "boom"}}`
+loads as `{:api_error, 500, "%{\"error\" => \"boom\"}"}`). Reasons
+outside the known vocabulary fall back to their `inspect/1` rendering
+and load as that bare string.
 
 For bare span lists (without errors/usage), the span-level pair applies:
 
