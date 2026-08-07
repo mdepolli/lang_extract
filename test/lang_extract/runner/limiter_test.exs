@@ -127,6 +127,33 @@ defmodule LangExtract.Runner.LimiterTest do
       waiter = blocked_acquire(limiter)
       assert_receive {:acquired, ^waiter}, 500
     end
+
+    # Under contention, pause/acquire paths used to stack send_after(:wake)
+    # without canceling the previous timer. One outstanding ref is enough.
+    test "rescheduling the wake timer cancels the previous one" do
+      limiter = start_supervised!({Limiter, [max_in_flight: 10]})
+
+      Limiter.pause(limiter, 60_000)
+      waiter = blocked_acquire(limiter)
+      await_waiting(limiter, 1)
+
+      %{wake_ref: first_ref} = :sys.get_state(limiter)
+      assert is_reference(first_ref)
+      assert is_integer(Process.read_timer(first_ref))
+
+      Limiter.pause(limiter, 60_000)
+      %{wake_ref: second_ref} = :sys.get_state(limiter)
+
+      assert is_reference(second_ref)
+      assert is_integer(Process.read_timer(second_ref))
+      # Previous timer is gone (cancelled or already delivered and cleared).
+      assert Process.read_timer(first_ref) == false
+      assert first_ref != second_ref
+
+      # Keep the waiter from leaking into other tests.
+      Process.unlink(waiter)
+      send(waiter, :die)
+    end
   end
 
   describe "rpm token bucket" do
