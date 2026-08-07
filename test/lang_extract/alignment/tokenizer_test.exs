@@ -20,6 +20,15 @@ defmodule LangExtract.Alignment.TokenizerTest do
       assert [] = Tokenizer.tokenize("")
     end
 
+    # Latin-1 corpora (older Gutenberg files) otherwise crash three layers
+    # down as a message-free ArgumentError from :re.run — undiagnosable
+    # from the caller's stacktrace.
+    test "invalid UTF-8 raises a named ArgumentError" do
+      assert_raise ArgumentError, ~r/valid UTF-8/, fn ->
+        Tokenizer.tokenize(<<"Caf", 0xE9, " au lait">>)
+      end
+    end
+
     test "splits contractions at the apostrophe like upstream" do
       tokens = Tokenizer.tokenize("don't won’t")
       texts = Enum.map(tokens, &{&1.type, &1.text})

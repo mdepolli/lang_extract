@@ -28,6 +28,16 @@ defmodule LangExtract.Alignment.Tokenizer do
 
   @spec tokenize(String.t()) :: [Token.t()]
   def tokenize(text) when is_binary(text) do
+    # Invalid bytes otherwise surface as a message-free ArgumentError
+    # from :re.run, three layers below the caller. Every pipeline and
+    # alignment path funnels through here, so one named check covers all
+    # entry points.
+    unless String.valid?(text) do
+      raise ArgumentError,
+            "text must be valid UTF-8 — Latin-1 sources need conversion " <>
+              "(e.g. :unicode.characters_to_binary(text, :latin1)) before extraction"
+    end
+
     @token_pattern
     |> Regex.scan(text, return: :index)
     |> Enum.map(fn [{byte_start, length} | _captures] ->
