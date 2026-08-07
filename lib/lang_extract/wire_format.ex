@@ -17,6 +17,9 @@ defmodule LangExtract.WireFormat do
   alias LangExtract.Extraction
 
   @attribute_suffix "_attributes"
+  @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
+  @fence_pattern ~r/```(?:json|yaml)?\s*(.*?)\s*```/s
+  @fence_pattern_greedy ~r/```(?:json|yaml)?\s*(.*)\s*```/s
 
   @spec format_extractions([Extraction.t()]) :: String.t()
   def format_extractions(extractions) do
@@ -42,29 +45,65 @@ defmodule LangExtract.WireFormat do
   # The sanitizers are regexes over the whole reply with no JSON-string
   # awareness, so running them unconditionally corrupts payloads whose
   # *content* carries fences or think tags — which the verbatim-span
-  # instruction makes expected. Candidates are tried in mutilation order:
-  # the raw reply untouched, then fence extraction (greedy first, so an
-  # inner fence inside a string cannot close the payload early; lazy as
-  # fallback), then the same over the think-stripped reply. First JSON
-  # parse wins.
+  # instruction makes expected. Build candidates in mutilation order
+  # (raw, each fenced block, greedy outer span, think-stripped variants),
+  # decode those that Jason accepts as maps, and pick by richness:
+  # longer `"extractions"` list wins so an echoed empty few-shot fence
+  # does not silence a later answer fence; ties keep the later candidate.
   defp parse_json(raw) do
-    stripped = strip_think_tags(raw)
-
-    [
-      String.trim(raw),
-      strip_fences_greedy(raw),
-      strip_fences(raw),
-      stripped,
-      strip_fences_greedy(stripped),
-      strip_fences(stripped)
-    ]
-    |> Enum.uniq()
-    |> Enum.find_value(:error, fn candidate ->
+    raw
+    |> json_candidates()
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {candidate, index} ->
       case Jason.decode(candidate) do
-        {:ok, decoded} -> {:ok, decoded}
-        {:error, _} -> nil
+        {:ok, decoded} when is_map(decoded) -> [{decoded, index}]
+        _ -> []
       end
     end)
+    |> case do
+      [] ->
+        :error
+
+      decoded ->
+        {best, _index} =
+          Enum.max_by(decoded, fn {document, index} ->
+            {extractions_score(document), index}
+          end)
+
+        {:ok, best}
+    end
+  end
+
+  defp extractions_score(%{"extractions" => entries}) when is_list(entries), do: length(entries)
+  defp extractions_score(_document), do: -1
+
+  defp json_candidates(raw) do
+    trimmed = String.trim(raw)
+    stripped = strip_think_tags(raw)
+
+    [trimmed, stripped]
+    |> Enum.flat_map(&text_candidates/1)
+    |> Enum.uniq()
+  end
+
+  # Per text layer: the full text, every fenced interior (source order),
+  # then the greedy outer span (needed when an extraction string itself
+  # contains ``` — non-greedy scan would close on the inner fence).
+  defp text_candidates(text) do
+    [text | fence_interiors(text) ++ [greedy_fence_interior(text)]]
+  end
+
+  defp fence_interiors(text) do
+    @fence_pattern
+    |> Regex.scan(text)
+    |> Enum.map(fn [_, content] -> content end)
+  end
+
+  defp greedy_fence_interior(text) do
+    case Regex.run(@fence_pattern_greedy, text) do
+      [_, content] -> content
+      _ -> text
+    end
   end
 
   # Any JSON object is a valid document — one without an "extractions"
@@ -80,28 +119,10 @@ defmodule LangExtract.WireFormat do
 
   defp normalize_extractions(document), do: document
 
-  @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
-  @fence_pattern ~r/```(?:json|yaml)?\s*(.*?)\s*```/s
-  @fence_pattern_greedy ~r/```(?:json|yaml)?\s*(.*)\s*```/s
-
   defp strip_think_tags(raw) do
     raw
     |> String.replace(@think_pattern, "")
     |> String.trim()
-  end
-
-  defp strip_fences(raw) do
-    case Regex.run(@fence_pattern, raw) do
-      [_, content] -> content
-      _ -> raw
-    end
-  end
-
-  defp strip_fences_greedy(raw) do
-    case Regex.run(@fence_pattern_greedy, raw) do
-      [_, content] -> content
-      _ -> raw
-    end
   end
 
   # Entries carrying canonical marker keys pass through untouched: a

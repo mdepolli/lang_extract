@@ -272,6 +272,65 @@ defmodule LangExtract.WireFormatTest do
              }
     end
 
+    # Models often echo a few-shot fence (empty or example) before the
+    # real answer fence. First-parse-wins with lazy fence capture silently
+    # kept the empty block; prefer the candidate with the richest
+    # extractions list so the answer survives.
+    test "multi-fence reply prefers the block with extractions over an earlier empty echo" do
+      empty = Jason.encode!(%{"extractions" => []})
+
+      answer =
+        Jason.encode!(%{
+          "extractions" => [%{"person" => "Alice", "person_attributes" => %{}}]
+        })
+
+      input = """
+      Here is the format:
+      ```json
+      #{empty}
+      ```
+
+      Answer:
+      ```json
+      #{answer}
+      ```
+      """
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+
+      assert decoded == %{
+               "extractions" => [
+                 %{"class" => "person", "text" => "Alice", "attributes" => %{}}
+               ]
+             }
+    end
+
+    test "multi-fence reply keeps a real answer when a later fence is empty" do
+      answer =
+        Jason.encode!(%{
+          "extractions" => [%{"person" => "Bob", "person_attributes" => %{}}]
+        })
+
+      empty = Jason.encode!(%{"extractions" => []})
+
+      input = """
+      ```json
+      #{answer}
+      ```
+      ```json
+      #{empty}
+      ```
+      """
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+
+      assert decoded == %{
+               "extractions" => [
+                 %{"class" => "person", "text" => "Bob", "attributes" => %{}}
+               ]
+             }
+    end
+
     test "strips markdown fences without language tag" do
       inner2 =
         Jason.encode!(%{"extractions" => [%{"drug" => "ibuprofen", "drug_attributes" => %{}}]})
