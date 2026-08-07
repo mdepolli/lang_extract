@@ -44,6 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upstream: other non-string values skip that entry with a log where
   upstream fails the whole chunk.
 
+- **Serializer decode enforces the invariants its docs claim** —
+  `result_from_map/1` and `from_map/1` accepted located spans with
+  `byte_start > byte_end` or offsets past the end of the source, chunk
+  errors with disordered or out-of-source ranges, and negative usage
+  counts — so a hand-edited file could produce structs that crash
+  `binary_part/3` despite the "strict validation" promise. Located span
+  and chunk-error offsets must now be ordered and within the source;
+  usage counts must be non-negative. Files written by the serializer are
+  unaffected (the pipeline never produces these shapes).
+
 - **Malformed canonical entries are skipped, not rewritten into data** —
   a model echoing the canonical schema with one field missing
   (`{"class": "drug"}`) was falling into the dynamic-key clause, which

@@ -30,7 +30,7 @@ defmodule LangExtract.SerializerTest do
 
     @chunk_error %ChunkError{
       byte_start: 0,
-      byte_end: 1000,
+      byte_end: 19,
       reason: {:task_exit, :timeout}
     }
 
@@ -50,20 +50,20 @@ defmodule LangExtract.SerializerTest do
       assert {:ok, {@source, loaded}} = Serializer.result_from_map(map)
       assert loaded.spans == [@exact_span]
       assert loaded.usage == %{input_tokens: 120, output_tokens: 45}
-      assert [%ChunkError{byte_start: 0, byte_end: 1000}] = loaded.errors
+      assert [%ChunkError{byte_start: 0, byte_end: 19}] = loaded.errors
     end
 
     test "known reason shapes serialize as tagged maps and load matchably" do
       errors = [
-        %ChunkError{byte_start: 0, byte_end: 10, reason: {:task_exit, :timeout}},
-        %ChunkError{byte_start: 10, byte_end: 20, reason: {:invalid_format, "not json"}},
-        %ChunkError{byte_start: 20, byte_end: 30, reason: {:rate_limited, 3000}},
+        %ChunkError{byte_start: 0, byte_end: 4, reason: {:task_exit, :timeout}},
+        %ChunkError{byte_start: 4, byte_end: 8, reason: {:invalid_format, "not json"}},
+        %ChunkError{byte_start: 8, byte_end: 12, reason: {:rate_limited, 3000}},
         %ChunkError{
-          byte_start: 30,
-          byte_end: 40,
+          byte_start: 12,
+          byte_end: 16,
           reason: {:api_error, 500, %{"error" => "boom"}}
         },
-        %ChunkError{byte_start: 40, byte_end: 50, reason: :unauthorized}
+        %ChunkError{byte_start: 16, byte_end: 19, reason: :unauthorized}
       ]
 
       map = Serializer.result_to_map(@source, %Result{spans: [], errors: errors, usage: nil})
@@ -223,15 +223,31 @@ defmodule LangExtract.SerializerTest do
 
     test "result_from_map rejects chunk errors with malformed byte offsets" do
       valid = Serializer.result_to_map(@source, %Result{spans: [], errors: [], usage: nil})
-      error = %{"byte_start" => 0, "byte_end" => 1000, "reason" => "boom"}
+      error = %{"byte_start" => 0, "byte_end" => 5, "reason" => "boom"}
 
       for bad <- [
             %{error | "byte_start" => "0"},
             %{error | "byte_end" => nil},
-            %{error | "byte_start" => -1}
+            %{error | "byte_start" => -1},
+            %{error | "byte_start" => 6, "byte_end" => 5},
+            %{error | "byte_end" => byte_size(@source) + 1}
           ] do
         assert {:error, :invalid_data} =
                  Serializer.result_from_map(%{valid | "errors" => [bad]})
+      end
+
+      assert {:ok, _} = Serializer.result_from_map(%{valid | "errors" => [error]})
+    end
+
+    test "result_from_map rejects negative usage counts" do
+      valid = Serializer.result_to_map(@source, %Result{spans: [], errors: [], usage: nil})
+
+      for usage <- [
+            %{"input_tokens" => -1, "output_tokens" => 2},
+            %{"input_tokens" => 1, "output_tokens" => -2}
+          ] do
+        assert {:error, :invalid_data} =
+                 Serializer.result_from_map(%{valid | "usage" => usage})
       end
     end
   end
@@ -305,6 +321,21 @@ defmodule LangExtract.SerializerTest do
 
       assert not_found.status == :not_found
       assert not_found.byte_start == nil
+    end
+
+    # The "strict validation" doc claim includes binary_part safety: a
+    # decoded located span must denote a real slice of its source.
+    test "rejects located spans with disordered or out-of-source offsets" do
+      base = %{"text" => "fox", "status" => "exact", "byte_start" => 16, "byte_end" => 19}
+
+      for bad <- [
+            %{base | "byte_start" => 19, "byte_end" => 16},
+            %{base | "byte_end" => 20},
+            %{base | "byte_start" => 20, "byte_end" => 25}
+          ] do
+        assert {:error, :invalid_data} =
+                 Serializer.from_map(%{"text" => @source, "extractions" => [bad]})
+      end
     end
 
     test "round-trips lesser and fuzzy spans distinctly" do
