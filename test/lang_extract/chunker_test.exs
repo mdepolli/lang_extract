@@ -4,6 +4,17 @@ defmodule LangExtract.ChunkerTest do
   alias LangExtract.Chunker
 
   describe "chunk/2" do
+    # nil would otherwise disable chunking silently: integers sort before
+    # atoms, so every byte_size(sentence) <= nil comparison is true and
+    # the whole document becomes one chunk.
+    test "non-positive max_chunk_chars raises a named ArgumentError" do
+      for bad <- [nil, 0, -1, "1000"] do
+        assert_raise ArgumentError, ~r/max_chunk_chars must be a positive integer/, fn ->
+          Chunker.chunk("some text", max_chunk_chars: bad)
+        end
+      end
+    end
+
     test "text within max_chunk_chars returns single chunk" do
       chunks = Chunker.chunk("Hello world.", max_chunk_chars: 100)
       assert length(chunks) == 1

@@ -38,6 +38,14 @@ defmodule LangExtract.Chunker do
   def chunk(text, opts) when is_binary(text) do
     max_chars = Keyword.fetch!(opts, :max_chunk_chars)
 
+    # nil would otherwise disable chunking silently: integers sort before
+    # atoms in term order, so byte_size(sentence) <= nil is always true
+    # and the whole document becomes one chunk.
+    unless is_integer(max_chars) and max_chars > 0 do
+      raise ArgumentError,
+            "max_chunk_chars must be a positive integer, got: #{inspect(max_chars)}"
+    end
+
     text
     |> find_sentences()
     |> Enum.flat_map(&split_oversized(&1, max_chars))
