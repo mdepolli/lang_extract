@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Hardening pass over the low-severity audit findings** — the limiter
+  serves queued waiters before fresh acquirers (FIFO admission; a
+  newcomer could previously steal a just-accrued token indefinitely
+  under sustained arrivals); the Runner validates `max_in_flight`,
+  `buffer`, and `rpm` at startup (a zero reached an "impossible" state
+  or divide-by-zero deep in the machinery); the chunker rejects
+  non-positive `max_chunk_chars` (`nil` silently disabled chunking via
+  term ordering); non-UTF-8 input raises a named `ArgumentError` at the
+  tokenizer instead of a bare regex error; the parser's skip warning
+  logs entry shape, never model-echoed payload; user `req_options`
+  headers merge per-key instead of wiping provider auth; OpenAI requests
+  send `max_completion_tokens` (reasoning models reject the deprecated
+  key); `{}` responses route to `:missing_extractions` like every other
+  extractions-less object; extraction-shaped maps passed as template
+  examples raise instead of building a teach-nothing template; plus
+  stale-prose corrections in the Request and Aligner docs.
+
 - **Non-list `:examples` raises a named `ArgumentError`** — a task
   definition with `"examples": null` (or any non-list) blew up as
   `Protocol.UndefinedError` from inside `Enum`; it now raises the same
