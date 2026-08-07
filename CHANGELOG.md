@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **429 paths pause before freeing the in-flight slot** —
+  `Limiter.release_and_pause/2` applies release and the global
+  `retry-after` deadline in one cast so `admit_waiting` cannot grant
+  queued work in the gap between separate `release` and `pause` casts.
+  `Request` uses it on rate-limited retries.
+
+- **Aligner fallthrough cannot nest inside a DP placement** — phase-0
+  token intervals are reserved; exact/lesser/LCS leftovers skip
+  overlapping candidates, and each fallthrough hit reserves for later
+  leftovers. `:first_occurrence` still allows independent first-match
+  (including overlaps). Parity known-divergences updated for contested
+  leftovers.
+
+- **`Runner.resources/1` rejects non-pid children** — during
+  `one_for_all` restart `which_children` can return `:restarting`;
+  raises a named `ArgumentError` instead of an opaque `Agent.get` crash.
+
+- **`align/3` refuses sources larger than 256 KiB by default** — fuzzy
+  fallthrough is super-linear in tokens; pass `allow_large: true` for
+  intentional whole-document alignment. The chunked pipeline is
+  unchanged.
+
 - **`Result.spans` are sorted by `byte_start` within a chunk** —
   `collect/1` previously ordered only the chunks before flat-mapping, so
   model emission order could leave later source spans first inside a
@@ -197,6 +219,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unredacted request headers hide — into `ChunkError.reason`. Struct fields
   are now value-stripped before formatting; an authored `:message` string
   survives.
+
+### Documentation
+
+- **Standalone `run/4` crash isolation is stated honestly** — handled
+  failures stay in `Result.errors`; bug-level linked chunk crashes still
+  exit the caller. Production mermaid matches the failure table; prefer
+  `Runner` for crash isolation.
 
 ### Changed
 
