@@ -176,6 +176,19 @@ defmodule LangExtractTest do
       end
     end
 
+    # Any dynamic key ending in "_attributes" is an attributes carrier on
+    # the wire: class "note_attributes" would decode as attributes for
+    # class "note", silently mangling every conforming reply.
+    test "extraction classes ending in _attributes raise ArgumentError" do
+      assert_raise ArgumentError, ~r/reserved suffix "_attributes"/, fn ->
+        LangExtract.template("Extract.",
+          examples: [
+            %{text: "hello", extractions: [%{class: "note_attributes", text: "hello"}]}
+          ]
+        )
+      end
+    end
+
     # Explicit null/false must not collapse to the field default via || —
     # that is the silent teach-nothing path the extractions: null top-level
     # case already rejects.

@@ -64,7 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   null/false fields** — classes `"class"` and `"text"` are WireFormat
   marker keys; encoding them as dynamic keys produced replies the decoder
   treated as markers, so every conforming run extracted nothing with only
-  a warning log. They now raise at `template/2`. Field lookup no longer
+  a warning log. They now raise at `template/2`, as does any class ending
+  in `"_attributes"` — the decoder reads such a key as an attributes
+  carrier (class `"note_attributes"` becomes attributes for `"note"`),
+  the same silently-mangled-reply failure. Field lookup no longer
   uses `Map.get` + `||`: explicit `"extractions": null`, `attributes:
   false`, or `"text": null` raise named type errors instead of collapsing
   to empty-list / empty-map / missing-key defaults (the teach-nothing

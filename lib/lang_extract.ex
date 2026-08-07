@@ -272,12 +272,16 @@ defmodule LangExtract do
   # WireFormat reserves "class" and "text" as canonical marker keys on the
   # wire. Encoding class "text" as a dynamic key produces {"text": "..."},
   # which the decoder treats as a marker — every conforming model reply is
-  # then skipped with only a warning log.
+  # then skipped with only a warning log. The "_attributes" suffix is
+  # reserved the same way: class "note_attributes" encodes to a key the
+  # decoder reads as attributes for class "note".
   @reserved_classes ~w(class text)
+  @reserved_suffix "_attributes"
 
   defp normalize_extraction(%Extraction{class: class} = extraction) do
-    with :ok <- reject_reserved_class(class) do
-      {:ok, extraction}
+    case reject_reserved_class(class) do
+      :ok -> {:ok, extraction}
+      {:error, _} = error -> error
     end
   end
 
@@ -304,7 +308,18 @@ defmodule LangExtract do
      )}
   end
 
-  defp reject_reserved_class(_class), do: :ok
+  defp reject_reserved_class(class) do
+    if String.ends_with?(class, @reserved_suffix) do
+      {:error,
+       ArgumentError.exception(
+         "extraction class #{inspect(class)} ends with the reserved suffix " <>
+           "#{inspect(@reserved_suffix)} (WireFormat attribute-carrier keys); " <>
+           "choose another class"
+       )}
+    else
+      :ok
+    end
+  end
 
   # The wire format decodes attributes with string keys (JSON); template
   # examples must produce the same shape regardless of how they were
