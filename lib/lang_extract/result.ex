@@ -2,8 +2,11 @@ defmodule LangExtract.Result do
   @moduledoc """
   A completed extraction run: document-ordered spans plus per-chunk errors.
 
-  The return value of `LangExtract.run/4` and `LangExtract.Runner.run/4` —
-  returned bare, since neither can fail: `errors` is the failure channel.
+  The return value of `LangExtract.run/4` and `LangExtract.Runner.run/4`
+  for all handled per-chunk failures — parse, HTTP, timeouts, and (on the
+  Runner) task crashes. Returned bare: `errors` is the failure channel.
+  Standalone `run/4` still exits the caller on a bug-level linked chunk
+  crash (no `Result`); the Runner converts those to `ChunkError`s.
   A struct rather than a positional tuple so future fields (usage, timing)
   can be added without breaking consumer matches — bind only the keys you
   need:

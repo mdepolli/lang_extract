@@ -4,6 +4,22 @@ defmodule LangExtract.Alignment.AlignerTest do
   alias LangExtract.Alignment.Aligner
   alias LangExtract.Span
 
+  describe "source size guard" do
+    # Public align/3 uses the full source; fallthrough LCS is super-linear
+    # in tokens. Book-length calls must opt in so tooling does not stall
+    # a BEAM scheduler by accident (the chunked pipeline stays small).
+    test "refuses oversize sources unless allow_large: true" do
+      source = String.duplicate("word ", 60_000)
+
+      assert_raise ArgumentError, ~r/allow_large: true/, fn ->
+        Aligner.align(source, ["word"])
+      end
+
+      assert [%Span{status: :exact}] =
+               Aligner.align(source, ["word"], allow_large: true)
+    end
+  end
+
   describe "exact matching" do
     test "aligns a single word" do
       assert [%Span{text: "fox", byte_start: 16, byte_end: 19, status: :exact}] =

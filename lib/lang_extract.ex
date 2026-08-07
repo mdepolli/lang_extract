@@ -45,8 +45,9 @@ defmodule LangExtract do
   `LangExtract.Alignment.Aligner` for tests, tooling, and callers who need
   the engine directly — the same engine the pipeline uses on each chunk.
   It aligns against the source as given: the fuzzy fallthrough phases scale
-  super-linearly in source tokens, so a book-length source can cost seconds
-  per unmatched extraction where the pipeline's ~200-token chunks stay fast.
+  super-linearly in source tokens. Sources larger than 256 KiB raise
+  `ArgumentError` unless `allow_large: true` — prefer the chunked pipeline
+  (`run/4`) for documents.
 
   Returns a list of `%LangExtract.Span{}` structs, one per extraction
   (`class` is always `nil` and `attributes` always empty).
@@ -57,6 +58,7 @@ defmodule LangExtract do
     * `:min_density` - minimum matched-token density for fuzzy (default `1/3`)
     * `:accept_lesser` - accept prefix partial matches (default `true`)
     * `:exact_algorithm` - `:dp` (default) or `:first_occurrence`
+    * `:allow_large` - permit sources over 256 KiB (default `false`)
 
   ## Examples
 
@@ -104,16 +106,14 @@ defmodule LangExtract do
   Runs the full extraction pipeline: prompt → LLM → parse → align.
 
   Returns a `%Result{}` — document-ordered spans plus per-chunk errors.
-  This function cannot fail; `Result.errors` is the failure channel.
-  Every failure stays per-chunk: a chunk that fails to parse or times
-  out lands in `errors` as a `%ChunkError{}` with its byte range, and
-  the surviving chunks' spans are still returned. Chunk tasks run
-  linked, so a bug-level crash inside one propagates to the caller.
-
-  `LangExtract.Runner.run/4` shares this return contract, adding
-  retries, a shared request budget, and crash isolation (its supervised
-  tasks report crashes as `ChunkError`s too) on top. See the
-  failure-semantics table in the "Running in Production" guide.
+  Handled failures (parse, HTTP, task timeout) stay per-chunk in
+  `Result.errors` with the chunk's byte range; surviving chunks' spans
+  are still returned. This path does **not** isolate bug-level crashes:
+  chunk tasks run linked, so a raise inside one exits the caller (no
+  `Result`). Prefer `LangExtract.Runner.run/4` in production for retries,
+  a shared request budget, and crash isolation (supervised tasks report
+  crashes as `ChunkError`s too). See the failure-semantics table in the
+  "Running in Production" guide.
 
   ## Options
 

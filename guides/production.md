@@ -133,22 +133,25 @@ sequenceDiagram
 
 ## Failure semantics by mode
 
-`LangExtract.run/4` and `Runner.run/4` share one return contract: both
-return a bare `%Result{}` and funnel failures — parse errors, HTTP
-errors, task exits — into per-chunk `ChunkError`s. Neither
-can fail; they differ in what happens *before* a failure lands in
-`Result.errors` (the runner retries under a shared budget, the standalone
-function does not) and in crash isolation: standalone chunk tasks are
-linked, so a bug-level crash inside one propagates to the caller, while
-the runner's supervised tasks report a crash as one more `ChunkError`:
+`LangExtract.run/4` and `Runner.run/4` share a bare `%Result{}` for
+handled per-chunk failures (parse, HTTP, timeouts). They differ in what
+happens *before* a failure lands in `Result.errors` (the runner retries
+under a shared budget; standalone does not) and in crash isolation:
+standalone chunk tasks are linked, so a bug-level crash exits the caller
+with no `Result`, while the runner's supervised tasks report a crash as
+one more `ChunkError`:
 
 ```mermaid
 flowchart TD
     Start([Chunk fails]) --> Mode{Entry point?}
 
-    Mode -->|LangExtract.run/4| CE1["ChunkError in Result.errors<br/>survivors kept"]
+    Mode -->|LangExtract.run/4| KindS{Failure kind?}
+    KindS -->|parse / HTTP / timeout| CE1["ChunkError in Result.errors<br/>survivors kept"]
+    KindS -->|bug-level raise| Crash["caller exits — linked task<br/>no Result"]
 
-    Mode -->|LangExtract.stream/4| CE2["error ChunkError event<br/>survivors keep flowing"]
+    Mode -->|LangExtract.stream/4| KindT{Failure kind?}
+    KindT -->|parse / HTTP / timeout| CE2["error ChunkError event<br/>survivors keep flowing"]
+    KindT -->|bug-level raise| Crash
 
     Mode -->|Runner.run / stream / stream_corpus| KindX{Failure kind?}
     KindX -->|429| Pause["global admission pause<br/>retry free — no budget burn"]
@@ -156,6 +159,7 @@ flowchart TD
     Retry -->|yes| Backoff[jittered backoff and retry]
     Backoff --> KindX
     Retry -->|exhausted| CE3["ChunkError — never top-level error"]
+    KindX -->|bug-level raise| CE3
     KindX -->|shutdown, unstarted| Drain["ChunkError reason drained"]
     Pause -->|rate_limit_retries left| KindX
     Pause -->|exhausted| CE3

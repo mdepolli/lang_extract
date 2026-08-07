@@ -39,15 +39,34 @@ defmodule LangExtract.Alignment.Aligner do
 
   @default_fuzzy_threshold 0.75
   @default_min_density 1 / 3
+  # Fuzzy fallthrough is super-linear in source tokens. The chunked
+  # pipeline stays near 1KB; this guard stops accidental whole-book
+  # align/3 calls from multi-second stalls unless the caller opts in.
+  @max_source_bytes_without_opt_in 256 * 1024
 
   @spec align(String.t(), [String.t()], keyword()) :: [Span.t()]
   def align(source, extractions, opts \\ []) do
+    maybe_reject_large_source!(source, opts)
     config = build_config(opts)
     index = index_source(source)
     ext_token_lists = tokenize_extractions(extractions)
     selection = occurrence_selection(config.exact_algorithm, index.texts, ext_token_lists)
 
     place_extractions(extractions, ext_token_lists, selection, index, config)
+  end
+
+  defp maybe_reject_large_source!(source, opts) do
+    allow_large? = Keyword.get(opts, :allow_large, false)
+
+    if not allow_large? and byte_size(source) > @max_source_bytes_without_opt_in do
+      raise ArgumentError,
+            "align/3 refuses sources larger than #{@max_source_bytes_without_opt_in} bytes " <>
+              "(got #{byte_size(source)}); fallthrough phases scale poorly on book-length " <>
+              "text. Prefer the chunked pipeline (run/4), or pass allow_large: true if you " <>
+              "intentionally need whole-document alignment."
+    end
+
+    :ok
   end
 
   defp build_config(opts) do
