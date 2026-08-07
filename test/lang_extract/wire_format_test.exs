@@ -2,6 +2,7 @@ defmodule LangExtract.WireFormatTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Extraction
+  alias LangExtract.Pipeline.Parser
   alias LangExtract.WireFormat
 
   describe "format_extractions/1" do
@@ -320,33 +321,6 @@ defmodule LangExtract.WireFormatTest do
              }
     end
 
-    # Upstream yields one extraction per non-suffix key in a group
-    # (resolver.py extract loop) — a merged entry is a classic dynamic-key
-    # model failure and dropping it loses every extraction in it. Upstream
-    # preserves JSON insertion order via dict; a decoded Elixir map cannot,
-    # so keys expand in sorted order for determinism.
-    test "entry with multiple class keys expands to one entry per key" do
-      input =
-        Jason.encode!(%{
-          "extractions" => [
-            %{
-              "drug" => "aspirin",
-              "dosage" => "100mg",
-              "drug_attributes" => %{"route" => "oral"}
-            }
-          ]
-        })
-
-      assert {:ok, decoded} = WireFormat.normalize(input)
-
-      assert decoded == %{
-               "extractions" => [
-                 %{"class" => "dosage", "text" => "100mg", "attributes" => %{}},
-                 %{"class" => "drug", "text" => "aspirin", "attributes" => %{"route" => "oral"}}
-               ]
-             }
-    end
-
     # Upstream coerces int/float extraction values via str(); other
     # non-string values raise there, but skip-and-log here (Parser's
     # per-entry guard), keeping the chunk alive.
@@ -370,12 +344,30 @@ defmodule LangExtract.WireFormatTest do
 
       assert decoded == %{"extractions" => [%{}]}
     end
-  end
 
-  describe "round-trip" do
+    test "parses a fenced JSON response in dynamic-key format" do
+      raw = ~s(```json\n{"extractions": [{"person": "Ahab", "person_attributes": {}}]}\n```)
+
+      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(raw)
+      assert entry["class"] == "person"
+      assert entry["text"] == "Ahab"
+    end
+
+    test "parses strings containing control characters" do
+      raw = ~s({"extractions": [{"note": "a\\tb", "note_attributes": {}}]})
+
+      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(raw)
+      assert entry["class"] == "note"
+      assert entry["text"] == "a\tb"
+    end
+
+    test "JSON without extractions key passes through for Parser to reject" do
+      assert {:ok, %{"other" => 1}} = WireFormat.normalize(~s({"other": 1}))
+    end
+
+    # Encode/decode agreement: what format_extractions emits, decoding
+    # recovers intact — Parser.parse states the result as structs.
     test "format_extractions |> normalize |> Parser.parse returns same extractions" do
-      alias LangExtract.Pipeline.Parser
-
       extractions = [
         %Extraction{
           class: "medical_condition",
@@ -401,44 +393,31 @@ defmodule LangExtract.WireFormatTest do
     end
 
     # Regression pin for the composed drop: before the multi-key expansion,
-    # normalize passed a merged entry through whole and Parser's
-    # class/text guard skipped it — both halves individually tested, the
-    # seam between them not, and every extraction in the entry vanished
-    # with only a log line.
+    # normalize passed a merged entry through whole and Parser's class/text
+    # guard skipped it — both halves individually tested, the seam between
+    # them not, and every extraction in the entry vanished with only a log
+    # line. Expansion, sorted key order (a decoded map cannot keep JSON
+    # insertion order), and per-key _attributes pairing are all pinned
+    # here through the structs.
     test "a merged multi-class entry yields all its extractions through Parser" do
-      alias LangExtract.Pipeline.Parser
-
-      input = Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "dosage" => "100mg"}]})
+      input =
+        Jason.encode!(%{
+          "extractions" => [
+            %{
+              "drug" => "aspirin",
+              "dosage" => "100mg",
+              "drug_attributes" => %{"route" => "oral"}
+            }
+          ]
+        })
 
       assert {:ok, normalized} = WireFormat.normalize(input)
       assert {:ok, parsed} = Parser.parse(normalized)
 
       assert [
-               %Extraction{class: "dosage", text: "100mg"},
-               %Extraction{class: "drug", text: "aspirin"}
+               %Extraction{class: "dosage", text: "100mg", attributes: %{}},
+               %Extraction{class: "drug", text: "aspirin", attributes: %{"route" => "oral"}}
              ] = parsed
-    end
-  end
-
-  describe "normalize/1 with JSON responses" do
-    test "parses a fenced JSON response in dynamic-key format" do
-      raw = ~s(```json\n{"extractions": [{"person": "Ahab", "person_attributes": {}}]}\n```)
-
-      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(raw)
-      assert entry["class"] == "person"
-      assert entry["text"] == "Ahab"
-    end
-
-    test "parses strings containing control characters" do
-      raw = ~s({"extractions": [{"note": "a\\tb", "note_attributes": {}}]})
-
-      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(raw)
-      assert entry["class"] == "note"
-      assert entry["text"] == "a\tb"
-    end
-
-    test "JSON without extractions key passes through for Parser to reject" do
-      assert {:ok, %{"other" => 1}} = WireFormat.normalize(~s({"other": 1}))
     end
   end
 
