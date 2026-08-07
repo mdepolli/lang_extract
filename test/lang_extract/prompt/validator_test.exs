@@ -187,44 +187,4 @@ defmodule LangExtract.Prompt.ValidatorTest do
       assert :ok = Validator.validate(template)
     end
   end
-
-  describe "validate!/1" do
-    test "returns :ok when all examples align" do
-      template = %Template{
-        description: "Extract.",
-        examples: [
-          %Example{
-            text: "Patient has diabetes.",
-            extractions: [
-              %Extraction{class: "condition", text: "diabetes", attributes: %{}}
-            ]
-          }
-        ]
-      }
-
-      assert :ok = Validator.validate!(template)
-    end
-
-    test "raises ValidationError with issues when alignment fails" do
-      template = %Template{
-        description: "Extract.",
-        examples: [
-          %Example{
-            text: "Patient has diabetes.",
-            extractions: [
-              %Extraction{class: "drug", text: "tylenol", attributes: %{}}
-            ]
-          }
-        ]
-      }
-
-      error =
-        assert_raise Validator.ValidationError, fn ->
-          Validator.validate!(template)
-        end
-
-      assert length(error.issues) == 1
-      assert Exception.message(error) =~ "1 alignment issue(s) found"
-    end
-  end
 end

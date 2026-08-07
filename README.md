@@ -258,9 +258,6 @@ by hand and for re-checking under custom aligner options:
 ```elixir
 # Returns :ok or {:error, [issues]}
 :ok = LangExtract.Prompt.Validator.validate(template)
-
-# Or raise on failure
-:ok = LangExtract.Prompt.Validator.validate!(template)
 ```
 
 Validation uses the production aligner, so a passing template predicts how

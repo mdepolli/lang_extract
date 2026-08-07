@@ -99,6 +99,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parse-flavored name (e.g. `Template.load/1`), designed against that
   caller's real branching needs.
 
+- **BREAKING: `Prompt.Validator.validate!/2` removed** — same rationale
+  as the `template!/2` collapse: the tuple-returning `validate/2` is the
+  real function (the library consumes it; users pre-flighting templates
+  want the issues list as data), and the bang twin's only callers were
+  its own tests. `ValidationError` stays — template construction raises
+  it. Migration: `validate!(t)` → `case validate(t) do :ok -> :ok;
+  {:error, issues} -> raise ValidationError, issues: issues end`, or
+  just build via `LangExtract.template/2`, which validates and raises
+  for you.
+
 - **Docs demote bare `align/3` as a product path** — README no longer has an
   "Alignment Without an LLM" section. The front door matches upstream:
   `run/4` / `stream/4` for documents, `extract/3` for replaying stored model

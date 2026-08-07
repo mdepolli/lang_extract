@@ -56,13 +56,20 @@ defmodule LangExtractTest do
     end
 
     test "misaligned examples raise ValidationError at construction" do
-      assert_raise ValidationError, fn ->
-        LangExtract.template("Extract.",
-          examples: [
-            %{text: "the quick brown fox", extractions: [%{class: "x", text: "purple elephant"}]}
-          ]
-        )
-      end
+      error =
+        assert_raise ValidationError, fn ->
+          LangExtract.template("Extract.",
+            examples: [
+              %{
+                text: "the quick brown fox",
+                extractions: [%{class: "x", text: "purple elephant"}]
+              }
+            ]
+          )
+        end
+
+      assert length(error.issues) == 1
+      assert Exception.message(error) =~ "1 alignment issue(s) found"
     end
 
     test "missing required keys raise ArgumentError naming the owner" do

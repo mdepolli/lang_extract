@@ -44,7 +44,8 @@ defmodule LangExtract.Prompt.Validator do
 
   defmodule ValidationError do
     @moduledoc """
-    Raised by `LangExtract.Prompt.Validator.validate!/1` when alignment issues are found.
+    Raised by `LangExtract.template/2` when a template's examples have
+    alignment issues.
     """
 
     defexception [:issues]
@@ -68,14 +69,6 @@ defmodule LangExtract.Prompt.Validator do
     case issues do
       [] -> :ok
       issues -> {:error, issues}
-    end
-  end
-
-  @spec validate!(Template.t(), keyword()) :: :ok
-  def validate!(%Template{} = template, opts \\ []) do
-    case validate(template, opts) do
-      :ok -> :ok
-      {:error, issues} -> raise ValidationError, issues: issues
     end
   end
 
