@@ -80,6 +80,23 @@ defmodule LangExtract.Runner.LimiterTest do
   end
 
   describe "retry-after pause" do
+    # release then pause is two casts: admit_waiting on release can grant a
+    # waiter before the pause cast is processed — amplifying 429 storms.
+    # release_and_pause is one cast: drop the slot and set the deadline
+    # before any admission runs.
+    test "release_and_pause does not admit a waiter before the pause applies" do
+      limiter = start_supervised!({Limiter, [max_in_flight: 1]})
+
+      :ok = Limiter.acquire(limiter)
+      waiter = blocked_acquire(limiter)
+      await_waiting(limiter, 1)
+
+      Limiter.release_and_pause(limiter, 120)
+      refute_receive {:acquired, ^waiter}, 50
+
+      assert_receive {:acquired, ^waiter}, 500
+    end
+
     test "holds all admission until the deadline" do
       attach_wait_telemetry()
       limiter = start_supervised!({Limiter, [max_in_flight: 10]})

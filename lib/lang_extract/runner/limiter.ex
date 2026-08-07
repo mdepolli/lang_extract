@@ -74,6 +74,18 @@ defmodule LangExtract.Runner.Limiter do
     GenServer.cast(limiter, {:pause, ms})
   end
 
+  @doc """
+  Releases the caller's slot and pauses admission in one cast.
+
+  Used on 429: separate `release` then `pause` casts let `admit_waiting`
+  grant queued work in the gap before the pause is visible. One message
+  applies both, then runs admission under the new deadline.
+  """
+  @spec release_and_pause(GenServer.server(), non_neg_integer()) :: :ok
+  def release_and_pause(limiter, ms) do
+    GenServer.cast(limiter, {:release_and_pause, self(), ms})
+  end
+
   @impl true
   def init(opts) do
     clock = Keyword.get(opts, :clock, fn -> System.monotonic_time(:millisecond) end)
@@ -126,17 +138,32 @@ defmodule LangExtract.Runner.Limiter do
   end
 
   def handle_cast({:pause, ms}, state) do
+    {:noreply, schedule_wake(apply_pause(state, ms))}
+  end
+
+  def handle_cast({:release_and_pause, pid, ms}, state) do
+    state =
+      state
+      |> drop_in_flight(pid)
+      |> apply_pause(ms)
+
+    # admit_waiting sees pause_until first — waiters stay blocked until
+    # the deadline, rather than racing the separate pause cast.
+    {:noreply, admit_waiting(state)}
+  end
+
+  # No `|| 0` floor: monotonic time can be (and on the BEAM, is) negative,
+  # which would make 0 a far-future deadline.
+  defp apply_pause(state, ms) do
     deadline = state.clock.() + min(ms, @max_pause_ms)
 
-    # No `|| 0` floor here: monotonic time can be (and on the BEAM, is)
-    # negative, which would make 0 a far-future deadline.
     pause_until =
       case state.pause_until do
         nil -> deadline
         current -> max(deadline, current)
       end
 
-    {:noreply, schedule_wake(%{state | pause_until: pause_until})}
+    %{state | pause_until: pause_until}
   end
 
   @impl true

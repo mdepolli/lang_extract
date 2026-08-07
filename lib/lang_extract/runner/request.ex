@@ -6,15 +6,16 @@ defmodule LangExtract.Runner.Request do
   Every attempt acquires from the Limiter first and releases after. The
   policy per outcome:
 
-    * `429` — pause the limiter globally until the server's `retry-after`
-      deadline and retry. Rate-limit waits never consume the chunk's retry
-      budget: the server asked us to wait, not to give up. When
-      `retry-after` is absent the pause escalates exponentially from one
-      backoff period; either way the Limiter clamps each pause to its 30s
-      ceiling, so a hostile deadline delays a run, never hangs it. A chunk
-      retries up to `:rate_limit_retries` times after a 429 (default 10);
-      the next 429 past that cap fails the chunk with the rate-limit
-      error — bounded, unlike a budget, only by persistence of the 429s.
+    * `429` — `release_and_pause` in one cast (so waiters cannot slip in
+      between release and pause), then retry. Rate-limit waits never
+      consume the chunk's retry budget: the server asked us to wait, not
+      to give up. When `retry-after` is absent the pause escalates
+      exponentially from one backoff period; either way the Limiter clamps
+      each pause to its 30s ceiling, so a hostile deadline delays a run,
+      never hangs it. A chunk retries up to `:rate_limit_retries` times
+      after a 429 (default 10); the next 429 past that cap fails the chunk
+      with the rate-limit error — bounded, unlike a budget, only by
+      persistence of the 429s.
     * `5xx` / transport error — jittered exponential backoff, consumes one
       unit of `chunk_retries`; budget exhausted returns the last error.
     * any other error (4xx, parse-level) — returned immediately; a bad
@@ -52,26 +53,31 @@ defmodule LangExtract.Runner.Request do
   defp attempt(limiter, client, prompt, s) do
     Limiter.acquire(limiter)
     result = client.provider.infer(prompt, Client.infer_opts(client))
-    Limiter.release(limiter)
-
-    handle(result, limiter, client, prompt, s)
+    finish(result, limiter, client, prompt, s)
   end
 
-  defp handle({:ok, %Response{}} = ok, _limiter, _client, _prompt, _s), do: ok
+  # Slot is still held when finish/5 runs: 429 must pause before any
+  # admission can see a free slot (release_and_pause); everything else
+  # releases first so other work can use the budget during backoff.
+  defp finish({:ok, %Response{}} = ok, limiter, _client, _prompt, _s) do
+    Limiter.release(limiter)
+    ok
+  end
 
-  defp handle(
+  defp finish(
          {:error, {:rate_limited, _}} = error,
-         _limiter,
+         limiter,
          _client,
          _prompt,
          %{rate_limited: n, rate_limit_retries: cap}
        )
        when n >= cap do
+    Limiter.release(limiter)
     error
   end
 
-  defp handle({:error, {:rate_limited, retry_after}}, limiter, client, prompt, s) do
-    Limiter.pause(limiter, retry_after || rate_limit_pause(s))
+  defp finish({:error, {:rate_limited, retry_after}}, limiter, client, prompt, s) do
+    Limiter.release_and_pause(limiter, retry_after || rate_limit_pause(s))
     emit_retry(limiter, s.attempt, :rate_limited)
 
     attempt(limiter, client, prompt, %{
@@ -81,15 +87,20 @@ defmodule LangExtract.Runner.Request do
     })
   end
 
-  defp handle({:error, :server_error} = error, limiter, client, prompt, s) do
+  defp finish({:error, :server_error} = error, limiter, client, prompt, s) do
+    Limiter.release(limiter)
     retry_or_give_up(error, :server_error, limiter, client, prompt, s)
   end
 
-  defp handle({:error, {:request_error, _}} = error, limiter, client, prompt, s) do
+  defp finish({:error, {:request_error, _}} = error, limiter, client, prompt, s) do
+    Limiter.release(limiter)
     retry_or_give_up(error, :transport_error, limiter, client, prompt, s)
   end
 
-  defp handle({:error, _} = error, _limiter, _client, _prompt, _s), do: error
+  defp finish({:error, _} = error, limiter, _client, _prompt, _s) do
+    Limiter.release(limiter)
+    error
+  end
 
   defp retry_or_give_up(error, _reason, _limiter, _client, _prompt, %{budget: b, spent: b}) do
     error
