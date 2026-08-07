@@ -20,6 +20,9 @@ defmodule LangExtract.WireFormat do
   @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
   @fence_pattern ~r/```(?:json|yaml)?\s*(.*?)\s*```/s
   @fence_pattern_greedy ~r/```(?:json|yaml)?\s*(.*)\s*```/s
+  # Cap retained garbage so a max_tokens-sized non-JSON reply cannot pin
+  # multi-megabyte binaries in ChunkError.reason / serialized results.
+  @max_invalid_format_bytes 4_096
 
   @spec format_extractions([Extraction.t()]) :: String.t()
   def format_extractions(extractions) do
@@ -36,7 +39,7 @@ defmodule LangExtract.WireFormat do
   def normalize(raw) when is_binary(raw) do
     case parse_json(raw) do
       {:ok, document} -> {:ok, normalize_extractions(document)}
-      :error -> {:error, {:invalid_format, raw}}
+      :error -> {:error, {:invalid_format, preview_raw(raw)}}
     end
   end
 
@@ -53,12 +56,16 @@ defmodule LangExtract.WireFormat do
   # the later candidate. Residual ambiguity, accepted: richness cannot
   # tell a *non-empty* few-shot echo from a smaller (or legitimately
   # empty) real answer — the echo wins those.
+  #
+  # strings: :copy — same contract as Serializer.load_jsonl: decoded
+  # strings ≥ 64 bytes would otherwise be sub-binaries of the LLM reply
+  # and pin the whole payload for as long as any Span.text lives.
   defp parse_json(raw) do
     raw
     |> json_candidates()
     |> Enum.with_index()
     |> Enum.flat_map(fn {candidate, index} ->
-      case Jason.decode(candidate) do
+      case Jason.decode(candidate, strings: :copy) do
         {:ok, decoded} when is_map(decoded) -> [{decoded, index}]
         _ -> []
       end
@@ -106,6 +113,24 @@ defmodule LangExtract.WireFormat do
     case Regex.run(@fence_pattern_greedy, text) do
       [_, content] -> content
       _ -> text
+    end
+  end
+
+  defp preview_raw(raw) when byte_size(raw) <= @max_invalid_format_bytes, do: raw
+
+  defp preview_raw(raw) do
+    prefix = valid_prefix(binary_part(raw, 0, @max_invalid_format_bytes))
+    prefix <> "…(#{byte_size(raw)} bytes total, truncated)"
+  end
+
+  # The cut can land mid-character; trim trailing bytes one at a time
+  # until the prefix is valid on its own — at most 3 steps for UTF-8
+  # input, since a character is at most 4 bytes.
+  defp valid_prefix(prefix) do
+    if String.valid?(prefix) do
+      prefix
+    else
+      valid_prefix(binary_part(prefix, 0, byte_size(prefix) - 1))
     end
   end
 

@@ -90,7 +90,9 @@ defmodule LangExtract.Runner.Limiter do
        # pid => monitor ref, for explicit release and DOWN auto-release
        in_flight: %{},
        # queued acquires: {from, enqueued_at, first_block_reason}
-       waiting: :queue.new()
+       waiting: :queue.new(),
+       # at most one outstanding :wake timer — reschedule cancels the old
+       wake_ref: nil
      }}
   end
 
@@ -143,7 +145,9 @@ defmodule LangExtract.Runner.Limiter do
   end
 
   def handle_info(:wake, state) do
-    {:noreply, admit_waiting(state)}
+    # Clear the ref so a late cancel is a no-op; admit_waiting re-arms if
+    # the head is still blocked on time.
+    {:noreply, admit_waiting(%{state | wake_ref: nil})}
   end
 
   defp admit_check(state) do
@@ -252,15 +256,34 @@ defmodule LangExtract.Runner.Limiter do
   end
 
   # Waiting acquires need a future wake-up when blocked on time (pause
-  # deadline or token refill) rather than on a release event.
+  # deadline or token refill) rather than on a release event. Keep a single
+  # outstanding timer: under RPM starvation or repeated pause casts the
+  # previous path stacked send_after messages (mailbox churn, not a
+  # correctness bug).
   defp schedule_wake(state) do
+    state = cancel_wake(state)
     delay = if :queue.is_empty(state.waiting), do: nil, else: wake_delay(state)
 
     if delay do
-      Process.send_after(self(), :wake, max(delay, 1))
+      ref = Process.send_after(self(), :wake, max(delay, 1))
+      %{state | wake_ref: ref}
+    else
+      state
+    end
+  end
+
+  defp cancel_wake(%{wake_ref: nil} = state), do: state
+
+  defp cancel_wake(%{wake_ref: ref} = state) do
+    Process.cancel_timer(ref)
+    # Drop a :wake that already fired and is sitting in the mailbox.
+    receive do
+      :wake -> :ok
+    after
+      0 -> :ok
     end
 
-    state
+    %{state | wake_ref: nil}
   end
 
   defp wake_delay(state) do

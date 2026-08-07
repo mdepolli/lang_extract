@@ -225,6 +225,27 @@ defmodule LangExtract.Provider.ClaudeTest do
                )
     end
 
+    # 2 MiB library cap on binary bodies (JSON is already a map by the
+    # time Req returns it). A flood of plain text must fail the chunk
+    # without being passed to the provider parser.
+    test "rejects an oversize binary response body" do
+      oversize = String.duplicate("x", 2 * 1024 * 1024 + 1)
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/plain")
+        |> Plug.Conn.send_resp(200, oversize)
+      end)
+
+      assert {:error, {:api_error, 413, message}} =
+               Claude.infer("prompt",
+                 api_key: "sk-test",
+                 req_options: [plug: {Req.Test, __MODULE__}]
+               )
+
+      assert message =~ "response body exceeds"
+    end
+
     test "returns error on missing api key" do
       System.delete_env("ANTHROPIC_API_KEY")
       assert {:error, :missing_api_key} = Claude.infer("prompt", [])

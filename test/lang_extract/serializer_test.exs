@@ -55,15 +55,27 @@ defmodule LangExtract.SerializerTest do
 
     test "known reason shapes serialize as tagged maps and load matchably" do
       errors = [
-        %ChunkError{byte_start: 0, byte_end: 4, reason: {:task_exit, :timeout}},
-        %ChunkError{byte_start: 4, byte_end: 8, reason: {:invalid_format, "not json"}},
-        %ChunkError{byte_start: 8, byte_end: 12, reason: {:rate_limited, 3000}},
+        %ChunkError{byte_start: 0, byte_end: 1, reason: {:task_exit, :timeout}},
+        %ChunkError{byte_start: 1, byte_end: 2, reason: {:invalid_format, "not json"}},
+        %ChunkError{byte_start: 2, byte_end: 3, reason: {:rate_limited, 3000}},
         %ChunkError{
-          byte_start: 12,
-          byte_end: 16,
+          byte_start: 3,
+          byte_end: 4,
           reason: {:api_error, 500, %{"error" => "boom"}}
         },
-        %ChunkError{byte_start: 16, byte_end: 19, reason: :unauthorized}
+        %ChunkError{byte_start: 4, byte_end: 5, reason: :unauthorized},
+        # Provider.error/0 shapes that previously lacked a round-trip case
+        %ChunkError{byte_start: 5, byte_end: 6, reason: {:bad_request, %{"error" => "nope"}}},
+        %ChunkError{byte_start: 6, byte_end: 7, reason: :missing_api_key},
+        %ChunkError{byte_start: 7, byte_end: 8, reason: :empty_response},
+        %ChunkError{byte_start: 8, byte_end: 9, reason: :server_error},
+        %ChunkError{byte_start: 9, byte_end: 10, reason: :drained},
+        %ChunkError{byte_start: 10, byte_end: 11, reason: :missing_extractions},
+        %ChunkError{
+          byte_start: 11,
+          byte_end: 12,
+          reason: {:request_error, %RuntimeError{message: "conn reset"}}
+        }
       ]
 
       map = Serializer.result_to_map(@source, %Result{spans: [], errors: errors, usage: nil})
@@ -73,10 +85,18 @@ defmodule LangExtract.SerializerTest do
                %{"reason" => %{"tag" => "invalid_format", "detail" => "not json"}},
                %{"reason" => %{"tag" => "rate_limited", "retry_after" => 3000}},
                %{"reason" => %{"tag" => "api_error", "status" => 500, "detail" => detail}},
-               %{"reason" => %{"tag" => "unauthorized"}}
+               %{"reason" => %{"tag" => "unauthorized"}},
+               %{"reason" => %{"tag" => "bad_request", "detail" => bad_detail}},
+               %{"reason" => %{"tag" => "missing_api_key"}},
+               %{"reason" => %{"tag" => "empty_response"}},
+               %{"reason" => %{"tag" => "server_error"}},
+               %{"reason" => %{"tag" => "drained"}},
+               %{"reason" => %{"tag" => "missing_extractions"}},
+               %{"reason" => %{"tag" => "request_error", "detail" => "conn reset"}}
              ] = map["errors"]
 
       assert detail =~ "boom"
+      assert bad_detail =~ "nope"
       assert {:ok, _json} = Jason.encode(map)
 
       # Loaded reasons keep their outer shape, so the same patterns match
@@ -90,7 +110,14 @@ defmodule LangExtract.SerializerTest do
                %ChunkError{reason: {:invalid_format, "not json"}},
                %ChunkError{reason: {:rate_limited, 3000}},
                %ChunkError{reason: {:api_error, 500, _body}},
-               %ChunkError{reason: :unauthorized}
+               %ChunkError{reason: :unauthorized},
+               %ChunkError{reason: {:bad_request, _}},
+               %ChunkError{reason: :missing_api_key},
+               %ChunkError{reason: :empty_response},
+               %ChunkError{reason: :server_error},
+               %ChunkError{reason: :drained},
+               %ChunkError{reason: :missing_extractions},
+               %ChunkError{reason: {:request_error, "conn reset"}}
              ] = loaded.errors
     end
 

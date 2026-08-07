@@ -73,6 +73,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to empty-list / empty-map / missing-key defaults (the teach-nothing
   silent-failure class).
 
+- **Live wire decode no longer pins full LLM replies** — `WireFormat`
+  uses `Jason.decode(..., strings: :copy)` (same contract as
+  `Serializer.load_jsonl`), so `Span.text` does not retain the whole
+  response binary. Oversized non-JSON garbage in
+  `{:invalid_format, detail}` is truncated to a 4KB preview with a length
+  marker instead of keeping the entire body in `ChunkError.reason`.
+
+- **Oversize binary HTTP response bodies are rejected** — after receive,
+  a binary body over 2 MiB fails as `{:api_error, 413, _}` before the
+  provider parser runs. JSON-decoded map bodies are unchanged (already
+  allocated); the cap stops plain-text floods from a bad endpoint or
+  mis-set `base_url`.
+
+- **Limiter keeps a single outstanding `:wake` timer** — reschedule
+  cancels the previous `send_after` ref so RPM starvation and pause
+  storms do not stack mailbox messages.
+
+- **Core chunk constructors no longer type-depend on Advanced `Chunk`** —
+  `ChunkError` / `ChunkResult` gain `from_range/3`–`4`; `from_chunk/2`–`3`
+  accept any map with `:byte_start` / `:byte_end` (including
+  `%Chunker.Chunk{}`) so Core typespecs and HexDocs no longer pull in
+  Advanced machinery.
+
 - **Hardening pass over the low-severity audit findings** — the limiter
   serves queued waiters before fresh acquirers (FIFO admission; a
   newcomer could previously steal a just-accrued token indefinitely
@@ -176,6 +199,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   survives.
 
 ### Changed
+
+- **Serializer known-reason round-trip tests cover the full library
+  shape set** — including `{:bad_request, _}`, the remaining atom reasons
+  (`:missing_api_key`, `:empty_response`, `:server_error`, `:drained`,
+  `:missing_extractions`), and `{:request_error, exception}`.
 
 - **BREAKING: `template!/2` is now `template/2`; the tuple-returning
   variant is gone** — the pair existed for "runtime task definitions

@@ -351,6 +351,47 @@ defmodule LangExtract.WireFormatTest do
                WireFormat.normalize("just plain text")
     end
 
+    # Same contract as Serializer.load_jsonl: decoded strings ≥ 64 bytes
+    # must not pin the whole LLM reply binary via sub-binary sharing.
+    test "decoded extraction text does not pin the full reply binary" do
+      text = String.duplicate("a grounded extraction span text ", 3)
+      padding = String.duplicate("x", 50_000)
+
+      payload =
+        Jason.encode!(%{
+          "padding" => padding,
+          "extractions" => [%{"word" => text, "word_attributes" => %{}}]
+        })
+
+      assert {:ok, %{"extractions" => [entry]}} = WireFormat.normalize(payload)
+      assert entry["text"] == text
+      assert :binary.referenced_byte_size(entry["text"]) < 1024
+    end
+
+    test "invalid_format detail is truncated for oversized garbage replies" do
+      raw = String.duplicate("z", 10_000)
+
+      assert {:error, {:invalid_format, detail}} = WireFormat.normalize(raw)
+      assert byte_size(detail) < 5_000
+      assert detail =~ "truncated"
+      assert detail =~ "10000"
+    end
+
+    # The truncation cut can land mid-character for any multibyte width
+    # (the prefixes below force it for 2-, 3-, and 4-byte characters).
+    # A mid-character cut would break the {:invalid_format, String.t()}
+    # contract and make serialized results non-JSON-encodable.
+    test "truncated invalid_format detail stays valid UTF-8 across char widths" do
+      for {prefix, char} <- [{"a", "é"}, {"", "宇"}, {"ab", "😀"}] do
+        raw = prefix <> String.duplicate(char, 4_096)
+
+        assert {:error, {:invalid_format, detail}} = WireFormat.normalize(raw)
+        assert String.valid?(detail)
+        assert detail =~ "truncated"
+        assert {:ok, _} = Jason.encode(%{"detail" => detail})
+      end
+    end
+
     test "handles combined think tags, fences, and dynamic keys" do
       inner =
         Jason.encode!(%{

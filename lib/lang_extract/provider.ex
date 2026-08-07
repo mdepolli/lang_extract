@@ -104,6 +104,15 @@ defmodule LangExtract.Provider do
     redirect: false
   ]
 
+  # Defense-in-depth after the body is fully received (Req has no portable
+  # streaming size cap). 2 MiB is well above any sane extraction JSON
+  # reply. Binary bodies only: an endpoint answering with a JSON
+  # content-type bypasses this cap — Req decodes the body before we see
+  # it, and the decoded map's sub-binaries can still pin the full reply
+  # via {:api_error, _, body} / {:bad_request, body} reasons. The cap
+  # stops plain-text floods and decode_body: false paths, not that route.
+  @max_response_body_bytes 2 * 1024 * 1024
+
   @doc """
   Merges caller-supplied `:req_options` into the provider's Req options.
 
@@ -181,7 +190,8 @@ defmodule LangExtract.Provider do
   not zero.
 
   Metadata: the caller's `provider` and `model`; `:stop` adds `status` —
-  the HTTP status code, or `:transport_error` when no response arrived.
+  the HTTP status code, `:transport_error` when no response arrived, or
+  `:body_too_large` when the response body exceeded the size cap.
   """
   @spec request(Req.Request.t(), keyword(), map(), (term() ->
                                                       {:ok, String.t()} | {:error, error()})) ::
@@ -189,15 +199,32 @@ defmodule LangExtract.Provider do
   def request(req, request_opts, metadata, parse_response) do
     :telemetry.span([:lang_extract, :request], metadata, fn ->
       raw = Req.post(req, request_opts)
-      usage = usage_measurements(raw)
 
-      {
-        wrap_response(parse_response.(raw), usage),
-        usage,
-        Map.put(metadata, :status, response_status(raw))
-      }
+      case reject_oversize_body(raw) do
+        :ok ->
+          usage = usage_measurements(raw)
+
+          {
+            wrap_response(parse_response.(raw), usage),
+            usage,
+            Map.put(metadata, :status, response_status(raw))
+          }
+
+        {:error, _} = error ->
+          {error, %{}, Map.put(metadata, :status, :body_too_large)}
+      end
     end)
   end
+
+  # Scope and limits of the binary-only check: see @max_response_body_bytes.
+  defp reject_oversize_body({:ok, %Req.Response{body: body}})
+       when is_binary(body) and byte_size(body) > @max_response_body_bytes do
+    {:error,
+     {:api_error, 413,
+      "response body exceeds #{@max_response_body_bytes} bytes (got #{byte_size(body)})"}}
+  end
+
+  defp reject_oversize_body(_raw), do: :ok
 
   # Usage rides the success value as well as the telemetry measurements:
   # the same keys, nil instead of empty when the API reported nothing.
