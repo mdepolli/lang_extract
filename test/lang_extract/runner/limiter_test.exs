@@ -150,9 +150,10 @@ defmodule LangExtract.Runner.LimiterTest do
       assert Process.read_timer(first_ref) == false
       assert first_ref != second_ref
 
-      # Keep the waiter from leaking into other tests.
+      # The waiter is blocked inside Limiter.acquire/1 and can't receive
+      # messages; it dies when start_supervised!'s cleanup stops the
+      # limiter and the call exits. Unlink so that exit can't cascade here.
       Process.unlink(waiter)
-      send(waiter, :die)
     end
   end
 
