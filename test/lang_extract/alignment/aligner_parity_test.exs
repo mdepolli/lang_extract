@@ -26,15 +26,17 @@ defmodule LangExtract.Alignment.AlignerParityTest do
   # Leftover phases are per-extraction here, joint upstream: after the
   # occurrence DP, upstream reruns difflib over the concatenated tokens of
   # ALL sibling extractions, so siblings change block decomposition for the
-  # leftovers. We run each leftover through the standalone phases instead.
-  # Consequences: out-of-order or contested leftovers ground as :exact where
-  # upstream degrades to fuzzy at the same bytes (favorable), and a
-  # paraphrase of an already-claimed repeat grounds its prefix where
-  # upstream returns not_found (documented trade-off).
+  # leftovers. We run each leftover through the standalone phases instead,
+  # and reserve DP token intervals so fallthrough cannot nest inside a
+  # phase-0 placement.
+  # Consequences: out-of-order leftovers still ground as :exact where
+  # upstream is fuzzy (favorable); contested leftovers that only fit inside
+  # a claimed span are :not_found here (upstream fuzzy); a paraphrase of an
+  # already-claimed repeat is :not_found on both sides after the claim
+  # reservation (was a lesser prefix here before claims).
   @known_divergences %{
     {"dp_out_of_order_emission", 0} => %{status: :exact, byte_start: 10, byte_end: 13},
-    {"dp_contested_overlap", 1} => %{status: :exact, byte_start: 4, byte_end: 11},
-    {"dp_paraphrase_among_repeats", 2} => %{status: :lesser, byte_start: 0, byte_end: 8}
+    {"dp_contested_overlap", 1} => %{status: :not_found, byte_start: nil, byte_end: nil}
   }
 
   for fixture <- @fixtures do

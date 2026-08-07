@@ -28,6 +28,10 @@ defmodule LangExtract.Alignment.Aligner do
   extraction standalone, while upstream reruns difflib over the concatenated
   tokens of all sibling extractions — see @known_divergences in
   aligner_parity_test.exs for the observable consequences.
+
+  Fallthrough respects DP claims: a token interval placed in phase 0 is
+  reserved, so exact/lesser/LCS leftovers cannot nest inside it (and each
+  fallthrough placement reserves its interval for later leftovers).
   """
 
   alias LangExtract.Alignment.Tokenizer
@@ -80,29 +84,71 @@ defmodule LangExtract.Alignment.Aligner do
     end)
   end
 
-  defp place_extractions(extractions, ext_token_lists, selection, index, config) do
+  # :first_occurrence keeps legacy independent first-match-wins (overlaps
+  # allowed). :dp reserves phase-0 intervals so fallthrough cannot nest
+  # inside a DP placement, and each fallthrough hit reserves for later
+  # leftovers.
+  defp place_extractions(
+         extractions,
+         ext_token_lists,
+         _selection,
+         index,
+         %{
+           exact_algorithm: :first_occurrence
+         } = config
+       ) do
     extractions
     |> Enum.zip(ext_token_lists)
-    |> Enum.with_index()
-    |> Enum.map(fn {{extraction, ext_texts}, idx} ->
-      case selection do
-        %{^idx => start_idx} ->
-          end_idx = start_idx + length(ext_texts) - 1
-          found_span(extraction, index.words, start_idx, end_idx, :exact)
-
-        _ ->
-          align_one(extraction, ext_texts, index, config)
+    |> Enum.map(fn {extraction, ext_texts} ->
+      case align_one(extraction, ext_texts, index, config, _claimed = []) do
+        {:ok, span, _interval} -> span
+        :not_found -> not_found_span(extraction)
       end
     end)
   end
 
-  defp align_one(extraction, ext_texts, index, config) do
-    with :no_match <- exact_match(extraction, index, ext_texts),
-         :no_match <- lesser_match(extraction, index, ext_texts, config),
-         :no_match <- lcs_match(extraction, index, ext_texts, config) do
-      not_found_span(extraction)
+  defp place_extractions(extractions, ext_token_lists, selection, index, config) do
+    claimed = claimed_from_selection(selection, ext_token_lists)
+
+    {spans, _claimed} =
+      extractions
+      |> Enum.zip(ext_token_lists)
+      |> Enum.with_index()
+      |> Enum.map_reduce(claimed, fn {{extraction, ext_texts}, idx}, claimed ->
+        case selection do
+          %{^idx => start_idx} ->
+            end_idx = start_idx + length(ext_texts) - 1
+            {found_span(extraction, index.words, start_idx, end_idx, :exact), claimed}
+
+          _ ->
+            case align_one(extraction, ext_texts, index, config, claimed) do
+              {:ok, span, interval} -> {span, [interval | claimed]}
+              :not_found -> {not_found_span(extraction), claimed}
+            end
+        end
+      end)
+
+    spans
+  end
+
+  defp claimed_from_selection(selection, ext_token_lists) do
+    Enum.map(selection, fn {idx, start_idx} ->
+      {start_idx, start_idx + length(Enum.at(ext_token_lists, idx))}
+    end)
+  end
+
+  # Half-open token intervals [start, end).
+  defp free?(claimed, {c, d}) do
+    not Enum.any?(claimed, fn {a, b} -> c < b and a < d end)
+  end
+
+  defp align_one(extraction, ext_texts, index, config, claimed) do
+    with :no_match <- exact_match(extraction, index, ext_texts, claimed),
+         :no_match <- lesser_match(extraction, index, ext_texts, config, claimed),
+         :no_match <- lcs_match(extraction, index, ext_texts, config, claimed) do
+      :not_found
     else
-      {:ok, span} -> span
+      {:ok, span, interval} -> {:ok, span, interval}
     end
   end
 
@@ -189,20 +235,27 @@ defmodule LangExtract.Alignment.Aligner do
 
   # --- Phase 1: exact contiguous match ---
 
-  defp exact_match(_extraction, _index, []) do
-    :no_match
-  end
+  defp exact_match(_extraction, _index, [], _claimed), do: :no_match
 
-  defp exact_match(extraction, index, ext_texts) do
+  defp exact_match(extraction, index, ext_texts, claimed) do
     ext_length = length(ext_texts)
     last_start = tuple_size(index.texts) - ext_length
 
-    case Enum.find(0..last_start//1, &subslice_at?(index.texts, ext_texts, &1)) do
+    start_idx =
+      Enum.find(0..last_start//1, fn start ->
+        subslice_at?(index.texts, ext_texts, start) and
+          free?(claimed, {start, start + ext_length})
+      end)
+
+    case start_idx do
       nil ->
         :no_match
 
       start_idx ->
-        {:ok, found_span(extraction, index.words, start_idx, start_idx + ext_length - 1, :exact)}
+        interval = {start_idx, start_idx + ext_length}
+
+        {:ok, found_span(extraction, index.words, start_idx, start_idx + ext_length - 1, :exact),
+         interval}
     end
   end
 
@@ -215,10 +268,12 @@ defmodule LangExtract.Alignment.Aligner do
 
   # --- Phase 2: lesser match (longest contiguous partial run) ---
 
-  defp lesser_match(_extraction, _index, _ext_texts, %{accept_lesser: false}), do: :no_match
-  defp lesser_match(_extraction, _index, [], _config), do: :no_match
+  defp lesser_match(_extraction, _index, _ext_texts, %{accept_lesser: false}, _claimed),
+    do: :no_match
 
-  defp lesser_match(extraction, index, ext_texts, _config) do
+  defp lesser_match(_extraction, _index, [], _config, _claimed), do: :no_match
+
+  defp lesser_match(extraction, index, ext_texts, _config, claimed) do
     ext_tuple = List.to_tuple(ext_texts)
 
     case prefix_block(index.texts, ext_tuple, tuple_size(index.texts), tuple_size(ext_tuple)) do
@@ -226,7 +281,15 @@ defmodule LangExtract.Alignment.Aligner do
         :no_match
 
       {start_idx, block_len} ->
-        {:ok, found_span(extraction, index.words, start_idx, start_idx + block_len - 1, :lesser)}
+        interval = {start_idx, start_idx + block_len}
+
+        if free?(claimed, interval) do
+          {:ok,
+           found_span(extraction, index.words, start_idx, start_idx + block_len - 1, :lesser),
+           interval}
+        else
+          :no_match
+        end
     end
   end
 
@@ -272,9 +335,9 @@ defmodule LangExtract.Alignment.Aligner do
 
   # --- Phase 3: LCS subsequence match over stemmed tokens ---
 
-  defp lcs_match(_extraction, _index, [], _config), do: :no_match
+  defp lcs_match(_extraction, _index, [], _config, _claimed), do: :no_match
 
-  defp lcs_match(extraction, index, ext_texts, config) do
+  defp lcs_match(extraction, index, ext_texts, config, claimed) do
     ext_stemmed = Enum.map(ext_texts, &stem_token/1)
     ext_length = length(ext_stemmed)
     spans = best_lcs_spans(index.stemmed, ext_stemmed)
@@ -287,9 +350,11 @@ defmodule LangExtract.Alignment.Aligner do
       span_len = end_idx - start_idx + 1
       coverage = matches / ext_length
       density = matches / span_len
+      interval = {start_idx, end_idx + 1}
 
-      if coverage >= config.threshold and density >= config.min_density do
-        {:ok, found_span(extraction, index.words, start_idx, end_idx, :fuzzy)}
+      if coverage >= config.threshold and density >= config.min_density and
+           free?(claimed, interval) do
+        {:ok, found_span(extraction, index.words, start_idx, end_idx, :fuzzy), interval}
       end
     end)
   end

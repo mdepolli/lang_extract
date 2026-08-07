@@ -29,6 +29,18 @@ defmodule LangExtract.Alignment.AlignerTest do
              ] = Aligner.align(source, ["quick brown", "lazy dog"])
     end
 
+    # DP places "quick brown fox" non-overlapping; fallthrough used to
+    # re-claim the nested "brown" as a second :exact. Claimed intervals
+    # are reserved so leftovers cannot ground inside a DP span.
+    test "fallthrough does not nest an exact span inside a DP placement" do
+      source = "the quick brown fox jumps"
+
+      assert [
+               %Span{text: "quick brown fox", status: :exact, byte_start: 4, byte_end: 19},
+               %Span{text: "brown", status: :not_found}
+             ] = Aligner.align(source, ["quick brown fox", "brown"])
+    end
+
     test "first occurrence wins for duplicates" do
       source = "hello world hello"
 
