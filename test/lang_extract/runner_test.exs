@@ -42,6 +42,23 @@ defmodule LangExtract.RunnerTest do
       assert client().http_client.options.retry == :transient
     end
 
+    # buffer: 0 would otherwise reach Delivery's "impossible" admit state
+    # and die as a bare CondClauseError deep in the consumer; rpm: 0
+    # divides by zero in the limiter's refill arithmetic.
+    @tag :capture_log
+    test "non-positive numeric options fail startup with a descriptive error" do
+      Process.flag(:trap_exit, true)
+
+      for bad <- [[max_in_flight: 0], [buffer: 0], [rpm: 0], [buffer: -1]] do
+        assert {:error, {%ArgumentError{message: message}, _stacktrace}} =
+                 Runner.start_link([client: client()] ++ bad)
+
+        [{key, value}] = bad
+        assert message =~ "#{inspect(key)} must be a positive integer"
+        assert message =~ "got: #{value}"
+      end
+    end
+
     @tag :capture_log
     test "a client that can't be rebuilt fails startup with a descriptive error" do
       broken = %Client{provider: RebuildFails, options: [], http_client: nil}

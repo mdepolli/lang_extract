@@ -70,14 +70,21 @@ defmodule LangExtract.Runner do
   @impl true
   def init(opts) do
     client = Keyword.fetch!(opts, :client)
-    max_in_flight = Keyword.get(opts, :max_in_flight, 10)
+    max_in_flight = pos_integer!(Keyword.get(opts, :max_in_flight, 10), :max_in_flight)
+    buffer = pos_integer!(Keyword.get(opts, :buffer, max_in_flight), :buffer)
+
+    rpm =
+      case Keyword.get(opts, :rpm, :infinity) do
+        :infinity -> :infinity
+        rpm -> pos_integer!(rpm, :rpm)
+      end
 
     config = %{
       client: disable_req_retry(client),
       chunk_retries: Keyword.get(opts, :chunk_retries, 3),
       retry_backoff_ms: Keyword.get(opts, :retry_backoff_ms, 200),
       rate_limit_retries: Keyword.get(opts, :rate_limit_retries, 10),
-      buffer: Keyword.get(opts, :buffer, max_in_flight),
+      buffer: buffer,
       drain_timeout: Keyword.get(opts, :drain_timeout, 5_000)
     }
 
@@ -85,9 +92,7 @@ defmodule LangExtract.Runner do
       %{id: :config, start: {Agent, :start_link, [fn -> config end]}},
       %{
         id: :limiter,
-        start:
-          {Limiter, :start_link,
-           [[rpm: Keyword.get(opts, :rpm, :infinity), max_in_flight: max_in_flight]]}
+        start: {Limiter, :start_link, [[rpm: rpm, max_in_flight: max_in_flight]]}
       },
       %{id: :task_supervisor, start: {Task.Supervisor, :start_link, [[]]}}
     ]
@@ -203,6 +208,16 @@ defmodule LangExtract.Runner do
   # and hide the real failure. The caller's other req_options (plugs,
   # timeouts) are preserved; the http_client is rebuilt with the merged
   # options.
+  # buffer: 0 would otherwise reach Delivery's "impossible" admit state
+  # and die as a bare CondClauseError deep in the consumer; rpm: 0 divides
+  # by zero in the limiter's refill. Misconfiguration fails at startup
+  # with the option's name attached.
+  defp pos_integer!(value, _key) when is_integer(value) and value > 0, do: value
+
+  defp pos_integer!(value, key) do
+    raise ArgumentError, "#{inspect(key)} must be a positive integer, got: #{inspect(value)}"
+  end
+
   defp disable_req_retry(%Client{} = client) do
     req_options =
       client.options
