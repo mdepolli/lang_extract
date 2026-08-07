@@ -11,10 +11,10 @@ defmodule LangExtract.Runner.Request do
       budget: the server asked us to wait, not to give up. When
       `retry-after` is absent the pause escalates exponentially from one
       backoff period; either way the Limiter clamps each pause to its 30s
-      ceiling, so a hostile deadline delays a run, never hangs it. After
-      `:rate_limit_retries` 429s on one chunk (default 10) the chunk fails
-      with the rate-limit error — bounded, unlike a budget, only by
-      persistence of the 429s.
+      ceiling, so a hostile deadline delays a run, never hangs it. A chunk
+      retries up to `:rate_limit_retries` times after a 429 (default 10);
+      the next 429 past that cap fails the chunk with the rate-limit
+      error — bounded, unlike a budget, only by persistence of the 429s.
     * `5xx` / transport error — jittered exponential backoff, consumes one
       unit of `chunk_retries`; budget exhausted returns the last error.
     * any other error (4xx, parse-level) — returned immediately; a bad
