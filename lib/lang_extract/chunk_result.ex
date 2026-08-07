@@ -48,7 +48,11 @@ defmodule LangExtract.ChunkResult do
   type dependency.
   """
   @spec from_chunk(
-          %{byte_start: non_neg_integer(), byte_end: non_neg_integer()},
+          %{
+            required(:byte_start) => non_neg_integer(),
+            required(:byte_end) => non_neg_integer(),
+            optional(any()) => any()
+          },
           [Span.t()],
           Response.usage() | nil
         ) :: t()

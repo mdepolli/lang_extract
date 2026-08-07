@@ -42,7 +42,14 @@ defmodule LangExtract.ChunkError do
   `%LangExtract.Chunker.Chunk{}`) so Core stays free of an Advanced-tier
   type dependency.
   """
-  @spec from_chunk(%{byte_start: non_neg_integer(), byte_end: non_neg_integer()}, term()) :: t()
+  @spec from_chunk(
+          %{
+            required(:byte_start) => non_neg_integer(),
+            required(:byte_end) => non_neg_integer(),
+            optional(any()) => any()
+          },
+          term()
+        ) :: t()
   def from_chunk(%{byte_start: byte_start, byte_end: byte_end}, reason) do
     from_range(byte_start, byte_end, reason)
   end
