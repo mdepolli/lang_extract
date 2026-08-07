@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Malformed canonical entries are skipped, not rewritten into data** —
+  a model echoing the canonical schema with one field missing
+  (`{"class": "drug"}`) was falling into the dynamic-key clause, which
+  fabricated an extraction out of the schema's own key names
+  (`class: "class"`, `text: "drug"`). Entries carrying a canonical marker
+  key now always pass through untouched, so the Parser's skip-and-log
+  guard is reachable again. This reserves `class` and `text` as dynamic
+  class names — a deliberate divergence from upstream, which would treat
+  them as ordinary classes.
+
 - **Exotic whitespace no longer breaks alignment** — the tokenizer's
   classifier only knew the four ASCII whitespace bytes, so NBSP, formfeed,
   vertical tab, and Unicode spaces (all matched by the token pattern's

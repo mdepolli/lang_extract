@@ -75,7 +75,14 @@ defmodule LangExtract.WireFormat do
     end
   end
 
-  defp normalize_entry(%{"class" => _, "text" => _} = entry), do: entry
+  # Entries carrying canonical marker keys pass through untouched: a
+  # complete pair is already canonical; a lone "class"/"text" is a
+  # malformed echo of the canonical schema for Parser to skip — never a
+  # dynamic-key group whose key names should become data
+  # (class: "class", text: "drug"). This reserves "class" and "text" as
+  # dynamic class names, a deliberate divergence from upstream.
+  defp normalize_entry(entry) when is_map_key(entry, "class") or is_map_key(entry, "text"),
+    do: entry
 
   defp normalize_entry(entry) when is_map(entry) do
     all_keys = Map.keys(entry)

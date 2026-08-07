@@ -165,6 +165,18 @@ defmodule LangExtract.WireFormatTest do
              }
     end
 
+    # A canonical marker key without its partner is a malformed echo of the
+    # canonical schema, not a dynamic-key group. Rewriting it would
+    # fabricate an extraction out of the schema's own key names
+    # (class: "class", text: "drug"); passthrough lets Parser skip and log.
+    test "canonical entry missing one field passes through for Parser to skip" do
+      input = Jason.encode!(%{"extractions" => [%{"class" => "drug"}, %{"text" => "orphan"}]})
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+
+      assert decoded == %{"extractions" => [%{"class" => "drug"}, %{"text" => "orphan"}]}
+    end
+
     test "strips <think> tags before parsing" do
       payload =
         Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "drug_attributes" => %{}}]})
