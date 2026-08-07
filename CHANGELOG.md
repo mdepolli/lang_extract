@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`req_options` header merge covers every Req header shape** — the
+  per-key auth-preserving merge only fired when both provider and user
+  headers were maps; a list/tuple or keyword-list `headers:` (Req's other
+  documented shape) fell through to wholesale `Keyword.merge` and wiped
+  `x-api-key`/`authorization`, so every chunk 401'd with no retry.
+  Headers are now normalized to maps, merged per-key, and attached once
+  *before* the keyword merge so that path never touches them. One-sided
+  list headers normalize to maps; empty user lists keep provider auth;
+  non-header overrides still merge independently.
+
+- **OpenAI omits `temperature` unless the caller sets it** —
+  `max_completion_tokens` alone was not enough for o-series/reasoning
+  models: the payload still defaulted to `"temperature": 0`, which those
+  models reject with a 400 on every chunk. Matches Claude — no default,
+  optional key only when set. Gemini still defaults to `0`.
+
+- **Multi-fence replies no longer keep a silent empty echo** — first
+  JSON-parse-wins plus lazy fence capture preferred an earlier
+  few-shot-echo fence (`{"extractions": []}`) over a later answer fence,
+  returning a successful empty result with no error. Candidates are now
+  scored by `"extractions"` list length (later candidate wins ties);
+  the greedy outer span is still tried so fences nested inside extraction
+  strings keep working.
+
+- **Template construction rejects reserved class names and explicit
+  null/false fields** — classes `"class"` and `"text"` are WireFormat
+  marker keys; encoding them as dynamic keys produced replies the decoder
+  treated as markers, so every conforming run extracted nothing with only
+  a warning log. They now raise at `template/2`. Field lookup no longer
+  uses `Map.get` + `||`: explicit `"extractions": null`, `attributes:
+  false`, or `"text": null` raise named type errors instead of collapsing
+  to empty-list / empty-map / missing-key defaults (the teach-nothing
+  silent-failure class).
+
 - **Hardening pass over the low-severity audit findings** — the limiter
   serves queued waiters before fresh acquirers (FIFO admission; a
   newcomer could previously steal a just-accrued token indefinitely
@@ -19,9 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   term ordering); non-UTF-8 input raises a named `ArgumentError` at the
   tokenizer instead of a bare regex error; the parser's skip warning
   logs entry shape, never model-echoed payload; user `req_options`
-  headers merge per-key instead of wiping provider auth; OpenAI requests
-  send `max_completion_tokens` (reasoning models reject the deprecated
-  key); `{}` responses route to `:missing_extractions` like every other
+  headers merge per-key instead of wiping provider auth (map shape; list
+  shapes closed in a later fix above); OpenAI requests send
+  `max_completion_tokens` (reasoning models reject the deprecated key);
+  `{}` responses route to `:missing_extractions` like every other
   extractions-less object; extraction-shaped maps passed as template
   examples raise instead of building a teach-nothing template; plus
   stale-prose corrections in the Request and Aligner docs.
@@ -44,9 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `` ``` `` (code corpora — which the verbatim-span instruction makes
   expected) truncated the payload at the inner fence and failed the whole
   chunk, and a literal `<think>` in extracted text deleted everything to
-  end-of-reply. `normalize/1` now tries candidates in mutilation order —
-  raw reply, greedy fence extraction (first fence to last), lazy fence,
-  each also over the think-stripped reply — and the first JSON parse wins.
+  end-of-reply. `normalize/1` builds candidates in mutilation order —
+  raw reply, each fenced interior, greedy outer span, each also over the
+  think-stripped reply — and picks among successful map decodes by
+  `"extractions"` list richness (see multi-fence fix above).
 
 - **Multi-class entries and numeric values survive normalization** —
   a dynamic-key entry with several class keys
