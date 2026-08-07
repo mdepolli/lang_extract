@@ -32,15 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `%Chunker.Chunk{}`) so Core typespecs and HexDocs no longer pull in
   Advanced machinery.
 
-### Tests
-
-- **Serializer known-reason round-trips cover the full library shape
-  set** — including `{:bad_request, _}`, the remaining atom reasons
-  (`:missing_api_key`, `:empty_response`, `:server_error`, `:drained`,
-  `:missing_extractions`), and `{:request_error, exception}`.
-
-### Fixed (earlier)
-
 - **Hardening pass over the low-severity audit findings** — the limiter
   serves queued waiters before fresh acquirers (FIFO admission; a
   newcomer could previously steal a just-accrued token indefinitely
@@ -142,6 +133,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   survives.
 
 ### Changed
+
+- **Serializer known-reason round-trip tests cover the full library
+  shape set** — including `{:bad_request, _}`, the remaining atom reasons
+  (`:missing_api_key`, `:empty_response`, `:server_error`, `:drained`,
+  `:missing_extractions`), and `{:request_error, exception}`.
 
 - **BREAKING: `template!/2` is now `template/2`; the tuple-returning
   variant is gone** — the pair existed for "runtime task definitions
