@@ -36,7 +36,9 @@ defmodule LangExtract.Provider.OpenAITest do
       # reasoning models reject the deprecated key with a 400.
       assert body["max_completion_tokens"] == 4096
       refute Map.has_key?(body, "max_tokens")
-      assert body["temperature"] == 0
+      # No temperature default — o-series/reasoning models reject any
+      # non-default temperature with a 400 (same stance as Claude).
+      refute Map.has_key?(body, "temperature")
       assert body["response_format"] == %{"type" => "json_object"}
 
       [system_msg, user_msg] = body["messages"]
@@ -45,16 +47,12 @@ defmodule LangExtract.Provider.OpenAITest do
       assert user_msg == %{"role" => "user", "content" => "Extract entities."}
     end
 
-    test "json_mode false omits response_format and system message" do
+    test "temperature is sent only when explicitly set" do
       assert {:ok, {_req, request_opts}} =
-               OpenAI.build_request("Tell me a story.", api_key: "sk-test", json_mode: false)
+               OpenAI.build_request("prompt", api_key: "sk-test", temperature: 0)
 
-      body = request_opts[:json]
-      refute Map.has_key?(body, "response_format")
-      assert body["messages"] == [%{"role" => "user", "content" => "Tell me a story."}]
-    end
+      assert request_opts[:json]["temperature"] == 0
 
-    test "custom model, max_tokens, and temperature override defaults" do
       assert {:ok, {_req, request_opts}} =
                OpenAI.build_request("prompt",
                  api_key: "sk-test",
@@ -67,6 +65,26 @@ defmodule LangExtract.Provider.OpenAITest do
       assert body["model"] == "gpt-4o"
       assert body["max_completion_tokens"] == 1024
       assert body["temperature"] == 0.7
+    end
+
+    test "reasoning model opts omit temperature and still use max_completion_tokens" do
+      assert {:ok, {_req, request_opts}} =
+               OpenAI.build_request("prompt", api_key: "sk-test", model: "o4-mini")
+
+      body = request_opts[:json]
+      assert body["model"] == "o4-mini"
+      assert body["max_completion_tokens"] == 4096
+      refute Map.has_key?(body, "temperature")
+      refute Map.has_key?(body, "max_tokens")
+    end
+
+    test "json_mode false omits response_format and system message" do
+      assert {:ok, {_req, request_opts}} =
+               OpenAI.build_request("Tell me a story.", api_key: "sk-test", json_mode: false)
+
+      body = request_opts[:json]
+      refute Map.has_key?(body, "response_format")
+      assert body["messages"] == [%{"role" => "user", "content" => "Tell me a story."}]
     end
 
     test "api_key from opts takes precedence over env var" do

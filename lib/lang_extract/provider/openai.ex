@@ -9,10 +9,12 @@ defmodule LangExtract.Provider.OpenAI do
 
   alias LangExtract.Provider
 
+  # No :temperature default — o-series/reasoning models reject any
+  # non-default temperature with a 400, so it's only sent when the caller
+  # sets it (same stance as Claude).
   @defaults [
     model: "gpt-4o-mini",
     max_tokens: 4096,
-    temperature: 0,
     base_url: "https://api.openai.com"
   ]
 
@@ -66,10 +68,10 @@ defmodule LangExtract.Provider.OpenAI do
         %{
           "model" => model,
           "max_completion_tokens" => max_tokens,
-          "temperature" => temperature,
           "messages" => messages
         }
-        |> maybe_add_response_format(json_mode)
+        |> maybe_put_temperature(temperature)
+        |> maybe_put_response_format(json_mode)
 
       {:ok, {req, [url: "/v1/chat/completions", json: payload]}}
     end
@@ -91,11 +93,17 @@ defmodule LangExtract.Provider.OpenAI do
     [%{"role" => "user", "content" => prompt}]
   end
 
-  defp maybe_add_response_format(body, true) do
-    Map.put(body, "response_format", %{"type" => "json_object"})
+  defp maybe_put_temperature(payload, nil), do: payload
+
+  defp maybe_put_temperature(payload, temperature) do
+    Map.put(payload, "temperature", temperature)
   end
 
-  defp maybe_add_response_format(body, false), do: body
+  defp maybe_put_response_format(payload, true) do
+    Map.put(payload, "response_format", %{"type" => "json_object"})
+  end
+
+  defp maybe_put_response_format(payload, false), do: payload
 
   defp extract_text(%{"choices" => [%{"message" => %{"content" => content}} | _]})
        when is_binary(content) do

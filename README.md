@@ -325,7 +325,7 @@ All providers accept these common options:
 | `:api_key`     | From env var     | API key (falls back to provider-specific env var)                        |
 | `:model`       | Provider default | Model ID                                                                 |
 | `:max_tokens`  | `4096`           | Maximum response tokens                                                  |
-| `:temperature` | `0` (OpenAI/Gemini); unset (Claude) | Sampling temperature. The Claude provider omits it unless set — `claude-sonnet-5` rejects non-default values |
+| `:temperature` | unset (OpenAI/Claude); `0` (Gemini) | Sampling temperature. OpenAI and Claude omit it unless set — o-series and `claude-sonnet-5` reject non-default values |
 | `:base_url`    | Provider default | API base URL                                                             |
 | `:req_options` | `[]`             | Extra [Req](https://hex.pm/packages/req) options merged into the request |
 
