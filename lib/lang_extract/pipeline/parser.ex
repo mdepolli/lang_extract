@@ -37,7 +37,13 @@ defmodule LangExtract.Pipeline.Parser do
   end
 
   defp parse_entry(entry) do
-    Logger.warning("Skipping invalid extraction entry: #{inspect(entry)}")
+    Logger.warning("Skipping invalid extraction entry: #{describe_entry(entry)}")
     []
   end
+
+  # Entries carry model-echoed source text (clinical corpora: PHI); only
+  # the entry's shape reaches the log — the same no-payloads rule the
+  # telemetry events follow. Keys are template vocabulary, not content.
+  defp describe_entry(entry) when is_map(entry), do: "map with keys: #{inspect(Map.keys(entry))}"
+  defp describe_entry(_entry), do: "a non-map term"
 end

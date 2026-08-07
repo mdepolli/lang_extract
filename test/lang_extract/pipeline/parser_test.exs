@@ -67,6 +67,25 @@ defmodule LangExtract.Pipeline.ParserTest do
       assert {:ok, [%Extraction{class: "valid", text: "kept"}]} = Parser.parse(input)
     end
 
+    # Skipped entries carry model-echoed source text (clinical corpora:
+    # PHI). The no-payloads rule the telemetry events follow extends to
+    # the app log: shape only, never values.
+    test "skip warnings log entry shape, never payload values" do
+      import ExUnit.CaptureLog
+
+      input = %{"extractions" => [%{"class" => "condition", "text" => 42}, "PATIENT-DATA"]}
+
+      log =
+        capture_log(fn ->
+          assert {:ok, []} = Parser.parse(input)
+        end)
+
+      assert log =~ "Skipping invalid extraction entry"
+      assert log =~ ~s(keys: ["class", "text"])
+      refute log =~ "PATIENT-DATA"
+      refute log =~ "condition"
+    end
+
     test "skips entries with empty string class or text" do
       input = %{
         "extractions" => [
