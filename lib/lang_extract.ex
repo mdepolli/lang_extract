@@ -269,10 +269,21 @@ defmodule LangExtract do
     {:error, ArgumentError.exception("example must be a map, got: #{inspect(other)}")}
   end
 
-  defp normalize_extraction(%Extraction{} = extraction), do: {:ok, extraction}
+  # WireFormat reserves "class" and "text" as canonical marker keys on the
+  # wire. Encoding class "text" as a dynamic key produces {"text": "..."},
+  # which the decoder treats as a marker — every conforming model reply is
+  # then skipped with only a warning log.
+  @reserved_classes ~w(class text)
+
+  defp normalize_extraction(%Extraction{class: class} = extraction) do
+    with :ok <- reject_reserved_class(class) do
+      {:ok, extraction}
+    end
+  end
 
   defp normalize_extraction(%{} = map) do
     with {:ok, class} <- fetch_string(map, :class, "extraction"),
+         :ok <- reject_reserved_class(class),
          {:ok, text} <- fetch_string(map, :text, "extraction"),
          {:ok, attributes} <-
            expect_map(get_field(map, :attributes, %{}), :attributes, "extraction") do
@@ -284,6 +295,16 @@ defmodule LangExtract do
   defp normalize_extraction(other) do
     {:error, ArgumentError.exception("extraction must be a map, got: #{inspect(other)}")}
   end
+
+  defp reject_reserved_class(class) when class in @reserved_classes do
+    {:error,
+     ArgumentError.exception(
+       "extraction class #{inspect(class)} is a reserved class name " <>
+         "(WireFormat marker keys); choose another class"
+     )}
+  end
+
+  defp reject_reserved_class(_class), do: :ok
 
   # The wire format decodes attributes with string keys (JSON); template
   # examples must produce the same shape regardless of how they were
@@ -297,17 +318,17 @@ defmodule LangExtract do
   end
 
   defp fetch_string(map, key, owner) do
-    case get_field(map, key, nil) do
-      nil ->
+    case fetch_field(map, key) do
+      :error ->
         {:error,
          ArgumentError.exception(
            "#{owner} is missing required key #{inspect(key)}: #{inspect(map)}"
          )}
 
-      value when is_binary(value) ->
+      {:ok, value} when is_binary(value) ->
         {:ok, value}
 
-      value ->
+      {:ok, value} ->
         type_error(owner, key, "a string", value)
     end
   end
@@ -325,9 +346,24 @@ defmodule LangExtract do
      )}
   end
 
+  # Present vs absent — never ||. Explicit nil/false must reach type
+  # checks (teach-nothing silent defaults) rather than collapsing to the
+  # field default the way Map.get + || does.
   defp get_field(map, key, default) do
-    Map.get(map, key) || Map.get(map, Atom.to_string(key)) || default
+    case fetch_field(map, key) do
+      {:ok, value} -> value
+      :error -> default
+    end
   end
+
+  defp fetch_field(map, key) when is_atom(key) do
+    case Map.fetch(map, key) do
+      {:ok, _} = ok -> ok
+      :error -> Map.fetch(map, Atom.to_string(key))
+    end
+  end
+
+  defp fetch_field(map, key), do: Map.fetch(map, key)
 
   defp validate_template(template) do
     case Validator.validate(template) do

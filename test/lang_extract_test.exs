@@ -151,5 +151,58 @@ defmodule LangExtractTest do
         LangExtract.template("Extract.", examples: [%{text: "hello", extractions: [42]}])
       end
     end
+
+    # WireFormat reserves "class" and "text" as canonical marker keys — a
+    # dynamic-key encode of class "text" echoes as {"text": "..."} and the
+    # decoder treats it as a marker, so every conforming reply is skipped.
+    test "reserved extraction class names class and text raise ArgumentError" do
+      for class <- ["class", "text"] do
+        assert_raise ArgumentError, ~r/reserved class name/, fn ->
+          LangExtract.template("Extract.",
+            examples: [%{text: "hello", extractions: [%{class: class, text: "hello"}]}]
+          )
+        end
+      end
+
+      assert_raise ArgumentError, ~r/reserved class name/, fn ->
+        LangExtract.template("Extract.",
+          examples: [
+            %{
+              text: "hello",
+              extractions: [%Extraction{class: "text", text: "hello"}]
+            }
+          ]
+        )
+      end
+    end
+
+    # Explicit null/false must not collapse to the field default via || —
+    # that is the silent teach-nothing path the extractions: null top-level
+    # case already rejects.
+    test "explicit null extractions raises rather than becoming an empty list" do
+      assert_raise ArgumentError, ~r/example key :extractions must be a list, got: nil/, fn ->
+        LangExtract.template("Extract.",
+          examples: [%{"text" => "hello", "extractions" => nil}]
+        )
+      end
+    end
+
+    test "explicit false attributes raises rather than becoming an empty map" do
+      assert_raise ArgumentError, ~r/extraction key :attributes must be a map, got: false/, fn ->
+        LangExtract.template("Extract.",
+          examples: [
+            %{text: "hello world", extractions: [%{class: "w", text: "hello", attributes: false}]}
+          ]
+        )
+      end
+    end
+
+    test "explicit null extraction text raises a type error not a missing-key error" do
+      assert_raise ArgumentError, ~r/extraction key :text must be a string, got: nil/, fn ->
+        LangExtract.template("Extract.",
+          examples: [%{text: "hello", extractions: [%{"class" => "w", "text" => nil}]}]
+        )
+      end
+    end
   end
 end
