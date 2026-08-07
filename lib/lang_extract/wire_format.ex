@@ -54,7 +54,7 @@ defmodule LangExtract.WireFormat do
   defp check_document(_decoded), do: :error
 
   defp normalize_extractions(%{"extractions" => entries} = document) when is_list(entries) do
-    %{document | "extractions" => Enum.map(entries, &normalize_entry/1)}
+    %{document | "extractions" => Enum.flat_map(entries, &normalize_entry/1)}
   end
 
   defp normalize_extractions(document), do: document
@@ -82,8 +82,12 @@ defmodule LangExtract.WireFormat do
   # (class: "class", text: "drug"). This reserves "class" and "text" as
   # dynamic class names, a deliberate divergence from upstream.
   defp normalize_entry(entry) when is_map_key(entry, "class") or is_map_key(entry, "text"),
-    do: entry
+    do: [entry]
 
+  # One canonical entry per class key, like upstream's extract loop — a
+  # merged multi-key group is a classic dynamic-key model failure whose
+  # extractions all survive there. Upstream keeps JSON insertion order via
+  # dict; a decoded map cannot, so keys expand sorted for determinism.
   defp normalize_entry(entry) when is_map(entry) do
     all_keys = Map.keys(entry)
 
@@ -97,24 +101,32 @@ defmodule LangExtract.WireFormat do
         MapSet.member?(class_set, String.replace_suffix(ak, @attribute_suffix, ""))
       end)
 
-    effective_class_keys = class_keys ++ unmatched_attr_keys
-
-    case effective_class_keys do
-      [class_key] ->
-        attr_key = class_key <> @attribute_suffix
-
-        attributes =
-          case entry do
-            %{^attr_key => attrs} when is_map(attrs) -> attrs
-            _ -> %{}
-          end
-
-        %{"class" => class_key, "text" => Map.get(entry, class_key), "attributes" => attributes}
-
-      _ ->
-        entry
+    case Enum.sort(class_keys ++ unmatched_attr_keys) do
+      [] -> [entry]
+      effective_class_keys -> Enum.map(effective_class_keys, &canonical_entry(entry, &1))
     end
   end
 
-  defp normalize_entry(entry), do: entry
+  defp normalize_entry(entry), do: [entry]
+
+  defp canonical_entry(entry, class_key) do
+    attr_key = class_key <> @attribute_suffix
+
+    attributes =
+      case entry do
+        %{^attr_key => attrs} when is_map(attrs) -> attrs
+        _ -> %{}
+      end
+
+    %{
+      "class" => class_key,
+      "text" => coerce_text(Map.get(entry, class_key)),
+      "attributes" => attributes
+    }
+  end
+
+  # Upstream coerces int/float extraction values via str(); anything else
+  # raises there but stays as-is here for Parser's per-entry skip-and-log.
+  defp coerce_text(value) when is_integer(value) or is_float(value), do: to_string(value)
+  defp coerce_text(value), do: value
 end

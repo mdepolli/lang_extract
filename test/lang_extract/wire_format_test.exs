@@ -292,14 +292,45 @@ defmodule LangExtract.WireFormatTest do
              }
     end
 
-    test "entry with multiple non-attribute keys is passed through" do
-      input = Jason.encode!(%{"extractions" => [%{"drug" => "aspirin", "dosage" => "100mg"}]})
+    # Upstream yields one extraction per non-suffix key in a group
+    # (resolver.py extract loop) — a merged entry is a classic dynamic-key
+    # model failure and dropping it loses every extraction in it. Upstream
+    # preserves JSON insertion order via dict; a decoded Elixir map cannot,
+    # so keys expand in sorted order for determinism.
+    test "entry with multiple class keys expands to one entry per key" do
+      input =
+        Jason.encode!(%{
+          "extractions" => [
+            %{
+              "drug" => "aspirin",
+              "dosage" => "100mg",
+              "drug_attributes" => %{"route" => "oral"}
+            }
+          ]
+        })
 
       assert {:ok, decoded} = WireFormat.normalize(input)
 
       assert decoded == %{
                "extractions" => [
-                 %{"drug" => "aspirin", "dosage" => "100mg"}
+                 %{"class" => "dosage", "text" => "100mg", "attributes" => %{}},
+                 %{"class" => "drug", "text" => "aspirin", "attributes" => %{"route" => "oral"}}
+               ]
+             }
+    end
+
+    # Upstream coerces int/float extraction values via str(); other
+    # non-string values raise there, but skip-and-log here (Parser's
+    # per-entry guard), keeping the chunk alive.
+    test "numeric extraction values coerce to strings" do
+      input = Jason.encode!(%{"extractions" => [%{"dosage" => 100}, %{"ratio" => 2.5}]})
+
+      assert {:ok, decoded} = WireFormat.normalize(input)
+
+      assert decoded == %{
+               "extractions" => [
+                 %{"class" => "dosage", "text" => "100", "attributes" => %{}},
+                 %{"class" => "ratio", "text" => "2.5", "attributes" => %{}}
                ]
              }
     end

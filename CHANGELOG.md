@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Multi-class entries and numeric values survive normalization** —
+  a dynamic-key entry with several class keys
+  (`{"drug": "aspirin", "dosage": "100mg"}`) was passed through whole and
+  dropped by the Parser, losing every extraction in it; a numeric value
+  (`{"dosage": 100}`) was likewise dropped. Upstream yields one extraction
+  per class key and `str()`-coerces int/float values, so identical LLM
+  output silently produced fewer spans here than in Python — skewing
+  cross-library comparison. The wire format now expands each class key to
+  its own canonical entry (keys sorted, since a decoded map cannot keep
+  JSON insertion order) and coerces int/float text. Remaining softness vs
+  upstream: other non-string values skip that entry with a log where
+  upstream fails the whole chunk.
+
 - **Malformed canonical entries are skipped, not rewritten into data** —
   a model echoing the canonical schema with one field missing
   (`{"class": "drug"}`) was falling into the dynamic-key clause, which
