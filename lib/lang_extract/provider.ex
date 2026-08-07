@@ -127,13 +127,13 @@ defmodule LangExtract.Provider do
     # header — every chunk would 401, and 4xx is never retried. Req accepts
     # both maps and list shapes; normalize before merging so list-shaped
     # user headers take the same path.
-    case {normalize_headers(Keyword.get(req_opts, :headers)),
-          normalize_headers(Keyword.get(user_opts, :headers))} do
-      {%{} = provider_headers, %{} = user_headers} ->
-        Keyword.put(merged, :headers, Map.merge(provider_headers, user_headers))
+    provider_headers = normalize_headers(Keyword.get(req_opts, :headers))
+    user_headers = normalize_headers(Keyword.get(user_opts, :headers))
 
-      _ ->
-        merged
+    if is_map(provider_headers) and is_map(user_headers) do
+      Keyword.put(merged, :headers, Map.merge(provider_headers, user_headers))
+    else
+      merged
     end
   end
 
