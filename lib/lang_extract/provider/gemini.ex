@@ -77,16 +77,22 @@ defmodule LangExtract.Provider.Gemini do
           {:ok, String.t()} | {:error, Provider.error()}
   def parse_response(response), do: Provider.map_response(response, &extract_text/1)
 
-  # Gemini splits long completions across parts; every text part is
-  # joined, like the official SDKs do. Non-text parts (function calls,
-  # thoughts) are skipped.
+  # Gemini splits long completions across parts; every non-thought text
+  # part is joined, like the official SDKs do. Function-call parts have
+  # no "text"; thought summaries carry "text" with "thought" => true and
+  # must be skipped or they prepend prose onto the JSON answer.
   defp extract_text(%{"candidates" => [%{"content" => %{"parts" => parts}} | _]})
        when is_list(parts) do
-    case for %{"text" => text} <- parts, is_binary(text), do: text do
+    case Enum.flat_map(parts, &answer_text/1) do
       [] -> {:error, :empty_response}
       texts -> {:ok, Enum.join(texts)}
     end
   end
 
   defp extract_text(_), do: {:error, :empty_response}
+
+  # flat_map: empty list drops thoughts and non-text parts.
+  defp answer_text(%{"text" => _text, "thought" => true}), do: []
+  defp answer_text(%{"text" => text}) when is_binary(text), do: [text]
+  defp answer_text(_part), do: []
 end

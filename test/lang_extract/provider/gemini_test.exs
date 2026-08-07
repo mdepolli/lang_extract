@@ -159,6 +159,30 @@ defmodule LangExtract.Provider.GeminiTest do
       assert {:ok, "payload"} = Gemini.parse_response({:ok, response})
     end
 
+    # Thought summaries also carry "text"; joining them prepends prose to
+    # the JSON and fails the chunk as invalid_format. Gemini only returns
+    # them when includeThoughts is requested — still skip by flag.
+    test "thought parts are skipped when joining text" do
+      response = %Req.Response{
+        status: 200,
+        body: %{
+          "candidates" => [
+            %{
+              "content" => %{
+                "parts" => [
+                  %{"text" => "thinking about it...", "thought" => true},
+                  %{"text" => ~s({"extractions": []})}
+                ]
+              },
+              "finishReason" => "STOP"
+            }
+          ]
+        }
+      }
+
+      assert {:ok, ~s({"extractions": []})} = Gemini.parse_response({:ok, response})
+    end
+
     test "returns empty_response when candidates is empty" do
       response = %Req.Response{status: 200, body: %{"candidates" => []}}
       assert {:error, :empty_response} = Gemini.parse_response({:ok, response})
