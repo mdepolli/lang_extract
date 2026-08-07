@@ -126,6 +126,22 @@ defmodule LangExtractTest do
       end
     end
 
+    # The classic examples/extractions mix-up: :extractions defaults to
+    # [], so an extraction passed as an example would otherwise build a
+    # validated template whose few-shot example teaches the model to
+    # extract nothing — with no error at construction or run time.
+    test "extraction-shaped maps as examples raise ArgumentError" do
+      for example <- [
+            %{class: "condition", text: "diabetes"},
+            %{"class" => "condition", "text" => "diabetes"},
+            %Extraction{class: "condition", text: "diabetes"}
+          ] do
+        assert_raise ArgumentError, ~r/extraction-shaped/, fn ->
+          LangExtract.template("Extract.", examples: [example])
+        end
+      end
+    end
+
     test "non-map examples and extractions raise ArgumentError" do
       assert_raise ArgumentError, ~r/example must be a map/, fn ->
         LangExtract.template("Extract.", examples: ["nope"])

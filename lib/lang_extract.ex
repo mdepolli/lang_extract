@@ -244,6 +244,19 @@ defmodule LangExtract do
 
   defp normalize_example(%Template.Example{} = example), do: {:ok, example}
 
+  # The classic examples/extractions mix-up: an extraction (or
+  # %Extraction{}) passed at example level has :text, and :extractions
+  # defaults to [] — it would build a validated template whose few-shot
+  # example teaches the model to extract nothing. A legitimate example
+  # never carries :class.
+  defp normalize_example(%{} = map) when is_map_key(map, :class) or is_map_key(map, "class") do
+    {:error,
+     ArgumentError.exception(
+       "extraction-shaped map given as an example (carries a class key) — wrap it in " <>
+         "an example: %{text: source_text, extractions: [extraction]}"
+     )}
+  end
+
   defp normalize_example(%{} = map) do
     with {:ok, text} <- fetch_string(map, :text, "example"),
          {:ok, list} <- expect_list(get_field(map, :extractions, []), :extractions, "example"),
