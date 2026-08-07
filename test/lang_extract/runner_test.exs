@@ -31,6 +31,18 @@ defmodule LangExtract.RunnerTest do
       assert resources.config.buffer == 7
     end
 
+    test "resources/1 raises a named error when a child is not a live pid" do
+      # which_children can return :restarting / :undefined during one_for_all
+      # restart; Agent.get on those atoms is an opaque crash.
+      assert_raise ArgumentError, ~r/runner child :config is not ready/, fn ->
+        Runner.resources_from_children(%{
+          config: :restarting,
+          limiter: self(),
+          task_supervisor: self()
+        })
+      end
+    end
+
     test "disables Req retry for the runner's client, preserving other req_options" do
       runner = start_supervised!({Runner, [client: client()]})
 

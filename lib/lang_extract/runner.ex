@@ -201,11 +201,39 @@ defmodule LangExtract.Runner do
     children =
       Map.new(Supervisor.which_children(runner), fn {id, pid, _type, _mods} -> {id, pid} end)
 
+    resources_from_children(children)
+  end
+
+  # Test seam: which_children can return :restarting / :undefined while the
+  # one_for_all cell restarts — reject those before Agent.get.
+  @doc false
+  @spec resources_from_children(%{
+          config: term(),
+          limiter: term(),
+          task_supervisor: term()
+        }) :: %{config: map(), limiter: pid(), task_supervisor: pid()}
+  def resources_from_children(children) do
+    config = live_pid!(children, :config)
+    limiter = live_pid!(children, :limiter)
+    task_supervisor = live_pid!(children, :task_supervisor)
+
     %{
-      config: Agent.get(children.config, & &1),
-      limiter: children.limiter,
-      task_supervisor: children.task_supervisor
+      config: Agent.get(config, & &1),
+      limiter: limiter,
+      task_supervisor: task_supervisor
     }
+  end
+
+  defp live_pid!(children, id) do
+    case Map.fetch!(children, id) do
+      pid when is_pid(pid) ->
+        pid
+
+      other ->
+        raise ArgumentError,
+              "runner child #{inspect(id)} is not ready (got #{inspect(other)}); " <>
+                "the runner cell may be restarting — retry the call"
+    end
   end
 
   # The runner owns retries, so Req's transient retry is disabled for
