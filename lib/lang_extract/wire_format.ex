@@ -17,6 +17,9 @@ defmodule LangExtract.WireFormat do
   alias LangExtract.Extraction
 
   @attribute_suffix "_attributes"
+  # Cap retained garbage so a max_tokens-sized non-JSON reply cannot pin
+  # multi-megabyte binaries in ChunkError.reason / serialized results.
+  @max_invalid_format_bytes 4_096
 
   @spec format_extractions([Extraction.t()]) :: String.t()
   def format_extractions(extractions) do
@@ -35,7 +38,7 @@ defmodule LangExtract.WireFormat do
          {:ok, document} <- check_document(decoded) do
       {:ok, normalize_extractions(document)}
     else
-      :error -> {:error, {:invalid_format, raw}}
+      :error -> {:error, {:invalid_format, preview_raw(raw)}}
     end
   end
 
@@ -47,6 +50,10 @@ defmodule LangExtract.WireFormat do
   # inner fence inside a string cannot close the payload early; lazy as
   # fallback), then the same over the think-stripped reply. First JSON
   # parse wins.
+  #
+  # strings: :copy — same contract as Serializer.load_jsonl: decoded
+  # strings ≥ 64 bytes would otherwise be sub-binaries of the LLM reply
+  # and pin the whole payload for as long as any Span.text lives.
   defp parse_json(raw) do
     stripped = strip_think_tags(raw)
 
@@ -60,11 +67,24 @@ defmodule LangExtract.WireFormat do
     ]
     |> Enum.uniq()
     |> Enum.find_value(:error, fn candidate ->
-      case Jason.decode(candidate) do
+      case Jason.decode(candidate, strings: :copy) do
         {:ok, decoded} -> {:ok, decoded}
         {:error, _} -> nil
       end
     end)
+  end
+
+  defp preview_raw(raw) when byte_size(raw) <= @max_invalid_format_bytes, do: raw
+
+  defp preview_raw(raw) do
+    prefix = binary_part(raw, 0, @max_invalid_format_bytes)
+
+    prefix =
+      if String.valid?(prefix),
+        do: prefix,
+        else: binary_part(raw, 0, @max_invalid_format_bytes - 3)
+
+    prefix <> "…(#{byte_size(raw)} bytes total, truncated)"
   end
 
   # Any JSON object is a valid document — one without an "extractions"
