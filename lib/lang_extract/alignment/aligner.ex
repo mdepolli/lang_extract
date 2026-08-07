@@ -134,20 +134,24 @@ defmodule LangExtract.Alignment.Aligner do
       |> Enum.zip(ext_token_lists)
       |> Enum.with_index()
       |> Enum.map_reduce(claimed, fn {{extraction, ext_texts}, idx}, claimed ->
-        case selection do
-          %{^idx => start_idx} ->
-            end_idx = start_idx + length(ext_texts) - 1
-            {found_span(extraction, index.words, start_idx, end_idx, :exact), claimed}
-
-          _ ->
-            case align_one(extraction, ext_texts, index, config, claimed) do
-              {:ok, span, interval} -> {span, [interval | claimed]}
-              :not_found -> {not_found_span(extraction), claimed}
-            end
-        end
+        place_one(extraction, ext_texts, idx, selection, index, config, claimed)
       end)
 
     spans
+  end
+
+  defp place_one(extraction, ext_texts, idx, selection, index, _config, claimed)
+       when is_map_key(selection, idx) do
+    start_idx = Map.fetch!(selection, idx)
+    end_idx = start_idx + length(ext_texts) - 1
+    {found_span(extraction, index.words, start_idx, end_idx, :exact), claimed}
+  end
+
+  defp place_one(extraction, ext_texts, _idx, _selection, index, config, claimed) do
+    case align_one(extraction, ext_texts, index, config, claimed) do
+      {:ok, span, interval} -> {span, [interval | claimed]}
+      :not_found -> {not_found_span(extraction), claimed}
+    end
   end
 
   defp claimed_from_selection(selection, ext_token_lists) do
