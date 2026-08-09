@@ -78,6 +78,30 @@ defmodule LangExtract.Provider.OpenAITest do
       refute Map.has_key?(body, "max_tokens")
     end
 
+    # Older OpenAI-compatible servers only know the deprecated key and
+    # silently drop max_completion_tokens (their own default then
+    # truncates replies mid-JSON); openai.com reasoning models 400 on the
+    # deprecated key. No heuristic can pick per server, so the wire key
+    # is an explicit option.
+    test "token_limit_key: :max_tokens switches the wire key for compat endpoints" do
+      assert {:ok, {_req, request_opts}} =
+               OpenAI.build_request("prompt",
+                 api_key: "sk-test",
+                 max_tokens: 1024,
+                 token_limit_key: :max_tokens
+               )
+
+      body = request_opts[:json]
+      assert body["max_tokens"] == 1024
+      refute Map.has_key?(body, "max_completion_tokens")
+    end
+
+    test "unknown token_limit_key raises a named ArgumentError" do
+      assert_raise ArgumentError, ~r/:token_limit_key must be/, fn ->
+        OpenAI.build_request("prompt", api_key: "sk-test", token_limit_key: :tokens)
+      end
+    end
+
     test "json_mode false omits response_format and system message" do
       assert {:ok, {_req, request_opts}} =
                OpenAI.build_request("Tell me a story.", api_key: "sk-test", json_mode: false)

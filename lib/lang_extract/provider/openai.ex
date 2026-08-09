@@ -3,6 +3,16 @@ defmodule LangExtract.Provider.OpenAI do
   OpenAI provider for LLM inference.
 
   Calls the OpenAI Chat Completions API via Req.
+
+  `:token_limit_key` picks the wire key carrying the completion-token cap:
+  `:max_completion_tokens` (default — openai.com, where reasoning models
+  reject the deprecated key) or `:max_tokens` for OpenAI-compatible
+  endpoints whose servers only know the deprecated key. Older compat
+  builds (Ollama, LocalAI, llama.cpp) silently drop unknown keys, so the
+  wrong choice there truncates replies at the server's own default length
+  — set `token_limit_key: :max_tokens` alongside `base_url` for those.
+  The library option stays `:max_tokens` either way; only the wire key
+  differs.
   """
 
   @behaviour LangExtract.Provider
@@ -58,16 +68,13 @@ defmodule LangExtract.Provider.OpenAI do
         Provider.common_opts(opts, @defaults)
 
       json_mode = Keyword.get(opts, :json_mode, true)
+      token_limit_key = Keyword.get(opts, :token_limit_key, :max_completion_tokens)
       messages = build_messages(prompt, json_mode)
 
-      # max_completion_tokens replaced max_tokens in chat completions;
-      # reasoning models reject the deprecated key with a 400. The
-      # library option stays :max_tokens — provider-neutral, only the
-      # wire key differs.
       payload =
         %{
           "model" => model,
-          "max_completion_tokens" => max_tokens,
+          token_limit_wire_key!(token_limit_key) => max_tokens,
           "messages" => messages
         }
         |> maybe_put_temperature(temperature)
@@ -81,6 +88,18 @@ defmodule LangExtract.Provider.OpenAI do
   @spec parse_response({:ok, Req.Response.t()} | {:error, Exception.t()}) ::
           {:ok, String.t()} | {:error, Provider.error()}
   def parse_response(response), do: Provider.map_response(response, &extract_text/1)
+
+  # See the moduledoc: no heuristic can pick the right key per server
+  # (Azure lives off-host but wants the new key; old compat builds only
+  # know the deprecated one), so the choice is explicit.
+  defp token_limit_wire_key!(:max_completion_tokens), do: "max_completion_tokens"
+  defp token_limit_wire_key!(:max_tokens), do: "max_tokens"
+
+  defp token_limit_wire_key!(other) do
+    raise ArgumentError,
+          ":token_limit_key must be :max_completion_tokens or :max_tokens, " <>
+            "got: #{inspect(other)}"
+  end
 
   defp build_messages(prompt, true) do
     [

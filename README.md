@@ -80,9 +80,16 @@ client = LangExtract.new(:gemini, api_key: "gm-...")
 client = LangExtract.new(:openai,
   api_key: "not-needed",
   base_url: "http://localhost:11434",
-  json_mode: false
+  json_mode: false,
+  token_limit_key: :max_tokens
 )
 ```
+
+`token_limit_key: :max_tokens` sends the token cap under the key older
+compatible servers understand. The default (`:max_completion_tokens`) is
+what openai.com requires — its reasoning models reject the deprecated
+key — but compat builds that predate it silently drop the unknown key
+and truncate replies at the server's own default length.
 
 ### 2. Define a prompt template
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`token_limit_key` option on the OpenAI provider** — picks the wire
+  key carrying the completion-token cap: `:max_completion_tokens`
+  (default; openai.com reasoning models reject the deprecated key) or
+  `:max_tokens` for OpenAI-compatible endpoints whose servers predate the
+  new key and silently drop it, truncating replies at their own default
+  length. No heuristic can pick per server (Azure lives off-host but
+  wants the new key; older Ollama/LocalAI/llama.cpp builds only know the
+  old one), so the choice is an explicit client option.
+
 ### Changed
 
 - **Chunks are token intervals, mirroring upstream** — a chunk's text now
