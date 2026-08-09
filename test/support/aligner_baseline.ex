@@ -1,6 +1,17 @@
 defmodule LangExtract.Test.AlignerBaseline do
   @moduledoc """
-  Maps extraction strings to byte spans in source text.
+  Frozen line-comparable aligner — the differential oracle for
+  `LangExtract.Alignment.Aligner`.
+
+  This is the pre-reshape implementation from 41b7a0e (the version the
+  alignment parity fixtures certified against upstream, committed
+  verbatim one commit back) with exactly one behavior change re-applied
+  in the old shape: the lesser-only claim narrowing (05137f9) — exact
+  and LCS fallthrough ignore claims; the lesser mask stays. With that
+  redo its behavior matches production, so the differential suite can
+  hold every future aligner reshape to it. Do not edit this module to
+  follow production changes — re-apply deliberate behavior changes only,
+  each as its own commit.
 
   Mirrors upstream langextract's `WordAligner` (v1.6.0 + #485) semantics in
   four phases over downcased word tokens:
@@ -30,15 +41,11 @@ defmodule LangExtract.Test.AlignerBaseline do
   tokens of all sibling extractions — see @known_divergences in
   aligner_parity_test.exs for the observable consequences.
 
-  Fallthrough respects DP claims: a token interval placed in phase 0 is
-  reserved, so leftovers cannot nest inside it — exact scans past claimed
-  occurrences, and the lesser and LCS searches share one rescue shape:
-  the plain search runs first and its winner stands when it lands on free
-  source (claims elsewhere never disturb an uncontested grounding); only
-  a winner that itself overlaps a claim reruns with claimed tokens masked,
-  landing on a free occurrence when one qualifies. A rescued LCS span that
-  still straddles a claim is rejected. Each fallthrough placement reserves
-  its own interval for later leftovers the same way.
+  DP claims mask only the lesser phase (the 05137f9 narrowing, re-applied
+  here): exact and LCS fallthrough ignore claims, and the lesser search
+  runs plain difflib first, rescuing under a claimed-token mask only when
+  its winner overlaps a claim. Each fallthrough placement reserves its
+  interval for later leftovers the same way.
 
   Cost model: this module aligns whatever text it is handed, with no size
   limit (same as upstream's `WordAligner`). The fallthrough phases are
@@ -275,14 +282,13 @@ defmodule LangExtract.Test.AlignerBaseline do
 
   defp exact_match(_extraction, _index, [], _claimed), do: :no_match
 
-  defp exact_match(extraction, index, ext_texts, claimed) do
+  defp exact_match(extraction, index, ext_texts, _claimed) do
     ext_length = length(ext_texts)
     last_start = tuple_size(index.texts) - ext_length
 
     start_idx =
       Enum.find(0..last_start//1, fn start ->
-        subslice_at?(index.texts, ext_texts, start) and
-          free?(claimed, {start, start + ext_length})
+        subslice_at?(index.texts, ext_texts, start)
       end)
 
     case start_idx do
@@ -400,14 +406,14 @@ defmodule LangExtract.Test.AlignerBaseline do
 
   defp lcs_match(_extraction, _index, [], _config, _claimed), do: :no_match
 
-  defp lcs_match(extraction, index, ext_texts, config, claimed) do
+  defp lcs_match(extraction, index, ext_texts, config, _claimed) do
     ext_stemmed = Enum.map(ext_texts, &stem_token/1)
     # Coverage gate as upstream _accept_lcs_match computes it: the float
     # error in m * threshold is part of the spec (25 * 0.28 floats to
     # 7.000000000000001, so ceil demands 8 matches, not 7).
     needed = ceil(length(ext_stemmed) * config.threshold)
 
-    case free_lcs_span(index.stemmed, ext_stemmed, needed, config, claimed) do
+    case accepted_lcs_span(index.stemmed, ext_stemmed, needed, config) do
       nil ->
         :no_match
 
@@ -417,34 +423,10 @@ defmodule LangExtract.Test.AlignerBaseline do
     end
   end
 
-  # Two passes, same shape as free_prefix_block: plain LCS runs first, so
-  # claims elsewhere never disturb a winner on free source. Only a winner
-  # that itself overlaps a claim reruns with claimed source tokens masked
-  # to a sentinel no extraction token can equal, landing on a free
-  # occurrence when one passes the gates. The rerun keeps the free? check:
-  # masks stop claimed tokens from matching, but a window can still
-  # straddle a claim (matches on both sides), and such spans fall through
-  # to lower match counts instead of grounding over claimed bytes.
-  defp free_lcs_span(source_stemmed, ext_stemmed, needed, config, claimed) do
-    case accepted_lcs_span(source_stemmed, ext_stemmed, needed, config, []) do
-      nil ->
-        nil
-
-      {start_idx, end_idx} = span ->
-        if free?(claimed, {start_idx, end_idx + 1}) do
-          span
-        else
-          source_stemmed
-          |> mask_tokens(claimed_token_set(claimed))
-          |> accepted_lcs_span(ext_stemmed, needed, config, claimed)
-        end
-    end
-  end
-
-  # Highest match count whose tightest span passes the coverage, density,
-  # and reservation gates (per count the span map already holds the
-  # tightest span, earliest start on ties — upstream's preference).
-  defp accepted_lcs_span(source_stemmed, ext_stemmed, needed, config, claimed) do
+  # Highest match count whose tightest span passes the coverage and
+  # density gates (per count the span map already holds the tightest
+  # span, earliest start on ties — upstream's preference).
+  defp accepted_lcs_span(source_stemmed, ext_stemmed, needed, config) do
     spans = best_lcs_spans(source_stemmed, ext_stemmed)
 
     spans
@@ -454,16 +436,9 @@ defmodule LangExtract.Test.AlignerBaseline do
       {start_idx, end_idx} = spans[matches]
       density = matches / (end_idx - start_idx + 1)
 
-      if matches >= needed and density >= config.min_density and
-           free?(claimed, {start_idx, end_idx + 1}) do
+      if matches >= needed and density >= config.min_density do
         {start_idx, end_idx}
       end
-    end)
-  end
-
-  defp mask_tokens(source_stemmed, claimed_set) do
-    Enum.with_index(source_stemmed, fn token, idx ->
-      if MapSet.member?(claimed_set, idx), do: :claimed, else: token
     end)
   end
 
