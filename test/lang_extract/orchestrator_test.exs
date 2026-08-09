@@ -29,6 +29,22 @@ defmodule LangExtract.OrchestratorTest do
       end)
     end
 
+    # For task_timeout tests: the "First" chunk hangs forever, so the
+    # timeout fires deterministically at any load — no sleep-vs-timeout
+    # race — while the fast chunk gets the full timeout as headroom. The
+    # kill takes the hung plug process down with the chunk task.
+    defp hanging_stub(parent) do
+      Req.Test.stub(__MODULE__, fn conn ->
+        {:ok, body, _conn} = Plug.Conn.read_body(conn)
+        prompt = hd(Jason.decode!(body)["messages"])["content"]
+        send(parent, {:request_made, prompt})
+
+        if prompt =~ "First", do: Process.sleep(:infinity)
+
+        FakeAnthropic.respond_ok(conn, [%{"word" => "Second"}])
+      end)
+    end
+
     test "is lazy: building the stream makes no requests" do
       counting_stub(self())
 
@@ -98,17 +114,14 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "a timed-out chunk is a per-chunk error; survivors keep flowing" do
-      # Margins matter under load: the fast chunk needs generous headroom
-      # inside the timeout, and the slow chunk (150ms sleep) must sit well
-      # past it — 100ms leaves ~2x on both sides.
-      counting_stub(self())
+      hanging_stub(self())
 
       events =
         claude_client()
         |> LangExtract.stream(@two_chunk_source, template(),
           max_chunk_chars: 25,
           max_concurrency: 2,
-          task_timeout: 100
+          task_timeout: 500
         )
         |> Enum.to_list()
 
@@ -537,13 +550,13 @@ defmodule LangExtract.OrchestratorTest do
     end
 
     test "a timed-out chunk lands in errors with its byte range; survivors are kept" do
-      counting_stub(self())
+      hanging_stub(self())
 
       assert %Result{spans: spans, errors: [%ChunkError{} = error]} =
                LangExtract.run(claude_client(), @two_chunk_source, template(),
                  max_chunk_chars: 25,
                  max_concurrency: 2,
-                 task_timeout: 100
+                 task_timeout: 500
                )
 
       assert error.reason == {:task_exit, :timeout}
