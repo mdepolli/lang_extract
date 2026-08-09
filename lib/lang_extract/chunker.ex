@@ -247,10 +247,16 @@ defmodule LangExtract.Chunker do
     last = elem(tokens, stop - 1)
 
     %Chunk{
-      text: binary_part(text, first.byte_start, last.byte_end - first.byte_start),
+      text: slice_tokens(text, first, last),
       byte_start: first.byte_start,
       byte_end: last.byte_end
     }
+  end
+
+  # Verbatim source slice from the first token's start to the last
+  # token's end — chunks and sentences share this shape.
+  defp slice_tokens(text, first, last) do
+    binary_part(text, first.byte_start, last.byte_end - first.byte_start)
   end
 
   # Public only as a test seam: the sentence-boundary rules aren't
@@ -270,9 +276,7 @@ defmodule LangExtract.Chunker do
 
   defp collect_sentences(text, tokens, count, boundaries, pos, acc) do
     sentence_end = elem(boundaries, pos)
-    first = elem(tokens, pos)
-    last = elem(tokens, sentence_end - 1)
-    sentence = binary_part(text, first.byte_start, last.byte_end - first.byte_start)
+    sentence = slice_tokens(text, elem(tokens, pos), elem(tokens, sentence_end - 1))
     collect_sentences(text, tokens, count, boundaries, sentence_end, [sentence | acc])
   end
 
