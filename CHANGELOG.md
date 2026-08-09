@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unaffected — inter-chunk whitespace was never inside any aligned span.
   Prompts no longer carry another chunk's leading whitespace.
 
+- **Alignment parity fixtures cover non-default aligner configs** — the
+  generator accepts optional `fuzzy_threshold` / `min_density` /
+  `accept_lesser` per case (mapped to upstream kwargs, frozen into the
+  fixture); the parity test replays those options. Sixteen new cases pin
+  threshold knife-edges (including the ceil float artifact), density and
+  stemming boundaries, lesser-disabled paths, and fuzzy tie-breaks
+  (38 cases, up from 22).
+
 ### Fixed
 
 - **Chunker boundaries match upstream's `ChunkIterator` exactly** — the

@@ -39,13 +39,26 @@ defmodule LangExtract.Alignment.AlignerParityTest do
     {"dp_contested_overlap", 1} => %{status: :not_found, byte_start: nil, byte_end: nil}
   }
 
+  # Fixture config keys map onto align/3 options; unknown keys fail loudly.
+  config_keys = %{
+    "fuzzy_threshold" => :fuzzy_threshold,
+    "min_density" => :min_density,
+    "accept_lesser" => :accept_lesser
+  }
+
   for fixture <- @fixtures do
     @fixture fixture
+
+    # Computed at module level: inside the test the unrolled fixture literal
+    # gives 1.20's type checker a heterogeneous union it can't enumerate.
+    @opts fixture
+          |> Map.get("config", %{})
+          |> Enum.map(fn {key, value} -> {Map.fetch!(config_keys, key), value} end)
 
     test "matches upstream on #{fixture["name"]}" do
       %{"source" => source, "extractions" => extractions, "results" => results} = @fixture
 
-      spans = Aligner.align(source, extractions)
+      spans = Aligner.align(source, extractions, @opts)
       # Enum.count, not length: 1.20's type checker can't see through the
       # heterogeneous fixture-map literal and unions its value types.
       assert length(spans) == Enum.count(results)

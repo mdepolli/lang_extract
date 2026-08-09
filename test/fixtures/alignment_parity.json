@@ -420,5 +420,295 @@
       }
     ],
     "note": "third extraction has no exact occurrence; falls to legacy phases"
+  },
+  {
+    "name": "threshold_boundary_default_accepts",
+    "source": "Patient shows chronic inflammation markers today.",
+    "extractions": [
+      "acute chronic inflammation markers"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 14,
+        "byte_end": 42
+      }
+    ],
+    "note": "3-of-4 coverage sits exactly on the default 0.75 gate"
+  },
+  {
+    "name": "threshold_high_rejects_same_case",
+    "source": "Patient shows chronic inflammation markers today.",
+    "extractions": [
+      "acute chronic inflammation markers"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
+    "note": "same case as threshold_boundary_default_accepts; 0.9 needs all 4",
+    "config": {
+      "fuzzy_threshold": 0.9
+    }
+  },
+  {
+    "name": "threshold_low_accepts",
+    "source": "Patient shows chronic inflammation markers today.",
+    "extractions": [
+      "acute febrile inflammation markers"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 22,
+        "byte_end": 42
+      }
+    ],
+    "note": "2-of-4 coverage fails default 0.75 but passes 0.5",
+    "config": {
+      "fuzzy_threshold": 0.5
+    }
+  },
+  {
+    "name": "density_default_accepts_sparse",
+    "source": "alpha stray beta straw gamma strap delta",
+    "extractions": [
+      "zip alpha beta gamma delta"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 0,
+        "byte_end": 40
+      }
+    ],
+    "note": "4 matches over a 7-token span: density 4/7 clears the 1/3 default"
+  },
+  {
+    "name": "density_high_rejects_sparse",
+    "source": "alpha stray beta straw gamma strap delta",
+    "extractions": [
+      "zip alpha beta gamma delta"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
+    "note": "same span as density_default_accepts_sparse; 4/7 fails 0.6",
+    "config": {
+      "min_density": 0.6
+    }
+  },
+  {
+    "name": "density_exactly_one_third",
+    "source": "alpha pad pod pud pid beta tail",
+    "extractions": [
+      "alpha beta"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 0,
+        "byte_end": 26
+      }
+    ],
+    "note": "2 matches over a 6-token span: density equals the 1/3 default; lesser disabled so the fuzzy phase is reached",
+    "config": {
+      "accept_lesser": false
+    }
+  },
+  {
+    "name": "density_below_one_third",
+    "source": "alpha pad pod pud pid pex beta tail",
+    "extractions": [
+      "alpha beta"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
+    "note": "2 matches over a 7-token span: density just under the 1/3 default",
+    "config": {
+      "accept_lesser": false
+    }
+  },
+  {
+    "name": "lesser_disabled_not_found",
+    "source": "The quick brown fox jumps.",
+    "extractions": [
+      "quick brown wolf"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
+    "note": "default would MATCH_LESSER on the quick-brown prefix block; with the gate off, 2-of-3 coverage fails the default threshold",
+    "config": {
+      "accept_lesser": false
+    }
+  },
+  {
+    "name": "lesser_disabled_fuzzy_rescue",
+    "source": "The quick brown fox jumps.",
+    "extractions": [
+      "quick brown wolf"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 4,
+        "byte_end": 15
+      }
+    ],
+    "note": "with the threshold lowered too, fuzzy grounds what lesser would have",
+    "config": {
+      "accept_lesser": false,
+      "fuzzy_threshold": 0.6
+    }
+  },
+  {
+    "name": "ceil_artifact_upstream_rejects",
+    "source": "siga sigb sigc sigd sige sigf sigg appear in this sentence.",
+    "extractions": [
+      "padz siga sigb sigc sigd sige sigf sigg pada padb padc padd pade padf padg padh padi padj padk padl padm padn pado padp padq"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
+    "note": "25*0.28 rounds to 7.000000000000001, so upstream needs ceil = 8 and rejects the 7-match span; a matches/m ratio comparison accepts at exactly 0.28",
+    "config": {
+      "fuzzy_threshold": 0.28
+    }
+  },
+  {
+    "name": "ceil_artifact_upstream_accepts",
+    "source": "the alpha beta gamma story",
+    "extractions": [
+      "zip beta gamma"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 10,
+        "byte_end": 20
+      }
+    ],
+    "note": "3*0.6666666666666667 rounds to 2.0, so upstream needs 2 of 3; a matches/m ratio comparison rejects because 2/3 rounds below the threshold",
+    "config": {
+      "fuzzy_threshold": 0.6666666666666667
+    }
+  },
+  {
+    "name": "stemming_four_char_plural_strips",
+    "source": "The lab closed early.",
+    "extractions": [
+      "labs"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 4,
+        "byte_end": 7
+      }
+    ],
+    "note": "4-char plural is just over the >3 stemming length gate"
+  },
+  {
+    "name": "stemming_double_s_kept",
+    "source": "The glass broke.",
+    "extractions": [
+      "glasses"
+    ],
+    "results": [
+      {
+        "status": "not_found",
+        "raw_status": null,
+        "byte_start": null,
+        "byte_end": null
+      }
+    ],
+    "note": "glasses stems to glasse while glass keeps its ss; no match"
+  },
+  {
+    "name": "fuzzy_tie_prefers_earliest_span",
+    "source": "alpha pad beta pod alpha pud beta",
+    "extractions": [
+      "alpha beta"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 0,
+        "byte_end": 14
+      }
+    ],
+    "note": "two 3-token spans hold both matches; earliest source start wins",
+    "config": {
+      "accept_lesser": false
+    }
+  },
+  {
+    "name": "fuzzy_prefers_tightest_span",
+    "source": "alpha pad pod beta pud alpha pex beta",
+    "extractions": [
+      "alpha beta"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 23,
+        "byte_end": 37
+      }
+    ],
+    "note": "a later 3-token span beats the earlier 4-token one",
+    "config": {
+      "accept_lesser": false
+    }
+  },
+  {
+    "name": "repeated_extraction_tokens_lcs",
+    "source": "big cat big cat",
+    "extractions": [
+      "big big cat"
+    ],
+    "results": [
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 0,
+        "byte_end": 15
+      }
+    ],
+    "note": "duplicate token inside the extraction; LCS reuses occurrences in order"
   }
 ]
