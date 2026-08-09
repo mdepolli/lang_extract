@@ -63,6 +63,7 @@ defmodule LangExtract.Alignment.Aligner do
     index = index_source(source)
     ext_token_lists = tokenize_extractions(extractions)
     selection = occurrence_selection(config.exact_algorithm, index.texts, ext_token_lists)
+    index = stem_for_leftovers(index, selection, ext_token_lists)
 
     place_extractions(extractions, ext_token_lists, selection, index, config)
   end
@@ -76,11 +77,10 @@ defmodule LangExtract.Alignment.Aligner do
     }
   end
 
-  # The source representations every phase reads: word tokens with byte
-  # offsets (span construction), their downcased texts (matching), and
-  # stemmed texts (LCS phase only). Words and texts are tuples for O(1)
-  # indexed access; stemmed stays a list — it is only ever walked
-  # sequentially by the LCS scan.
+  # The source representations the phases read: word tokens with byte
+  # offsets (span construction) and their downcased texts (matching).
+  # Both are tuples for O(1) indexed access. Stemmed texts are filled in
+  # by stem_for_leftovers/3 only when a fallthrough phase can run.
   defp index_source(source) do
     words = source |> Tokenizer.tokenize() |> reject_whitespace()
     texts = Enum.map(words, &String.downcase(&1.text))
@@ -88,8 +88,21 @@ defmodule LangExtract.Alignment.Aligner do
     %{
       words: List.to_tuple(words),
       texts: List.to_tuple(texts),
-      stemmed: Enum.map(texts, &stem_token/1)
+      stemmed: nil
     }
+  end
+
+  # Upstream normalizes source tokens only once unaligned extractions
+  # remain (resolver.py builds src_norm inside the fuzzy-alignment branch);
+  # mirror that so a fully placed call never pays the stem pass. LCS is
+  # the only stem reader, and stemmed stays a list — it is only ever
+  # walked sequentially by the LCS scan.
+  defp stem_for_leftovers(index, selection, ext_token_lists) do
+    if map_size(selection) == length(ext_token_lists) do
+      index
+    else
+      %{index | stemmed: index.texts |> Tuple.to_list() |> Enum.map(&stem_token/1)}
+    end
   end
 
   defp tokenize_extractions(extractions) do
