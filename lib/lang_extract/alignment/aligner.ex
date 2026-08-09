@@ -62,12 +62,13 @@ defmodule LangExtract.Alignment.Aligner do
   @spec align(String.t(), [String.t()], keyword()) :: [Span.t()]
   def align(source, extractions, opts \\ []) do
     config = build_config(opts)
-    index = index_source(source)
     ext_token_lists = tokenize_extractions(extractions)
-    selection = occurrence_selection(config.exact_algorithm, index.texts, ext_token_lists)
-    index = stem_for_leftovers(index, selection, ext_token_lists)
+    index = index_source(source)
+    selection = occurrence_selection(index, ext_token_lists, config)
 
-    place_extractions(extractions, ext_token_lists, selection, index, config)
+    index
+    |> stem_for_leftovers(selection, ext_token_lists)
+    |> place_extractions(extractions, ext_token_lists, selection, config)
   end
 
   defp build_config(opts) do
@@ -121,10 +122,10 @@ defmodule LangExtract.Alignment.Aligner do
   # inside a DP placement, and each fallthrough hit reserves for later
   # leftovers.
   defp place_extractions(
+         index,
          extractions,
          ext_token_lists,
          _selection,
-         index,
          %{
            exact_algorithm: :first_occurrence
          } = config
@@ -139,7 +140,7 @@ defmodule LangExtract.Alignment.Aligner do
     end)
   end
 
-  defp place_extractions(extractions, ext_token_lists, selection, index, config) do
+  defp place_extractions(index, extractions, ext_token_lists, selection, config) do
     claimed = claimed_from_selection(selection, ext_token_lists)
 
     {spans, _claimed} =
@@ -199,13 +200,14 @@ defmodule LangExtract.Alignment.Aligner do
   # earliest-ending chain, which is what maps repeated mentions to
   # successive occurrences. Nodes are {extraction_index, start, parent}.
 
-  defp occurrence_selection(:first_occurrence, _source_texts_tuple, _ext_token_lists), do: %{}
+  defp occurrence_selection(_index, _ext_token_lists, %{exact_algorithm: :first_occurrence}),
+    do: %{}
 
-  defp occurrence_selection(:dp, source_texts_tuple, ext_token_lists) do
+  defp occurrence_selection(%{texts: source_texts}, ext_token_lists, %{exact_algorithm: :dp}) do
     ext_token_lists
     |> Enum.with_index()
     |> Enum.reduce([], fn {ext_texts, idx}, frontier ->
-      add_extraction(frontier, idx, ext_texts, occurrences(source_texts_tuple, ext_texts))
+      add_extraction(frontier, idx, ext_texts, occurrences(source_texts, ext_texts))
     end)
     |> backtrack()
   end
