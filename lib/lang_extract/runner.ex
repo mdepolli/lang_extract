@@ -150,10 +150,12 @@ defmodule LangExtract.Runner do
 
   Collects `stream/4` and restores document order. Returns a
   `%LangExtract.Result{}` — the same contract as `LangExtract.run/4`,
-  with retries and the shared request budget on top. Every failure is
-  per-chunk: a crashed chunk task lands in the result's `errors` with
-  reason `{:task_exit, reason}`, so this function cannot fail and
-  `Result.errors` is the failure channel.
+  with retries and the shared request budget on top. Every runtime
+  failure is per-chunk: a crashed chunk task lands in the result's
+  `errors` with reason `{:task_exit, reason}`, so no extraction failure
+  escapes as an exception — `Result.errors` is the failure channel.
+  Invalid options (`:buffer`, `:max_chunk_chars`) are programmer errors
+  and raise `ArgumentError` at the call, as everywhere in the library.
 
   The runner has no per-chunk deadline: `:task_timeout` belongs to the
   standalone path and is ignored here. Each attempt is bounded by the
