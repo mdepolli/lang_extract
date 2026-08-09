@@ -28,11 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `one_for_all` restart `which_children` can return `:restarting`;
   raises a named `ArgumentError` instead of an opaque `Agent.get` crash.
 
-- **`align/3` refuses sources larger than 256 KiB by default** — fuzzy
-  fallthrough is super-linear in tokens; pass `allow_large: true` for
-  intentional whole-document alignment. The chunked pipeline is
-  unchanged.
-
 - **`Result.spans` are sorted by `byte_start` within a chunk** —
   `collect/1` previously ordered only the chunks before flat-mapping, so
   model emission order could leave later source spans first inside a
@@ -257,9 +252,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs demote bare `align/3` as a product path** — README no longer has an
   "Alignment Without an LLM" section. The front door matches upstream:
   `run/4` / `stream/4` for documents, `extract/3` for replaying stored model
-  JSON. `align/3` remains on the facade as a thin helper over the alignment
-  engine (tests/tooling); grounding itself is still the core product, via
-  the pipeline. Guide and Serializer wording updated to match.
+  JSON. Grounding itself is still the core product, via the pipeline. Guide
+  and Serializer wording updated to match. (The facade `align/3` is now
+  removed entirely — see Removed.)
+
+### Removed
+
+- **BREAKING: `LangExtract.align/3`** — completes the demotion above.
+  Upstream has no whole-document alignment front door; ours invited
+  exactly the oversize calls that a short-lived size guard (added and
+  removed within this release cycle, never shipped) tried to police.
+  The engine is unchanged and stays public-but-best-effort with its cost
+  model documented in its moduledoc: it aligns whatever text it is
+  handed, cost is the caller's budget, and the chunked pipeline is the
+  bounded document path. Migration:
+  `LangExtract.align(source, extractions, opts)` →
+  `LangExtract.Alignment.Aligner.align(source, extractions, opts)`.
 
 ## [0.10.0] - 2026-07-20
 

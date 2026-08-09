@@ -12,7 +12,7 @@ Every alignment produces a `LangExtract.Span`:
 | Field        | Description                                           |
 | ------------ | ----------------------------------------------------- |
 | `text`       | The extracted text as the LLM returned it             |
-| `class`      | Entity class — always set by the pipeline (`nil` for bare `align/3` spans) |
+| `class`      | Entity class — always set by the pipeline (`nil` for bare `Aligner.align/3` spans) |
 | `attributes` | Metadata the LLM attached — not byte-grounded, untrusted |
 | `byte_start` | Inclusive byte offset in source (`nil` if not found)  |
 | `byte_end`   | Exclusive byte offset in source (`nil` if not found)  |

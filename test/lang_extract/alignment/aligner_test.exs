@@ -4,19 +4,15 @@ defmodule LangExtract.Alignment.AlignerTest do
   alias LangExtract.Alignment.Aligner
   alias LangExtract.Span
 
-  describe "source size guard" do
-    # Public align/3 uses the full source; fallthrough LCS is super-linear
-    # in tokens. Book-length calls must opt in so tooling does not stall
-    # a BEAM scheduler by accident (the chunked pipeline stays small).
-    test "refuses oversize sources unless allow_large: true" do
+  describe "source size" do
+    # No size guard, matching upstream WordAligner: the engine aligns
+    # whatever text it is handed, and cost is the caller's budget (the
+    # chunked pipeline is the bounded document path). Pins the guard's
+    # removal — sources of any size align without opt-in flags.
+    test "book-length sources align without opt-in" do
       source = String.duplicate("word ", 60_000)
 
-      assert_raise ArgumentError, ~r/allow_large: true/, fn ->
-        Aligner.align(source, ["word"])
-      end
-
-      assert [%Span{status: :exact}] =
-               Aligner.align(source, ["word"], allow_large: true)
+      assert [%Span{status: :exact, byte_start: 0}] = Aligner.align(source, ["word"])
     end
   end
 

@@ -33,43 +33,8 @@ defmodule LangExtract do
     Template
   }
 
-  alias LangExtract.Alignment.Aligner
   alias LangExtract.Prompt.Validator
   alias LangExtract.Prompt.Validator.ValidationError
-
-  @doc """
-  Lower-level: aligns bare extraction strings to byte spans in source text.
-
-  Prefer `run/4` / `stream/4` for documents (they chunk, then ground) and
-  `extract/3` when you already have model JSON. This is a thin wrapper over
-  `LangExtract.Alignment.Aligner` for tests, tooling, and callers who need
-  the engine directly — the same engine the pipeline uses on each chunk.
-  It aligns against the source as given: the fuzzy fallthrough phases scale
-  super-linearly in source tokens. Sources larger than 256 KiB raise
-  `ArgumentError` unless `allow_large: true` — prefer the chunked pipeline
-  (`run/4`) for documents.
-
-  Returns a list of `%LangExtract.Span{}` structs, one per extraction
-  (`class` is always `nil` and `attributes` always empty).
-
-  ## Options
-
-    * `:fuzzy_threshold` - minimum overlap ratio for fuzzy match (default `0.75`)
-    * `:min_density` - minimum matched-token density for fuzzy (default `1/3`)
-    * `:accept_lesser` - accept prefix partial matches (default `true`)
-    * `:exact_algorithm` - `:dp` (default) or `:first_occurrence`
-    * `:allow_large` - permit sources over 256 KiB (default `false`)
-
-  ## Examples
-
-      iex> LangExtract.align("the quick brown fox", ["quick brown"])
-      [%LangExtract.Span{text: "quick brown", byte_start: 4, byte_end: 15, status: :exact}]
-
-  """
-  @spec align(String.t(), [String.t()], keyword()) :: [LangExtract.Span.t()]
-  def align(source, extractions, opts \\ []) do
-    Aligner.align(source, extractions, opts)
-  end
 
   @doc """
   Parses raw LLM output, aligns extractions against source text, and returns
