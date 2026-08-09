@@ -12,7 +12,7 @@ defmodule LangExtract.Alignment.Aligner do
      mentions resolve to successive occurrences. Status `:exact`.
      Extractions the DP cannot place fall through to the phases below.
   1. **Exact** — the extraction's tokens appear contiguously in the source
-     (linear scan, first occurrence wins). Status `:exact`.
+     (linear scan, first free occurrence wins). Status `:exact`.
   2. **Lesser** — difflib-style block decomposition: if a matching block is
      anchored at the extraction's first token, its source run grounds the
      extraction (upstream `MATCH_LESSER`). Blocks elsewhere in the extraction
@@ -30,15 +30,19 @@ defmodule LangExtract.Alignment.Aligner do
   tokens of all sibling extractions — see @known_divergences in
   aligner_parity_test.exs for the observable consequences.
 
-  Fallthrough respects DP claims: a token interval placed in phase 0 is
-  reserved, so leftovers cannot nest inside it — exact scans past claimed
-  occurrences, and the lesser and LCS searches share one rescue shape:
-  the plain search runs first and its winner stands when it lands on free
-  source (claims elsewhere never disturb an uncontested grounding); only
-  a winner that itself overlaps a claim reruns with claimed tokens masked,
-  landing on a free occurrence when one qualifies. A rescued LCS span that
-  still straddles a claim is rejected. Each fallthrough placement reserves
-  its own interval for later leftovers the same way.
+  Fallthrough respects DP claims when `:exact_algorithm` is `:dp` (the
+  default). Token intervals are half-open `[start, end)` throughout.
+  Phase-0 placements seed the claim list; each successful leftover
+  reserves its interval for later items. Exact fallthrough is "first free
+  occurrence" (filter candidates with claims). Lesser and LCS are
+  "plain optimum, then claim-rescue" via `accept_free_or_masked/3`: the
+  plain search runs first and its winner stands on free source; only a
+  winner that overlaps a claim reruns under a claimed-token mask. A
+  rescued LCS span that still straddles a claim is rejected.
+
+  With `:exact_algorithm` `:first_occurrence`, phase 0 is skipped and
+  claims stay empty so independent first-match (including overlaps) is
+  allowed.
 
   Cost model: this module aligns whatever text it is handed, with no size
   limit (same as upstream's `WordAligner`). The fallthrough phases are
@@ -59,16 +63,19 @@ defmodule LangExtract.Alignment.Aligner do
   @default_fuzzy_threshold 0.75
   @default_min_density 1 / 3
 
+  # Grounding: half-open token interval [start, end) plus alignment status.
+  # @type grounding :: %{status: :exact | :lesser | :fuzzy, start: non_neg_integer(), end: non_neg_integer()}
+
   @spec align(String.t(), [String.t()], keyword()) :: [Span.t()]
   def align(source, extractions, opts \\ []) do
     config = build_config(opts)
-    ext_token_lists = tokenize_extractions(extractions)
+    items = tokenize_items(extractions)
     index = index_source(source)
-    selection = occurrence_selection(index, ext_token_lists, config)
+    selection = occurrence_selection(index, items, config)
 
     index
-    |> stem_for_leftovers(selection, ext_token_lists)
-    |> place_extractions(extractions, ext_token_lists, selection, config)
+    |> stem_for_leftovers(selection, items)
+    |> place_extractions(items, selection, config)
   end
 
   defp build_config(opts) do
@@ -80,12 +87,34 @@ defmodule LangExtract.Alignment.Aligner do
     }
   end
 
-  # The source representations the phases read: word tokens with byte
-  # offsets (span construction) and their downcased texts (matching).
-  # Both are tuples for O(1) indexed access. Stemmed texts are filled in
-  # by stem_for_leftovers/3 only when a fallthrough phase can run.
+  # --- Setup: items, source index, optional stems ---
+
+  # One work item per input extraction: original text (for Span.text),
+  # downcased non-whitespace tokens (for matching), and its model-output
+  # index (for phase-0 selection and claim lengths).
+  defp tokenize_items(extractions) do
+    extractions
+    |> Enum.with_index()
+    |> Enum.map(fn {text, idx} ->
+      tokens =
+        text
+        |> Tokenizer.tokenize()
+        |> reject_whitespace()
+        |> Enum.map(&String.downcase(&1.text))
+
+      %{text: text, tokens: tokens, idx: idx}
+    end)
+  end
+
+  # Source views phases read: word tokens with byte offsets (span
+  # construction) and downcased texts (matching). Both are tuples for
+  # O(1) access. Stemmed texts are filled in only when fallthrough can run.
   defp index_source(source) do
-    words = source |> Tokenizer.tokenize() |> reject_whitespace()
+    words =
+      source
+      |> Tokenizer.tokenize()
+      |> reject_whitespace()
+
     texts = Enum.map(words, &String.downcase(&1.text))
 
     %{
@@ -100,94 +129,102 @@ defmodule LangExtract.Alignment.Aligner do
   # mirror that so a fully placed call never pays the stem pass. LCS is
   # the only stem reader, and stemmed stays a list — it is only ever
   # walked sequentially by the LCS scan.
-  defp stem_for_leftovers(%{texts: texts} = index, selection, ext_token_lists) do
-    if map_size(selection) == length(ext_token_lists) do
+  defp stem_for_leftovers(%{texts: texts} = index, selection, items) do
+    if map_size(selection) == length(items) do
       index
     else
       %{index | stemmed: texts |> Tuple.to_list() |> Enum.map(&stem_token/1)}
     end
   end
 
-  defp tokenize_extractions(extractions) do
-    Enum.map(extractions, fn extraction ->
-      extraction
-      |> Tokenizer.tokenize()
-      |> reject_whitespace()
-      |> Enum.map(&String.downcase(&1.text))
-    end)
+  # --- Placement: selection hits vs leftovers under claims ---
+
+  # :dp seeds claims from phase 0 and grows them on leftover hits.
+  # :first_occurrence skips phase 0 and never claims, so overlaps remain allowed.
+  defp place_extractions(index, items, selection, %{exact_algorithm: :dp} = config) do
+    fold_placements(index, items, selection, config, claimed_from_selection(selection, items))
   end
 
-  # :first_occurrence keeps legacy independent first-match-wins (overlaps
-  # allowed). :dp reserves phase-0 intervals so fallthrough cannot nest
-  # inside a DP placement, and each fallthrough hit reserves for later
-  # leftovers.
-  defp place_extractions(
-         index,
-         extractions,
-         ext_token_lists,
-         _selection,
-         %{
-           exact_algorithm: :first_occurrence
-         } = config
-       ) do
-    extractions
-    |> Enum.zip(ext_token_lists)
-    |> Enum.map(fn {extraction, ext_texts} ->
-      case align_one(extraction, ext_texts, index, config, _claimed = []) do
-        {:ok, span, _interval} -> span
-        :not_found -> not_found_span(extraction)
-      end
-    end)
+  defp place_extractions(index, items, selection, %{exact_algorithm: :first_occurrence} = config) do
+    fold_placements(index, items, selection, config, _claimed = [])
   end
 
-  defp place_extractions(index, extractions, ext_token_lists, selection, config) do
-    claimed = claimed_from_selection(selection, ext_token_lists)
-
+  defp fold_placements(index, items, selection, config, claimed) do
     {spans, _claimed} =
-      extractions
-      |> Enum.zip(ext_token_lists)
-      |> Enum.with_index()
-      |> Enum.map_reduce(claimed, fn {{extraction, ext_texts}, idx}, claimed ->
-        place_one(extraction, ext_texts, idx, selection, index, config, claimed)
+      Enum.map_reduce(items, claimed, fn item, claimed ->
+        place_one(item, selection, index, config, claimed)
       end)
 
     spans
   end
 
-  defp place_one(extraction, ext_texts, idx, selection, %{words: words}, _config, claimed)
-       when is_map_key(selection, idx) do
-    start_idx = Map.fetch!(selection, idx)
-    end_idx = start_idx + length(ext_texts) - 1
-    {found_span(extraction, words, start_idx, end_idx, :exact), claimed}
-  end
-
-  defp place_one(extraction, ext_texts, _idx, _selection, index, config, claimed) do
-    case align_one(extraction, ext_texts, index, config, claimed) do
-      {:ok, span, interval} -> {span, [interval | claimed]}
-      :not_found -> {not_found_span(extraction), claimed}
+  defp place_one(item, selection, index, config, claimed) do
+    case Map.fetch(selection, item.idx) do
+      {:ok, start} -> from_selection(item, start, index, claimed)
+      :error -> place_leftover(item, index, config, claimed)
     end
   end
 
-  defp claimed_from_selection(selection, ext_token_lists) do
-    lengths = ext_token_lists |> Enum.map(&length/1) |> List.to_tuple()
+  defp from_selection(%{text: text, tokens: tokens}, start, %{words: words}, claimed) do
+    grounding = %{status: :exact, start: start, end: start + length(tokens)}
+    {to_span(text, words, grounding), claimed}
+  end
 
-    Enum.map(selection, fn {idx, start_idx} ->
-      {start_idx, start_idx + elem(lengths, idx)}
+  defp place_leftover(item, index, config, claimed) do
+    case align_one(item, index, config, claimed) do
+      {:ok, grounding} ->
+        {to_span(item.text, index.words, grounding), reserve_claim(claimed, grounding, config)}
+
+      :not_found ->
+        {not_found_span(item.text), claimed}
+    end
+  end
+
+  defp reserve_claim(claimed, grounding, %{exact_algorithm: :dp}),
+    do: [interval(grounding) | claimed]
+
+  defp reserve_claim(claimed, _grounding, %{exact_algorithm: :first_occurrence}), do: claimed
+
+  defp claimed_from_selection(selection, items) do
+    lengths = Map.new(items, fn %{idx: idx, tokens: tokens} -> {idx, length(tokens)} end)
+
+    Enum.map(selection, fn {idx, start} ->
+      {start, start + Map.fetch!(lengths, idx)}
     end)
   end
+
+  defp interval(%{start: start, end: end_}), do: {start, end_}
 
   # Half-open token intervals [start, end).
   defp free?(claimed, {c, d}) do
     not Enum.any?(claimed, fn {a, b} -> c < b and a < d end)
   end
 
-  defp align_one(extraction, ext_texts, index, config, claimed) do
-    with :no_match <- exact_match(extraction, index, ext_texts, claimed),
-         :no_match <- lesser_match(extraction, index, ext_texts, config, claimed),
-         :no_match <- lcs_match(extraction, index, ext_texts, config, claimed) do
-      :not_found
+  # Shared claim policy for lesser and LCS ("plain optimum, then rescue").
+  # on_claimed is invoked only when the plain winner overlaps a claim —
+  # callers build the mask / re-run there so free winners pay nothing.
+  defp accept_free_or_masked(nil, _claimed, _on_claimed), do: nil
+
+  defp accept_free_or_masked(interval, claimed, on_claimed) do
+    if free?(claimed, interval) do
+      interval
     else
-      {:ok, span, interval} -> {:ok, span, interval}
+      on_claimed.()
+    end
+  end
+
+  defp claimed_token_set(claimed) do
+    for {a, b} <- claimed, idx <- a..(b - 1)//1, into: MapSet.new(), do: idx
+  end
+
+  # Phases return {:ok, grounding} | :no_match. A successful value fails the
+  # with pattern and becomes align_one's result; exhausting every phase
+  # yields :not_found.
+  defp align_one(item, index, config, claimed) do
+    with :no_match <- exact_match(item, index, claimed),
+         :no_match <- lesser_match(item, index, config, claimed),
+         :no_match <- lcs_match(item, index, config, claimed) do
+      :not_found
     end
   end
 
@@ -200,14 +237,12 @@ defmodule LangExtract.Alignment.Aligner do
   # earliest-ending chain, which is what maps repeated mentions to
   # successive occurrences. Nodes are {extraction_index, start, parent}.
 
-  defp occurrence_selection(_index, _ext_token_lists, %{exact_algorithm: :first_occurrence}),
-    do: %{}
+  defp occurrence_selection(_index, _items, %{exact_algorithm: :first_occurrence}), do: %{}
 
-  defp occurrence_selection(%{texts: source_texts}, ext_token_lists, %{exact_algorithm: :dp}) do
-    ext_token_lists
-    |> Enum.with_index()
-    |> Enum.reduce([], fn {ext_texts, idx}, frontier ->
-      add_extraction(frontier, idx, ext_texts, occurrences(source_texts, ext_texts))
+  defp occurrence_selection(%{texts: source_texts}, items, %{exact_algorithm: :dp}) do
+    items
+    |> Enum.reduce([], fn %{tokens: ext_texts, idx: idx}, frontier ->
+      add_extraction(frontier, idx, ext_texts, contiguous_starts(source_texts, ext_texts))
     end)
     |> backtrack()
   end
@@ -263,97 +298,99 @@ defmodule LangExtract.Alignment.Aligner do
     collect_chain(parent, Map.put(selection, idx, start))
   end
 
-  defp occurrences(source_texts_tuple, ext_texts) do
-    last_start = tuple_size(source_texts_tuple) - length(ext_texts)
+  # --- Contiguous token runs (phase 0 occurrences + phase 1 exact) ---
+
+  # Every source start where ext_texts appears as a contiguous subslice.
+  defp contiguous_starts(texts, ext_texts) do
+    case start_range(texts, ext_texts) do
+      nil ->
+        []
+
+      first..last//1 ->
+        Enum.filter(first..last//1, &subslice_at?(texts, ext_texts, &1))
+    end
+  end
+
+  # Exact fallthrough strategy: first contiguous start whose half-open
+  # interval is free of claims (not "plain optimum then rescue").
+  defp first_free_contiguous(texts, ext_texts, claimed) do
+    case start_range(texts, ext_texts) do
+      nil ->
+        nil
+
+      first..last//1 ->
+        ext_length = length(ext_texts)
+
+        Enum.find(first..last//1, fn start ->
+          subslice_at?(texts, ext_texts, start) and
+            free?(claimed, {start, start + ext_length})
+        end)
+    end
+  end
+
+  defp start_range(texts, ext_texts) do
+    last_start = tuple_size(texts) - length(ext_texts)
 
     if last_start < 0 do
-      []
+      nil
     else
-      Enum.filter(0..last_start//1, &subslice_at?(source_texts_tuple, ext_texts, &1))
+      0..last_start//1
     end
   end
 
-  # --- Phase 1: exact contiguous match ---
+  defp subslice_at?(_texts, [], _start_idx), do: true
 
-  defp exact_match(_extraction, _index, [], _claimed), do: :no_match
+  defp subslice_at?(texts, [text | rest], start_idx) do
+    elem(texts, start_idx) == text and subslice_at?(texts, rest, start_idx + 1)
+  end
 
-  defp exact_match(extraction, %{texts: texts, words: words}, ext_texts, claimed) do
-    ext_length = length(ext_texts)
-    last_start = tuple_size(texts) - ext_length
+  # --- Phase 1: exact contiguous match ("first free occurrence") ---
 
-    start_idx =
-      Enum.find(0..last_start//1, fn start ->
-        subslice_at?(texts, ext_texts, start) and
-          free?(claimed, {start, start + ext_length})
-      end)
+  defp exact_match(%{tokens: []}, _index, _claimed), do: :no_match
 
-    case start_idx do
+  defp exact_match(%{tokens: ext_texts}, %{texts: texts}, claimed) do
+    case first_free_contiguous(texts, ext_texts, claimed) do
       nil ->
         :no_match
 
-      start_idx ->
-        interval = {start_idx, start_idx + ext_length}
-
-        {:ok, found_span(extraction, words, start_idx, start_idx + ext_length - 1, :exact),
-         interval}
+      start ->
+        {:ok, %{status: :exact, start: start, end: start + length(ext_texts)}}
     end
   end
 
-  defp subslice_at?(_source_texts_tuple, [], _start_idx), do: true
+  # --- Phase 2: lesser match ("plain optimum, then claim-rescue") ---
 
-  defp subslice_at?(source_texts_tuple, [text | rest], start_idx) do
-    elem(source_texts_tuple, start_idx) == text and
-      subslice_at?(source_texts_tuple, rest, start_idx + 1)
-  end
+  defp lesser_match(_item, _index, %{accept_lesser: false}, _claimed), do: :no_match
 
-  # --- Phase 2: lesser match (longest contiguous partial run) ---
+  defp lesser_match(%{tokens: []}, _index, _config, _claimed), do: :no_match
 
-  defp lesser_match(_extraction, _index, _ext_texts, %{accept_lesser: false}, _claimed),
-    do: :no_match
-
-  defp lesser_match(_extraction, _index, [], _config, _claimed), do: :no_match
-
-  defp lesser_match(extraction, %{texts: texts, words: words}, ext_texts, _config, claimed) do
-    ext_tuple = List.to_tuple(ext_texts)
-
-    case free_prefix_block(texts, ext_tuple, claimed) do
+  defp lesser_match(%{tokens: ext_texts}, %{texts: texts}, _config, claimed) do
+    case free_prefix_block(texts, List.to_tuple(ext_texts), claimed) do
       nil ->
         :no_match
 
-      {start_idx, block_len} ->
-        interval = {start_idx, start_idx + block_len}
-
-        {:ok, found_span(extraction, words, start_idx, start_idx + block_len - 1, :lesser),
-         interval}
+      {start, end_} ->
+        {:ok, %{status: :lesser, start: start, end: end_}}
     end
   end
 
-  # Two passes: plain difflib runs first, so claims elsewhere can never
-  # perturb the tie-breaks that guide the recursion over free source, and
-  # its block wins whenever it lands on free tokens. Only a leftover whose
-  # own difflib block is claimed reruns with claimed tokens masked out of
-  # runs, landing the decomposition on a later free occurrence (or
-  # :no_match when every anchored candidate is claimed).
+  # Returns half-open [start, end) or nil.
   defp free_prefix_block(source_tuple, ext_tuple, claimed) do
     source_hi = tuple_size(source_tuple)
     ext_hi = tuple_size(ext_tuple)
 
-    case prefix_block(source_tuple, ext_tuple, source_hi, ext_hi, MapSet.new()) do
-      nil ->
-        nil
-
-      {start_idx, block_len} = block ->
-        if free?(claimed, {start_idx, start_idx + block_len}) do
-          block
-        else
-          prefix_block(source_tuple, ext_tuple, source_hi, ext_hi, claimed_token_set(claimed))
-        end
-    end
+    source_tuple
+    |> prefix_block(ext_tuple, source_hi, ext_hi, MapSet.new())
+    |> prefix_to_interval()
+    |> accept_free_or_masked(claimed, fn ->
+      source_tuple
+      |> prefix_block(ext_tuple, source_hi, ext_hi, claimed_token_set(claimed))
+      |> prefix_to_interval()
+    end)
   end
 
-  defp claimed_token_set(claimed) do
-    for {a, b} <- claimed, idx <- a..(b - 1)//1, into: MapSet.new(), do: idx
-  end
+  defp prefix_to_interval(nil), do: nil
+  defp prefix_to_interval({start, len}), do: {start, start + len}
 
   # difflib decomposes matches by recursively taking the longest common block
   # (ties: lowest source index, then lowest extraction index). Only a block
@@ -361,6 +398,7 @@ defmodule LangExtract.Alignment.Aligner do
   # only come from the leftmost recursion path — so chase it directly.
   # With an empty mask this is difflib exactly; masked tokens cannot join
   # runs, so a masked search decomposes over free source only.
+  # Returns {source_start, block_len} or nil.
   defp prefix_block(_source_tuple, _ext_tuple, source_hi, ext_hi, _masked)
        when source_hi <= 0 or ext_hi <= 0,
        do: nil
@@ -398,14 +436,13 @@ defmodule LangExtract.Alignment.Aligner do
     end
   end
 
-  # --- Phase 3: LCS subsequence match over stemmed tokens ---
+  # --- Phase 3: LCS fuzzy ("plain optimum, then claim-rescue") ---
 
-  defp lcs_match(_extraction, _index, [], _config, _claimed), do: :no_match
+  defp lcs_match(%{tokens: []}, _index, _config, _claimed), do: :no_match
 
   defp lcs_match(
-         extraction,
-         %{stemmed: stemmed, words: words},
-         ext_texts,
+         %{tokens: ext_texts},
+         %{stemmed: stemmed},
          %{threshold: threshold} = config,
          claimed
        ) do
@@ -419,38 +456,29 @@ defmodule LangExtract.Alignment.Aligner do
       nil ->
         :no_match
 
-      {start_idx, end_idx} ->
-        {:ok, found_span(extraction, words, start_idx, end_idx, :fuzzy), {start_idx, end_idx + 1}}
+      {start, end_} ->
+        {:ok, %{status: :fuzzy, start: start, end: end_}}
     end
   end
 
-  # Two passes, same shape as free_prefix_block: plain LCS runs first, so
-  # claims elsewhere never disturb a winner on free source. Only a winner
-  # that itself overlaps a claim reruns with claimed source tokens masked
-  # to a sentinel no extraction token can equal, landing on a free
-  # occurrence when one passes the gates. The rerun keeps the free? check:
-  # masks stop claimed tokens from matching, but a window can still
-  # straddle a claim (matches on both sides), and such spans fall through
-  # to lower match counts instead of grounding over claimed bytes.
+  # Returns half-open [start, end) or nil. The masked rerun keeps free?
+  # inside accepted_lcs_span: masks stop claimed tokens from matching, but a
+  # window can still straddle a claim (matches on both sides), and such
+  # spans fall through to lower match counts.
   defp free_lcs_span(source_stemmed, ext_stemmed, needed, config, claimed) do
-    case accepted_lcs_span(source_stemmed, ext_stemmed, needed, config, []) do
-      nil ->
-        nil
-
-      {start_idx, end_idx} = span ->
-        if free?(claimed, {start_idx, end_idx + 1}) do
-          span
-        else
-          source_stemmed
-          |> mask_tokens(claimed_token_set(claimed))
-          |> accepted_lcs_span(ext_stemmed, needed, config, claimed)
-        end
-    end
+    source_stemmed
+    |> accepted_lcs_span(ext_stemmed, needed, config, [])
+    |> accept_free_or_masked(claimed, fn ->
+      source_stemmed
+      |> mask_tokens(claimed_token_set(claimed))
+      |> accepted_lcs_span(ext_stemmed, needed, config, claimed)
+    end)
   end
 
   # Highest match count whose tightest span passes the coverage, density,
   # and reservation gates (per count the span map already holds the
   # tightest span, earliest start on ties — upstream's preference).
+  # Returns half-open [start, end).
   defp accepted_lcs_span(
          source_stemmed,
          ext_stemmed,
@@ -464,12 +492,13 @@ defmodule LangExtract.Alignment.Aligner do
     |> Map.keys()
     |> Enum.sort(:desc)
     |> Enum.find_value(fn matches ->
-      {start_idx, end_idx} = spans[matches]
-      density = matches / (end_idx - start_idx + 1)
+      # DP harvest stores inclusive ends; convert to half-open for claims.
+      {start, last} = spans[matches]
+      end_ = last + 1
+      density = matches / (end_ - start)
 
-      if matches >= needed and density >= min_density and
-           free?(claimed, {start_idx, end_idx + 1}) do
-        {start_idx, end_idx}
+      if matches >= needed and density >= min_density and free?(claimed, {start, end_}) do
+        {start, end_}
       end
     end)
   end
@@ -487,6 +516,7 @@ defmodule LangExtract.Alignment.Aligner do
   # first j extraction tokens; later starts yield minimal spans, earliest
   # start wins ties. A row is a tuple of m+1 k-vectors (tuples) — cells are
   # written once in build order and only ever read back through elem/2.
+  # Values in the result map are inclusive {start, last} token indices.
   defp best_lcs_spans(source, extraction) do
     m = length(extraction)
     ext = List.to_tuple(extraction)
@@ -537,37 +567,39 @@ defmodule LangExtract.Alignment.Aligner do
   end
 
   defp harvest_spans(best, curr, i, m) do
-    end_idx = i - 1
+    last = i - 1
     last_vec = elem(curr, m)
 
     Enum.reduce(1..m, best, fn k, best ->
-      start_idx = elem(last_vec, k)
+      start = elem(last_vec, k)
 
-      if start_idx < 0 do
+      if start < 0 do
         best
       else
-        update_tightest(best, k, start_idx, end_idx)
+        update_tightest(best, k, start, last)
       end
     end)
   end
 
-  defp update_tightest(best, k, start_idx, end_idx) do
-    new_len = end_idx - start_idx + 1
+  defp update_tightest(best, k, start, last) do
+    new_len = last - start + 1
 
     case Map.get(best, k) do
       nil ->
-        Map.put(best, k, {start_idx, end_idx})
+        Map.put(best, k, {start, last})
 
-      {cur_start, cur_end} ->
-        cur_len = cur_end - cur_start + 1
+      {cur_start, cur_last} ->
+        cur_len = cur_last - cur_start + 1
 
-        if new_len < cur_len or (new_len == cur_len and start_idx < cur_start) do
-          Map.put(best, k, {start_idx, end_idx})
+        if new_len < cur_len or (new_len == cur_len and start < cur_start) do
+          Map.put(best, k, {start, last})
         else
           best
         end
     end
   end
+
+  # --- Spans and token utilities ---
 
   # Upstream _normalize_token: light plural stemming, fuzzy phase only.
   defp stem_token(token) do
@@ -583,9 +615,10 @@ defmodule LangExtract.Alignment.Aligner do
     %Span{text: text, byte_start: nil, byte_end: nil, status: :not_found}
   end
 
-  defp found_span(text, source_words, start_idx, end_idx, status) do
-    first = elem(source_words, start_idx)
-    last = elem(source_words, end_idx)
+  # grounding.start/end are half-open token indices.
+  defp to_span(text, words, %{status: status, start: start, end: end_}) do
+    first = elem(words, start)
+    last = elem(words, end_ - 1)
     %Span{text: text, byte_start: first.byte_start, byte_end: last.byte_end, status: status}
   end
 
