@@ -139,7 +139,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uses `Map.get` + `||`: explicit `"extractions": null`, `attributes:
   false`, or `"text": null` raise named type errors instead of collapsing
   to empty-list / empty-map / missing-key defaults (the teach-nothing
-  silent-failure class).
+  silent-failure class). Struct-authored input gets the same treatment:
+  `%Template.Example{}` and `%Extraction{}` no longer short-circuit past
+  normalization, so a reserved or non-string class inside a struct raises
+  the same named errors as the map path (structs are only
+  presence-checked at construction), and struct-authored attributes
+  normalize to string keys like everything else. The reserved names live
+  in one place now — `WireFormat.reserved_marker_keys/0` and
+  `WireFormat.attribute_suffix/0`, exported by the module whose decode
+  contract reserves them.
 
 - **Live wire decode no longer pins full LLM replies** — `WireFormat`
   uses `Jason.decode(..., strings: :copy)` (same contract as

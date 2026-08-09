@@ -176,6 +176,39 @@ defmodule LangExtractTest do
       end
     end
 
+    # %Template.Example{} must not short-circuit past normalization: a
+    # reserved class that sneaks through renders as a marker key and every
+    # conforming reply decodes to zero extractions with only a log warning.
+    test "struct-authored examples are validated like maps" do
+      assert_raise ArgumentError, ~r/reserved class name/, fn ->
+        LangExtract.template("Extract.",
+          examples: [
+            %Example{
+              text: "take aspirin",
+              extractions: [%Extraction{class: "text", text: "aspirin"}]
+            }
+          ]
+        )
+      end
+
+      assert_raise ArgumentError, ~r/example key :text must be a string, got: 42/, fn ->
+        LangExtract.template("Extract.", examples: [%Example{text: 42}])
+      end
+    end
+
+    # @enforce_keys only checks presence — %Extraction{class: nil} and atom
+    # classes construct fine; they must fail with the map path's named
+    # error, not a FunctionClauseError in the reserved-suffix check.
+    test "non-string struct extraction class raises the named error" do
+      for class <- [nil, :symptom] do
+        assert_raise ArgumentError, ~r/extraction key :class must be a string/, fn ->
+          LangExtract.template("Extract.",
+            examples: [%{text: "x", extractions: [%Extraction{class: class, text: "x"}]}]
+          )
+        end
+      end
+    end
+
     # Any dynamic key ending in "_attributes" is an attributes carrier on
     # the wire: class "note_attributes" would decode as attributes for
     # class "note", silently mangling every conforming reply.

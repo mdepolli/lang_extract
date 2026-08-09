@@ -17,12 +17,33 @@ defmodule LangExtract.WireFormat do
   alias LangExtract.Extraction
 
   @attribute_suffix "_attributes"
+  # Canonical marker keys the decode side (normalize_entry) reserves.
+  @marker_keys ~w(class text)
   @think_pattern ~r/<think>.*?(?:<\/think>|$)/s
   @fence_pattern ~r/```(?:json|yaml)?\s*(.*?)\s*```/s
   @fence_pattern_greedy ~r/```(?:json|yaml)?\s*(.*)\s*```/s
   # Cap retained garbage so a max_tokens-sized non-JSON reply cannot pin
   # multi-megabyte binaries in ChunkError.reason / serialized results.
   @max_invalid_format_bytes 4_096
+
+  @doc """
+  Class names reserved by the wire contract.
+
+  Encoding one of these as a dynamic key collides with the canonical
+  `"class"`/`"text"` marker keys the decoder passes through untouched, so
+  template construction rejects them up front.
+  """
+  @spec reserved_marker_keys() :: [String.t()]
+  def reserved_marker_keys, do: @marker_keys
+
+  @doc """
+  Suffix reserved for attribute-carrier keys (`"<class>_attributes"`).
+
+  A class name ending in it would decode as attributes for another class,
+  so template construction rejects those up front as well.
+  """
+  @spec attribute_suffix() :: String.t()
+  def attribute_suffix, do: @attribute_suffix
 
   @spec format_extractions([Extraction.t()]) :: String.t()
   def format_extractions(extractions) do

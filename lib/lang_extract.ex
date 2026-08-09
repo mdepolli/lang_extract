@@ -30,7 +30,8 @@ defmodule LangExtract do
     Provider,
     Result,
     Span,
-    Template
+    Template,
+    WireFormat
   }
 
   alias LangExtract.Prompt.Validator
@@ -207,7 +208,12 @@ defmodule LangExtract do
     end
   end
 
-  defp normalize_example(%Template.Example{} = example), do: {:ok, example}
+  # Struct-authored examples get the same field and extraction validation
+  # as maps — a struct is only presence-checked at construction, so a
+  # reserved class or wrong-typed field inside one is just as reachable.
+  defp normalize_example(%Template.Example{} = example) do
+    example |> Map.from_struct() |> normalize_example()
+  end
 
   # The classic examples/extractions mix-up: an extraction (or
   # %Extraction{}) passed at example level has :text, and :extractions
@@ -234,20 +240,8 @@ defmodule LangExtract do
     {:error, ArgumentError.exception("example must be a map, got: #{inspect(other)}")}
   end
 
-  # WireFormat reserves "class" and "text" as canonical marker keys on the
-  # wire. Encoding class "text" as a dynamic key produces {"text": "..."},
-  # which the decoder treats as a marker — every conforming model reply is
-  # then skipped with only a warning log. The "_attributes" suffix is
-  # reserved the same way: class "note_attributes" encodes to a key the
-  # decoder reads as attributes for class "note".
-  @reserved_classes ~w(class text)
-  @reserved_suffix "_attributes"
-
-  defp normalize_extraction(%Extraction{class: class} = extraction) do
-    case reject_reserved_class(class) do
-      :ok -> {:ok, extraction}
-      {:error, _} = error -> error
-    end
+  defp normalize_extraction(%Extraction{} = extraction) do
+    extraction |> Map.from_struct() |> normalize_extraction()
   end
 
   defp normalize_extraction(%{} = map) do
@@ -265,24 +259,32 @@ defmodule LangExtract do
     {:error, ArgumentError.exception("extraction must be a map, got: #{inspect(other)}")}
   end
 
-  defp reject_reserved_class(class) when class in @reserved_classes do
-    {:error,
-     ArgumentError.exception(
-       "extraction class #{inspect(class)} is a reserved class name " <>
-         "(WireFormat marker keys); choose another class"
-     )}
-  end
-
+  # The reserved names belong to the wire contract WireFormat owns: a
+  # reserved class encodes to a marker key ({"text": ...}) every conforming
+  # reply then skips with a warning log, and a class ending in the
+  # attribute suffix decodes as another class's attributes. Callers
+  # guarantee `class` is a string (fetch_string runs first).
   defp reject_reserved_class(class) do
-    if String.ends_with?(class, @reserved_suffix) do
-      {:error,
-       ArgumentError.exception(
-         "extraction class #{inspect(class)} ends with the reserved suffix " <>
-           "#{inspect(@reserved_suffix)} (WireFormat attribute-carrier keys); " <>
-           "choose another class"
-       )}
-    else
-      :ok
+    suffix = WireFormat.attribute_suffix()
+
+    cond do
+      class in WireFormat.reserved_marker_keys() ->
+        {:error,
+         ArgumentError.exception(
+           "extraction class #{inspect(class)} is a reserved class name " <>
+             "(WireFormat marker keys); choose another class"
+         )}
+
+      String.ends_with?(class, suffix) ->
+        {:error,
+         ArgumentError.exception(
+           "extraction class #{inspect(class)} ends with the reserved suffix " <>
+             "#{inspect(suffix)} (WireFormat attribute-carrier keys); " <>
+             "choose another class"
+         )}
+
+      true ->
+        :ok
     end
   end
 
