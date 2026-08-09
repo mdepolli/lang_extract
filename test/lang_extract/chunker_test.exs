@@ -3,6 +3,25 @@ defmodule LangExtract.ChunkerTest do
 
   alias LangExtract.Chunker
 
+  # Chunks are token intervals (mirroring upstream): ordered,
+  # non-overlapping, byte-faithful against the source, and only
+  # whitespace may fall between them.
+  defp assert_covers_source(chunks, text) do
+    for chunk <- chunks do
+      assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
+               chunk.text
+    end
+
+    starts = Enum.map(chunks, & &1.byte_start)
+    ends = Enum.map(chunks, & &1.byte_end)
+
+    for {gap_start, gap_end} <- Enum.zip([0 | ends], starts ++ [byte_size(text)]) do
+      assert gap_start <= gap_end, "chunks out of order or overlapping"
+      gap = binary_part(text, gap_start, gap_end - gap_start)
+      assert String.trim(gap) == "", "non-whitespace text lost between chunks: #{inspect(gap)}"
+    end
+  end
+
   describe "chunk/2" do
     # nil would otherwise disable chunking silently: integers sort before
     # atoms, so every byte_size(sentence) <= nil comparison is true and
@@ -26,8 +45,7 @@ defmodule LangExtract.ChunkerTest do
       text = "First sentence. Second sentence. Third sentence. Fourth sentence."
       chunks = Chunker.chunk(text, max_chunk_chars: 35)
       assert length(chunks) >= 2
-      reconstructed = Enum.map_join(chunks, "", & &1.text)
-      assert reconstructed == text
+      assert_covers_source(chunks, text)
     end
 
     # Packing counts characters (String.length) while offsets count bytes
@@ -44,13 +62,9 @@ defmodule LangExtract.ChunkerTest do
 
         for chunk <- chunks do
           assert String.valid?(chunk.text), "split codepoint at max_chars=#{max_chars}"
-
-          assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
-                   chunk.text,
-                 "byte offsets drifted at max_chars=#{max_chars}"
         end
 
-        assert Enum.map_join(chunks, "", & &1.text) == text
+        assert_covers_source(chunks, text)
       end
     end
 
@@ -63,12 +77,9 @@ defmodule LangExtract.ChunkerTest do
 
       for chunk <- chunks do
         assert String.valid?(chunk.text)
-
-        assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
-                 chunk.text
       end
 
-      assert Enum.map_join(chunks, "", & &1.text) == text
+      assert_covers_source(chunks, text)
     end
 
     test "boundary-free text is hard-split within the budget" do
@@ -81,12 +92,9 @@ defmodule LangExtract.ChunkerTest do
 
       for chunk <- chunks do
         assert String.length(chunk.text) <= 50
-
-        assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
-                 chunk.text
       end
 
-      assert Enum.map_join(chunks, "", & &1.text) == text
+      assert_covers_source(chunks, text)
     end
 
     test "a single token longer than the budget stays whole" do
@@ -115,14 +123,14 @@ defmodule LangExtract.ChunkerTest do
 
       assert length(chunks) > 1
       assert Enum.all?(chunks, &(String.length(&1.text) <= 20))
-      assert Enum.map_join(chunks, "", & &1.text) == text
+      assert_covers_source(chunks, text)
     end
 
-    test "chunks cover entire source text" do
+    test "chunks cover all non-whitespace source text" do
       text = "Hello world. How are you? I am fine. Thanks for asking!"
       chunks = Chunker.chunk(text, max_chunk_chars: 25)
-      reconstructed = Enum.map_join(chunks, "", & &1.text)
-      assert reconstructed == text
+      assert length(chunks) > 1
+      assert_covers_source(chunks, text)
     end
 
     test "handles multibyte UTF-8 text with correct byte offsets" do
@@ -130,12 +138,8 @@ defmodule LangExtract.ChunkerTest do
       text = "Café is great. Señor drinks café."
       chunks = Chunker.chunk(text, max_chunk_chars: 20)
 
-      for chunk <- chunks do
-        assert binary_part(text, chunk.byte_start, byte_size(chunk.text)) == chunk.text
-      end
-
-      reconstructed = Enum.map_join(chunks, "", & &1.text)
-      assert reconstructed == text
+      assert length(chunks) > 1
+      assert_covers_source(chunks, text)
     end
 
     test "text exactly at max_chunk_chars boundary" do
@@ -198,26 +202,20 @@ defmodule LangExtract.ChunkerTest do
       assert hd(sentences) == text
     end
 
-    test "sentences concatenated equal original text" do
+    test "sentence texts span first to last token, excluding the gaps" do
       text = "Hello world. Goodbye world. How are you?"
       sentences = Chunker.find_sentences(text)
-      assert Enum.join(sentences) == text
+      assert sentences == ["Hello world.", "Goodbye world.", "How are you?"]
     end
 
-    test "CRLF line endings: chunk byte ranges tile the source exactly" do
+    test "CRLF line endings: chunk byte ranges slice the source verbatim" do
       # Windows corpora arrive with \r\n; every offset downstream depends
       # on chunk ranges slicing the original bytes back out verbatim.
       text = "First sentence here.\r\nSecond sentence there.\r\nThird one closes it."
       chunks = Chunker.chunk(text, max_chunk_chars: 25)
 
       assert length(chunks) > 1
-
-      for chunk <- chunks do
-        assert binary_part(text, chunk.byte_start, chunk.byte_end - chunk.byte_start) ==
-                 chunk.text
-      end
-
-      assert Enum.map_join(chunks, & &1.text) == text
+      assert_covers_source(chunks, text)
     end
   end
 end

@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Chunks are token intervals, mirroring upstream** — a chunk's text now
+  runs from its first token's start to its last token's end, so
+  whitespace between chunks belongs to no chunk and chunks no longer tile
+  the source (only whitespace may fall between them). Chunk byte ranges
+  still slice their text out of the source verbatim, and span offsets are
+  unaffected — inter-chunk whitespace was never inside any aligned span.
+  Prompts no longer carry another chunk's leading whitespace.
+
 ### Fixed
+
+- **Chunker boundaries match upstream's `ChunkIterator` exactly** — the
+  sentence splitter and packer are now a faithful port, verified by a new
+  parity fixture suite (`chunker_parity_test.exs`, generated from the
+  upstream checkout by `gen_chunker_fixtures.py`) and a full-corpus
+  differential (3,184 chunks across 12 Gutenberg documents at two buffer
+  sizes, byte-identical). Closed divergences, all real on benchmark text:
+  closing punctuation now consumed across whitespace (the `"` opening the
+  next line's dialogue attaches to the sentence before it); budgets
+  measured from the first token, never counting leading whitespace;
+  oversized sentences cut at the most recent newline; broken-sentence
+  fragments isolated in their own chunks instead of merging with
+  neighbors; lone `\r` treated as a line break; the abbreviation check
+  reads the previous token across whitespace (`"Dr ."`); budgets count
+  code points, not graphemes (`\r\n` is two, so hard-wrapped CRLF text
+  no longer drifts one char per line).
 
 - **429 paths pause before freeing the in-flight slot** —
   `Limiter.release_and_pause/2` applies release and the global

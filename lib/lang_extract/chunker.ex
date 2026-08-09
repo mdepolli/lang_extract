@@ -1,24 +1,46 @@
 defmodule LangExtract.Chunker do
   @moduledoc """
-  Splits text into sentence-level chunks using the Alignment.Tokenizer.
+  Splits text into sentence-aware chunks, mirroring upstream's `ChunkIterator`.
+
+  A chunk is a token interval: its text runs from its first token's start to
+  its last token's end. Whitespace between chunks belongs to no chunk, so
+  chunks do not tile the source — matching upstream, whose token stream has
+  no whitespace tokens. Byte offsets always slice the chunk's text back out
+  of the source verbatim.
 
   Sentence boundary rules (mirroring upstream's `find_sentence_range`):
   1. A `:punctuation` token ending in a sentence terminator (`.`, `!`, `?`,
      CJK equivalents — `...` counts, since symbol runs are one token) ends a
      sentence, unless the previous token plus the terminator form a known
-     abbreviation (`"Dr" <> "." == "Dr."`).
+     abbreviation (`"Dr" <> "." == "Dr."`). Whitespace is invisible here, so
+     `"Dr ."` still reads as the abbreviation.
   2. After sentence-ending punctuation, trailing closing punctuation
-     (`"`, `'`, `)`, `]`, `}`, `»`, `\u201D`, `\u2019`) is consumed into the same sentence.
-  3. A `:whitespace` token containing `\\n` starts a new sentence unless the
-     next token begins lowercase — lines opening with quotes, digits, or
-     capitals all break (upstream: "assume break unless lowercase").
+     (`"`, `'`, `)`, `]`, `}`, `»`, `”`, `’`) is consumed into the
+     same sentence — across any whitespace, so the quote opening the next
+     line's dialogue attaches to the sentence before it, exactly as upstream.
+  3. A token first on its line (its gap from the previous token contains
+     `\\n` or `\\r`) starts a new sentence unless it begins lowercase —
+     lines opening with quotes, digits, or capitals all break (upstream:
+     "assume break unless lowercase").
+
+  Chunk assembly (mirroring upstream's `ChunkIterator.__next__`):
+  1. A single token longer than the budget forms a chunk by itself.
+  2. An oversized sentence is cut at the most recent newline within budget
+     when one exists, else at the last token that fits; the remainder
+     restarts sentence discovery mid-sentence.
+  3. A chunk that completes a broken sentence never absorbs following
+     sentences.
+  4. Otherwise whole sentences pack into the chunk while they fit.
+
+  Budgets count characters (upstream's `max_char_buffer` unit — see
+  `chunk/2`); offsets are bytes.
   """
 
   alias LangExtract.Alignment.Tokenizer
   alias LangExtract.Chunker.Chunk
 
   @abbreviations ~w(Mr. Mrs. Ms. Dr. Prof. St.)
-  @closing_punctuation [~s("), "'", ")", "]", "}", "»", "\u201D", "\u2019"]
+  @closing_punctuation [~s("), "'", ")", "]", "}", "»", "”", "’"]
   # Upstream's _END_OF_SENTENCE_PATTERN: a token ending in a sentence
   # terminator (same-symbol runs make "..." one token, so match the tail).
   @sentence_ending ~r/[.?!。！？\x{0964}]["'”’»)\]}]*$/u
@@ -29,9 +51,10 @@ defmodule LangExtract.Chunker do
   ## Options
 
     * `:max_chunk_chars` — maximum characters per chunk (required).
-      Char-denominated to mirror upstream's `max_char_buffer`, so chunk
-      boundaries land identically across the two libraries — the
-      cross-library benchmarks depend on that. Output offsets are bytes.
+      Char-denominated to mirror upstream's `max_char_buffer` — chars are
+      code points, Python's `len` unit — so chunk boundaries land
+      identically across the two libraries; the cross-library benchmarks
+      depend on that. Output offsets are bytes.
 
   """
   @spec chunk(String.t(), keyword()) :: [Chunk.t()]
@@ -39,164 +62,227 @@ defmodule LangExtract.Chunker do
     max_chars = Keyword.fetch!(opts, :max_chunk_chars)
 
     # nil would otherwise disable chunking silently: integers sort before
-    # atoms in term order, so byte_size(sentence) <= nil is always true
-    # and the whole document becomes one chunk.
+    # atoms in term order, so char-count <= nil is always true and the
+    # whole document becomes one chunk.
     unless is_integer(max_chars) and max_chars > 0 do
       raise ArgumentError,
             "max_chunk_chars must be a positive integer, got: #{inspect(max_chars)}"
     end
 
-    text
-    |> find_sentences()
-    |> Enum.flat_map(&split_oversized(&1, max_chars))
-    |> pack_sentences(max_chars)
+    tokens = annotate_tokens(text)
+    build_chunks(text, tokens, tuple_size(tokens), 0, false, max_chars, [])
   end
 
-  # A sentence longer than the budget is hard-split at token boundaries
-  # (mirroring upstream's ChunkIterator) — otherwise boundary-free text
-  # (logs, minified content) becomes one whole-document chunk and defeats
-  # the size guarantee. Fragments concatenate back to the sentence exactly,
-  # so pack_sentences' byte accounting is unaffected. A single token longer
-  # than the budget stays whole: token boundaries are never violated.
-  defp split_oversized(sentence, max_chars) do
-    # chars ≤ bytes, so a small byte count proves the sentence fits without
-    # walking its graphemes; only near-oversized sentences pay for a count.
-    if byte_size(sentence) <= max_chars or String.length(sentence) <= max_chars do
-      [sentence]
-    else
-      sentence
+  # The chunker's token stream: the tokenizer's non-whitespace tokens,
+  # annotated with char positions (the budget unit) and whether the gap
+  # from the previous token contains a line break (upstream's
+  # first_token_after_newline; a lone \r counts, and the document's first
+  # token never carries the flag).
+  defp annotate_tokens(text) do
+    {annotated, _char_pos, _newline?} =
+      text
       |> Tokenizer.tokenize()
-      |> split_tokens(max_chars)
-    end
+      |> Enum.reduce({[], 0, false}, &annotate_token/2)
+
+    annotated
+    |> Enum.reverse()
+    |> List.to_tuple()
   end
 
-  defp split_tokens(tokens, max_chars) do
-    {fragments, current, _len} =
-      Enum.reduce(tokens, {[], [], 0}, fn token, {fragments, current, len} ->
-        token_len = String.length(token.text)
+  defp annotate_token(token, {acc, char_pos, newline?}) do
+    # Code points, not graphemes: upstream's budget unit is Python's len().
+    # String.length/1 would undercount "\r\n" (one grapheme, two code
+    # points) by one char per hard-wrapped line, drifting every cut.
+    char_end = char_pos + length(String.codepoints(token.text))
 
-        cond do
-          current == [] ->
-            {fragments, [token.text], token_len}
-
-          len + token_len <= max_chars ->
-            {fragments, [token.text | current], len + token_len}
-
-          true ->
-            {[join_fragment(current) | fragments], [token.text], token_len}
-        end
-      end)
-
-    Enum.reverse([join_fragment(current) | fragments])
-  end
-
-  defp join_fragment(reversed_texts) do
-    reversed_texts |> Enum.reverse() |> IO.iodata_to_binary()
-  end
-
-  defp pack_sentences(sentences, max_chars) do
-    {chunks, current_text, current_start, _current_len} =
-      Enum.reduce(sentences, {[], "", 0, 0}, fn sentence,
-                                                {chunks, current_text, current_start, current_len} ->
-        sentence_len = String.length(sentence)
-
-        if current_len + sentence_len <= max_chars or current_text == "" do
-          {chunks, current_text <> sentence, current_start, current_len + sentence_len}
-        else
-          byte_end = current_start + byte_size(current_text)
-          chunk = %Chunk{text: current_text, byte_start: current_start, byte_end: byte_end}
-          {[chunk | chunks], sentence, byte_end, sentence_len}
-        end
-      end)
-
-    if current_text != "" do
-      byte_end = current_start + byte_size(current_text)
-
-      Enum.reverse([
-        %Chunk{text: current_text, byte_start: current_start, byte_end: byte_end} | chunks
-      ])
+    if token.type == :whitespace do
+      gap_breaks? = newline? or String.contains?(token.text, ["\n", "\r"])
+      {acc, char_end, gap_breaks?}
     else
-      Enum.reverse(chunks)
+      annotated = %{
+        text: token.text,
+        type: token.type,
+        byte_start: token.byte_start,
+        byte_end: token.byte_end,
+        char_start: char_pos,
+        char_end: char_end,
+        newline?: newline? and acc != []
+      }
+
+      {[annotated | acc], char_end, false}
     end
+  end
+
+  # Upstream ChunkIterator.__next__, one clause per return path: a token
+  # wider than the budget is its own chunk; otherwise the sentence grows
+  # token-by-token (cutting at the budget), and only an unbroken sentence
+  # may then absorb following whole sentences.
+  defp build_chunks(_text, _tokens, count, pos, _broken?, _max_chars, acc) when pos >= count do
+    Enum.reverse(acc)
+  end
+
+  defp build_chunks(text, tokens, count, pos, broken?, max_chars, acc) do
+    sentence_end = find_sentence_range(tokens, count, pos)
+
+    if span_exceeds?(tokens, pos, pos + 1, max_chars) do
+      chunk = emit_chunk(text, tokens, pos, pos + 1)
+      still_broken? = pos + 1 < sentence_end
+      build_chunks(text, tokens, count, pos + 1, still_broken?, max_chars, [chunk | acc])
+    else
+      case fit_within_sentence(tokens, pos, pos + 1, sentence_end, -1, max_chars) do
+        {:cut, cut_end} ->
+          chunk = emit_chunk(text, tokens, pos, cut_end)
+          build_chunks(text, tokens, count, cut_end, true, max_chars, [chunk | acc])
+
+        :fits when broken? ->
+          chunk = emit_chunk(text, tokens, pos, sentence_end)
+          build_chunks(text, tokens, count, sentence_end, false, max_chars, [chunk | acc])
+
+        :fits ->
+          chunk_end = append_sentences(tokens, count, pos, sentence_end, max_chars)
+          chunk = emit_chunk(text, tokens, pos, chunk_end)
+          build_chunks(text, tokens, count, chunk_end, false, max_chars, [chunk | acc])
+      end
+    end
+  end
+
+  # Grows [start, idx) through the sentence until the budget trips. The
+  # first token already fit (build_chunks checked), so a cut interval is
+  # never empty. On a cut, the most recent line start wins when it lies
+  # inside the interval — upstream breaks oversized sentences at newlines.
+  defp fit_within_sentence(_tokens, _start, idx, sentence_end, _newline_idx, _max_chars)
+       when idx > sentence_end do
+    :fits
+  end
+
+  defp fit_within_sentence(tokens, start, idx, sentence_end, newline_idx, max_chars) do
+    if span_exceeds?(tokens, start, idx, max_chars) do
+      cut_end = if newline_idx > start, do: newline_idx, else: idx - 1
+      {:cut, cut_end}
+    else
+      newline_idx = next_newline_idx(tokens, idx, sentence_end, newline_idx)
+      fit_within_sentence(tokens, start, idx + 1, sentence_end, newline_idx, max_chars)
+    end
+  end
+
+  defp next_newline_idx(tokens, idx, sentence_end, newline_idx) do
+    if idx < sentence_end and elem(tokens, idx).newline?, do: idx, else: newline_idx
+  end
+
+  # Upstream's trailing sentence loop: keep absorbing whole sentences while
+  # the chunk stays within budget. Sentences are contiguous, so the chunk
+  # ends exactly where the first non-fitting sentence starts.
+  defp append_sentences(_tokens, count, _start, chunk_end, _max_chars) when chunk_end >= count do
+    chunk_end
+  end
+
+  defp append_sentences(tokens, count, start, chunk_end, max_chars) do
+    next_end = find_sentence_range(tokens, count, chunk_end)
+
+    if span_exceeds?(tokens, start, next_end, max_chars) do
+      chunk_end
+    else
+      append_sentences(tokens, count, start, next_end, max_chars)
+    end
+  end
+
+  # Char width of the token interval [start, stop): first token's start to
+  # last token's end, leading whitespace excluded, interior included —
+  # upstream measures chunks through get_char_interval the same way.
+  defp span_exceeds?(tokens, start, stop, max_chars) do
+    elem(tokens, stop - 1).char_end - elem(tokens, start).char_start > max_chars
+  end
+
+  defp emit_chunk(text, tokens, start, stop) do
+    first = elem(tokens, start)
+    last = elem(tokens, stop - 1)
+
+    %Chunk{
+      text: binary_part(text, first.byte_start, last.byte_end - first.byte_start),
+      byte_start: first.byte_start,
+      byte_end: last.byte_end
+    }
   end
 
   # Public only as a test seam: the sentence-boundary rules aren't
   # observable through chunk/2 (packing merges sentences back together).
+  # Sentence texts span first to last token, like chunks.
   @doc false
   @spec find_sentences(String.t()) :: [String.t()]
-  def find_sentences(""), do: []
-
   def find_sentences(text) when is_binary(text) do
-    tokens = Tokenizer.tokenize(text)
-    tokens_tuple = List.to_tuple(tokens)
-    count = tuple_size(tokens_tuple)
-    boundaries = find_boundaries(tokens_tuple, count)
-    tokens_to_sentences(tokens_tuple, boundaries, text)
+    tokens = annotate_tokens(text)
+    count = tuple_size(tokens)
+    collect_sentences(text, tokens, count, 0, [])
   end
 
-  defp find_boundaries(tokens_tuple, count) do
-    boundaries =
-      Enum.reduce(0..(count - 1)//1, [], fn idx, acc ->
-        token = elem(tokens_tuple, idx)
-
-        cond do
-          sentence_end_by_punctuation?(token, idx, tokens_tuple) ->
-            end_idx = consume_closing_punctuation(idx + 1, tokens_tuple, count)
-            [end_idx | acc]
-
-          sentence_end_by_newline?(token, idx, tokens_tuple, count) ->
-            [idx | acc]
-
-          true ->
-            acc
-        end
-      end)
-
-    boundaries
-    |> Enum.sort()
-    |> Enum.uniq()
-    |> ensure_final_boundary(count)
+  defp collect_sentences(_text, _tokens, count, pos, acc) when pos >= count do
+    Enum.reverse(acc)
   end
 
-  defp sentence_end_by_punctuation?(%{type: :punctuation, text: text}, idx, tokens_tuple) do
-    Regex.match?(@sentence_ending, text) and not abbreviation_before?(idx, tokens_tuple, text)
+  defp collect_sentences(text, tokens, count, pos, acc) do
+    sentence_end = find_sentence_range(tokens, count, pos)
+    first = elem(tokens, pos)
+    last = elem(tokens, sentence_end - 1)
+    sentence = binary_part(text, first.byte_start, last.byte_end - first.byte_start)
+    collect_sentences(text, tokens, count, sentence_end, [sentence | acc])
   end
 
-  defp sentence_end_by_punctuation?(_token, _idx, _tokens_tuple), do: false
+  # Upstream find_sentence_range: scan for a sentence-ending punctuation
+  # token (consuming trailing closing punctuation) or a line break followed
+  # by a non-lowercase token; end of text ends the sentence.
+  defp find_sentence_range(_tokens, count, idx) when idx >= count, do: count
+
+  defp find_sentence_range(tokens, count, idx) do
+    token = elem(tokens, idx)
+
+    cond do
+      sentence_end_by_punctuation?(token, idx, tokens) ->
+        consume_closing_punctuation(idx + 1, tokens, count)
+
+      sentence_break_after_newline?(idx, tokens, count) ->
+        idx + 1
+
+      true ->
+        find_sentence_range(tokens, count, idx + 1)
+    end
+  end
+
+  defp sentence_end_by_punctuation?(%{type: :punctuation, text: text}, idx, tokens) do
+    Regex.match?(@sentence_ending, text) and not abbreviation_before?(idx, tokens, text)
+  end
+
+  defp sentence_end_by_punctuation?(_token, _idx, _tokens), do: false
 
   # Upstream concatenates the previous token with the terminator and
-  # checks the pair ("Dr" <> "." == "Dr."), so "Dr..." still breaks.
-  defp abbreviation_before?(punct_idx, tokens_tuple, punct_text) when punct_idx > 0 do
-    prev = elem(tokens_tuple, punct_idx - 1)
+  # checks the pair ("Dr" <> "." == "Dr."), so "Dr..." still breaks. The
+  # token stream has no whitespace, so "Dr ." reads the same as "Dr.".
+  defp abbreviation_before?(punct_idx, tokens, punct_text) when punct_idx > 0 do
+    prev = elem(tokens, punct_idx - 1)
     (prev.text <> punct_text) in @abbreviations
   end
 
-  defp abbreviation_before?(_punct_idx, _tokens_tuple, _punct_text), do: false
+  defp abbreviation_before?(_punct_idx, _tokens, _punct_text), do: false
 
-  defp consume_closing_punctuation(idx, tokens_tuple, count) when idx < count do
-    token = elem(tokens_tuple, idx)
+  defp consume_closing_punctuation(idx, tokens, count) when idx < count do
+    token = elem(tokens, idx)
 
     if token.type == :punctuation and token.text in @closing_punctuation do
-      consume_closing_punctuation(idx + 1, tokens_tuple, count)
+      consume_closing_punctuation(idx + 1, tokens, count)
     else
       idx
     end
   end
 
-  defp consume_closing_punctuation(idx, _tokens_tuple, _count), do: idx
+  defp consume_closing_punctuation(idx, _tokens, _count), do: idx
 
   # Upstream: "Assume break unless lowercase (covers numbers/quotes)" —
   # a line starting with “, a digit, or an uppercase letter all break.
-  defp sentence_end_by_newline?(%{type: :whitespace, text: ws_text}, idx, tokens_tuple, count) do
-    if String.contains?(ws_text, "\n") and idx + 1 < count do
-      next = elem(tokens_tuple, idx + 1)
-      not lowercase_start?(next.text)
-    else
-      false
-    end
+  defp sentence_break_after_newline?(idx, tokens, count) when idx + 1 < count do
+    next = elem(tokens, idx + 1)
+    next.newline? and not lowercase_start?(next.text)
   end
 
-  defp sentence_end_by_newline?(_token, _idx, _tokens_tuple, _count), do: false
+  defp sentence_break_after_newline?(_idx, _tokens, _count), do: false
 
   defp lowercase_start?(<<first::utf8, _rest::binary>>) do
     char = <<first::utf8>>
@@ -204,30 +290,4 @@ defmodule LangExtract.Chunker do
   end
 
   defp lowercase_start?(_), do: false
-
-  defp ensure_final_boundary(boundaries, count) do
-    if List.last(boundaries) == count do
-      boundaries
-    else
-      boundaries ++ [count]
-    end
-  end
-
-  # Extracts sentence strings using byte offsets from the token tuple.
-  # Uses boundary pairs to look up first/last token directly — O(1) per sentence.
-  defp tokens_to_sentences(tokens_tuple, boundaries, text) do
-    {sentences, _} =
-      Enum.reduce(boundaries, {[], 0}, fn boundary, {acc, start_idx} ->
-        if boundary > start_idx do
-          first = elem(tokens_tuple, start_idx)
-          last = elem(tokens_tuple, boundary - 1)
-          sentence = binary_part(text, first.byte_start, last.byte_end - first.byte_start)
-          {[sentence | acc], boundary}
-        else
-          {acc, boundary}
-        end
-      end)
-
-    Enum.reverse(sentences)
-  end
 end

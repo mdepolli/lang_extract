@@ -1,0 +1,1134 @@
+[
+  {
+    "name": "quote_after_terminator_10",
+    "text": "He left. \"Come back,\" she said.",
+    "max_char_buffer": 10,
+    "chunks": [
+      {
+        "text": "He left. \"",
+        "byte_start": 0,
+        "byte_end": 10
+      },
+      {
+        "text": "Come back,",
+        "byte_start": 10,
+        "byte_end": 20
+      },
+      {
+        "text": "\" she said",
+        "byte_start": 20,
+        "byte_end": 30
+      },
+      {
+        "text": ".",
+        "byte_start": 30,
+        "byte_end": 31
+      }
+    ],
+    "note": "ASCII closing quote consumed across the whitespace gap"
+  },
+  {
+    "name": "quote_after_terminator_12",
+    "text": "He left. \"Come back,\" she said.",
+    "max_char_buffer": 12,
+    "chunks": [
+      {
+        "text": "He left. \"",
+        "byte_start": 0,
+        "byte_end": 10
+      },
+      {
+        "text": "Come back,\"",
+        "byte_start": 10,
+        "byte_end": 21
+      },
+      {
+        "text": "she said.",
+        "byte_start": 22,
+        "byte_end": 31
+      }
+    ],
+    "note": "ASCII closing quote consumed across the whitespace gap"
+  },
+  {
+    "name": "quote_after_terminator_20",
+    "text": "He left. \"Come back,\" she said.",
+    "max_char_buffer": 20,
+    "chunks": [
+      {
+        "text": "He left. \"",
+        "byte_start": 0,
+        "byte_end": 10
+      },
+      {
+        "text": "Come back,\" she said",
+        "byte_start": 10,
+        "byte_end": 30
+      },
+      {
+        "text": ".",
+        "byte_start": 30,
+        "byte_end": 31
+      }
+    ],
+    "note": "ASCII closing quote consumed across the whitespace gap"
+  },
+  {
+    "name": "quote_after_terminator_31",
+    "text": "He left. \"Come back,\" she said.",
+    "max_char_buffer": 31,
+    "chunks": [
+      {
+        "text": "He left. \"Come back,\" she said.",
+        "byte_start": 0,
+        "byte_end": 31
+      }
+    ],
+    "note": "ASCII closing quote consumed across the whitespace gap"
+  },
+  {
+    "name": "quote_after_terminator_100",
+    "text": "He left. \"Come back,\" she said.",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "He left. \"Come back,\" she said.",
+        "byte_start": 0,
+        "byte_end": 31
+      }
+    ],
+    "note": "ASCII closing quote consumed across the whitespace gap"
+  },
+  {
+    "name": "knife_edge_budget_20",
+    "text": "Aaaa bbbbb ccccc ddd. Bbbbb cccc. Cccc ddd.",
+    "max_char_buffer": 20,
+    "chunks": [
+      {
+        "text": "Aaaa bbbbb ccccc ddd",
+        "byte_start": 0,
+        "byte_end": 20
+      },
+      {
+        "text": ".",
+        "byte_start": 20,
+        "byte_end": 21
+      },
+      {
+        "text": "Bbbbb cccc.",
+        "byte_start": 22,
+        "byte_end": 33
+      },
+      {
+        "text": "Cccc ddd.",
+        "byte_start": 34,
+        "byte_end": 43
+      }
+    ],
+    "note": "budget measured from first non-whitespace token"
+  },
+  {
+    "name": "knife_edge_budget_21",
+    "text": "Aaaa bbbbb ccccc ddd. Bbbbb cccc. Cccc ddd.",
+    "max_char_buffer": 21,
+    "chunks": [
+      {
+        "text": "Aaaa bbbbb ccccc ddd.",
+        "byte_start": 0,
+        "byte_end": 21
+      },
+      {
+        "text": "Bbbbb cccc. Cccc ddd.",
+        "byte_start": 22,
+        "byte_end": 43
+      }
+    ],
+    "note": "budget measured from first non-whitespace token"
+  },
+  {
+    "name": "knife_edge_budget_22",
+    "text": "Aaaa bbbbb ccccc ddd. Bbbbb cccc. Cccc ddd.",
+    "max_char_buffer": 22,
+    "chunks": [
+      {
+        "text": "Aaaa bbbbb ccccc ddd.",
+        "byte_start": 0,
+        "byte_end": 21
+      },
+      {
+        "text": "Bbbbb cccc. Cccc ddd.",
+        "byte_start": 22,
+        "byte_end": 43
+      }
+    ],
+    "note": "budget measured from first non-whitespace token"
+  },
+  {
+    "name": "knife_edge_budget_43",
+    "text": "Aaaa bbbbb ccccc ddd. Bbbbb cccc. Cccc ddd.",
+    "max_char_buffer": 43,
+    "chunks": [
+      {
+        "text": "Aaaa bbbbb ccccc ddd. Bbbbb cccc. Cccc ddd.",
+        "byte_start": 0,
+        "byte_end": 43
+      }
+    ],
+    "note": "budget measured from first non-whitespace token"
+  },
+  {
+    "name": "newline_break_in_oversized_11",
+    "text": "aaa bbb ccc\nddd eee fff",
+    "max_char_buffer": 11,
+    "chunks": [
+      {
+        "text": "aaa bbb ccc",
+        "byte_start": 0,
+        "byte_end": 11
+      },
+      {
+        "text": "ddd eee fff",
+        "byte_start": 12,
+        "byte_end": 23
+      }
+    ],
+    "note": "oversized sentences split at the most recent newline"
+  },
+  {
+    "name": "newline_break_in_oversized_15",
+    "text": "aaa bbb ccc\nddd eee fff",
+    "max_char_buffer": 15,
+    "chunks": [
+      {
+        "text": "aaa bbb ccc",
+        "byte_start": 0,
+        "byte_end": 11
+      },
+      {
+        "text": "ddd eee fff",
+        "byte_start": 12,
+        "byte_end": 23
+      }
+    ],
+    "note": "oversized sentences split at the most recent newline"
+  },
+  {
+    "name": "newline_break_in_oversized_23",
+    "text": "aaa bbb ccc\nddd eee fff",
+    "max_char_buffer": 23,
+    "chunks": [
+      {
+        "text": "aaa bbb ccc\nddd eee fff",
+        "byte_start": 0,
+        "byte_end": 23
+      }
+    ],
+    "note": "oversized sentences split at the most recent newline"
+  },
+  {
+    "name": "donne_poem_40",
+    "text": "No man is an island,\nEntire of itself,\nEvery man is a piece of the continent,\nA part of the main.",
+    "max_char_buffer": 40,
+    "chunks": [
+      {
+        "text": "No man is an island,\nEntire of itself,",
+        "byte_start": 0,
+        "byte_end": 38
+      },
+      {
+        "text": "Every man is a piece of the continent,",
+        "byte_start": 39,
+        "byte_end": 77
+      },
+      {
+        "text": "A part of the main.",
+        "byte_start": 78,
+        "byte_end": 97
+      }
+    ],
+    "note": "upstream ChunkIterator docstring example A"
+  },
+  {
+    "name": "oversized_token_20",
+    "text": "This is antidisestablishmentarianism.",
+    "max_char_buffer": 20,
+    "chunks": [
+      {
+        "text": "This is",
+        "byte_start": 0,
+        "byte_end": 7
+      },
+      {
+        "text": "antidisestablishmentarianism",
+        "byte_start": 8,
+        "byte_end": 36
+      },
+      {
+        "text": ".",
+        "byte_start": 36,
+        "byte_end": 37
+      }
+    ],
+    "note": "upstream ChunkIterator docstring example B"
+  },
+  {
+    "name": "whole_sentences_60",
+    "text": "Roses are red. Violets are blue. Flowers are nice. And so are you.",
+    "max_char_buffer": 60,
+    "chunks": [
+      {
+        "text": "Roses are red. Violets are blue. Flowers are nice.",
+        "byte_start": 0,
+        "byte_end": 50
+      },
+      {
+        "text": "And so are you.",
+        "byte_start": 51,
+        "byte_end": 66
+      }
+    ],
+    "note": "upstream ChunkIterator docstring example C"
+  },
+  {
+    "name": "fragment_then_sentence_21",
+    "text": "wwwwwwwwww xxxxxxxxxx yyyyyyyyyy. Zz aa.",
+    "max_char_buffer": 21,
+    "chunks": [
+      {
+        "text": "wwwwwwwwww xxxxxxxxxx",
+        "byte_start": 0,
+        "byte_end": 21
+      },
+      {
+        "text": "yyyyyyyyyy.",
+        "byte_start": 22,
+        "byte_end": 33
+      },
+      {
+        "text": "Zz aa.",
+        "byte_start": 34,
+        "byte_end": 40
+      }
+    ],
+    "note": "broken-sentence fragments never merge with the next sentence"
+  },
+  {
+    "name": "sentence_then_fragment_21",
+    "text": "Aa bb. cccccccccc dddddddddd eeee.",
+    "max_char_buffer": 21,
+    "chunks": [
+      {
+        "text": "Aa bb.",
+        "byte_start": 0,
+        "byte_end": 6
+      },
+      {
+        "text": "cccccccccc dddddddddd",
+        "byte_start": 7,
+        "byte_end": 28
+      },
+      {
+        "text": "eeee.",
+        "byte_start": 29,
+        "byte_end": 34
+      }
+    ],
+    "note": "an oversized sentence starts its own chunk run"
+  },
+  {
+    "name": "lone_cr_8",
+    "text": "First line\rSecond line",
+    "max_char_buffer": 8,
+    "chunks": [
+      {
+        "text": "First",
+        "byte_start": 0,
+        "byte_end": 5
+      },
+      {
+        "text": "line",
+        "byte_start": 6,
+        "byte_end": 10
+      },
+      {
+        "text": "Second",
+        "byte_start": 11,
+        "byte_end": 17
+      },
+      {
+        "text": "line",
+        "byte_start": 18,
+        "byte_end": 22
+      }
+    ],
+    "note": "lone \\r counts as a newline"
+  },
+  {
+    "name": "lone_cr_100",
+    "text": "First line\rSecond line",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "First line\rSecond line",
+        "byte_start": 0,
+        "byte_end": 22
+      }
+    ],
+    "note": "lone \\r counts as a newline"
+  },
+  {
+    "name": "crlf_lines_25",
+    "text": "First sentence here.\r\nSecond sentence there.\r\nThird one closes it.",
+    "max_char_buffer": 25,
+    "chunks": [
+      {
+        "text": "First sentence here.",
+        "byte_start": 0,
+        "byte_end": 20
+      },
+      {
+        "text": "Second sentence there.",
+        "byte_start": 22,
+        "byte_end": 44
+      },
+      {
+        "text": "Third one closes it.",
+        "byte_start": 46,
+        "byte_end": 66
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "crlf_hard_wrap_21",
+    "text": "Aaaa bbbb cccc dddd\r\neeee ffff gggg hhhh\r\niiii jjjj kkkk llll.",
+    "max_char_buffer": 21,
+    "chunks": [
+      {
+        "text": "Aaaa bbbb cccc dddd",
+        "byte_start": 0,
+        "byte_end": 19
+      },
+      {
+        "text": "eeee ffff gggg hhhh",
+        "byte_start": 21,
+        "byte_end": 40
+      },
+      {
+        "text": "iiii jjjj kkkk llll.",
+        "byte_start": 42,
+        "byte_end": 62
+      }
+    ],
+    "note": "budget counts code points: \\r\\n is two, not one grapheme"
+  },
+  {
+    "name": "crlf_hard_wrap_40",
+    "text": "Aaaa bbbb cccc dddd\r\neeee ffff gggg hhhh\r\niiii jjjj kkkk llll.",
+    "max_char_buffer": 40,
+    "chunks": [
+      {
+        "text": "Aaaa bbbb cccc dddd\r\neeee ffff gggg hhhh",
+        "byte_start": 0,
+        "byte_end": 40
+      },
+      {
+        "text": "iiii jjjj kkkk llll.",
+        "byte_start": 42,
+        "byte_end": 62
+      }
+    ],
+    "note": "budget counts code points: \\r\\n is two, not one grapheme"
+  },
+  {
+    "name": "crlf_hard_wrap_41",
+    "text": "Aaaa bbbb cccc dddd\r\neeee ffff gggg hhhh\r\niiii jjjj kkkk llll.",
+    "max_char_buffer": 41,
+    "chunks": [
+      {
+        "text": "Aaaa bbbb cccc dddd\r\neeee ffff gggg hhhh",
+        "byte_start": 0,
+        "byte_end": 40
+      },
+      {
+        "text": "iiii jjjj kkkk llll.",
+        "byte_start": 42,
+        "byte_end": 62
+      }
+    ],
+    "note": "budget counts code points: \\r\\n is two, not one grapheme"
+  },
+  {
+    "name": "crlf_hard_wrap_62",
+    "text": "Aaaa bbbb cccc dddd\r\neeee ffff gggg hhhh\r\niiii jjjj kkkk llll.",
+    "max_char_buffer": 62,
+    "chunks": [
+      {
+        "text": "Aaaa bbbb cccc dddd\r\neeee ffff gggg hhhh\r\niiii jjjj kkkk llll.",
+        "byte_start": 0,
+        "byte_end": 62
+      }
+    ],
+    "note": "budget counts code points: \\r\\n is two, not one grapheme"
+  },
+  {
+    "name": "abbreviations_18",
+    "text": "Dr. Smith is here. He is nice.",
+    "max_char_buffer": 18,
+    "chunks": [
+      {
+        "text": "Dr. Smith is here.",
+        "byte_start": 0,
+        "byte_end": 18
+      },
+      {
+        "text": "He is nice.",
+        "byte_start": 19,
+        "byte_end": 30
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "abbreviations_100",
+    "text": "Dr. Smith is here. He is nice.",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "Dr. Smith is here. He is nice.",
+        "byte_start": 0,
+        "byte_end": 30
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "abbreviation_run_22",
+    "text": "Mr. Dr. Smith arrived. Then left.",
+    "max_char_buffer": 22,
+    "chunks": [
+      {
+        "text": "Mr. Dr. Smith arrived.",
+        "byte_start": 0,
+        "byte_end": 22
+      },
+      {
+        "text": "Then left.",
+        "byte_start": 23,
+        "byte_end": 33
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "abbreviation_run_100",
+    "text": "Mr. Dr. Smith arrived. Then left.",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "Mr. Dr. Smith arrived. Then left.",
+        "byte_start": 0,
+        "byte_end": 33
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "spaced_abbreviation_10",
+    "text": "Dr . Smith arrived.",
+    "max_char_buffer": 10,
+    "chunks": [
+      {
+        "text": "Dr . Smith",
+        "byte_start": 0,
+        "byte_end": 10
+      },
+      {
+        "text": "arrived.",
+        "byte_start": 11,
+        "byte_end": 19
+      }
+    ],
+    "note": "previous *token* (whitespace-blind) feeds the abbreviation check"
+  },
+  {
+    "name": "spaced_abbreviation_100",
+    "text": "Dr . Smith arrived.",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "Dr . Smith arrived.",
+        "byte_start": 0,
+        "byte_end": 19
+      }
+    ],
+    "note": "previous *token* (whitespace-blind) feeds the abbreviation check"
+  },
+  {
+    "name": "quoted_exclamation_28",
+    "text": "She yelled (\"stop!\") loudly. Done.",
+    "max_char_buffer": 28,
+    "chunks": [
+      {
+        "text": "She yelled (\"stop!\") loudly.",
+        "byte_start": 0,
+        "byte_end": 28
+      },
+      {
+        "text": "Done.",
+        "byte_start": 29,
+        "byte_end": 34
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "quoted_exclamation_100",
+    "text": "She yelled (\"stop!\") loudly. Done.",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "She yelled (\"stop!\") loudly. Done.",
+        "byte_start": 0,
+        "byte_end": 34
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "smart_quote_dialogue_40",
+    "text": "“Mrs. Joe has been out a dozen times, looking for you, Pip. And she’s\nout now, making it a baker’s dozen.”\n\n“Is she?”\n\n“Yes, Pip,” said Joe; “and what’s worse, she’s got Tickler with her.”",
+    "max_char_buffer": 40,
+    "chunks": [
+      {
+        "text": "“Mrs. Joe has been out a dozen times,",
+        "byte_start": 0,
+        "byte_end": 39
+      },
+      {
+        "text": "looking for you, Pip.",
+        "byte_start": 40,
+        "byte_end": 61
+      },
+      {
+        "text": "And she’s",
+        "byte_start": 62,
+        "byte_end": 73
+      },
+      {
+        "text": "out now, making it a baker’s dozen.”",
+        "byte_start": 74,
+        "byte_end": 114
+      },
+      {
+        "text": "“Is she?”",
+        "byte_start": 116,
+        "byte_end": 129
+      },
+      {
+        "text": "“Yes, Pip,” said Joe; “and what’s worse,",
+        "byte_start": 131,
+        "byte_end": 179
+      },
+      {
+        "text": "she’s got Tickler with her.”",
+        "byte_start": 180,
+        "byte_end": 212
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "smart_quote_dialogue_100",
+    "text": "“Mrs. Joe has been out a dozen times, looking for you, Pip. And she’s\nout now, making it a baker’s dozen.”\n\n“Is she?”\n\n“Yes, Pip,” said Joe; “and what’s worse, she’s got Tickler with her.”",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "“Mrs. Joe has been out a dozen times, looking for you, Pip.",
+        "byte_start": 0,
+        "byte_end": 61
+      },
+      {
+        "text": "And she’s\nout now, making it a baker’s dozen.”\n\n“Is she?”",
+        "byte_start": 62,
+        "byte_end": 129
+      },
+      {
+        "text": "“Yes, Pip,” said Joe; “and what’s worse, she’s got Tickler with her.”",
+        "byte_start": 131,
+        "byte_end": 212
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "smart_quote_dialogue_1000",
+    "text": "“Mrs. Joe has been out a dozen times, looking for you, Pip. And she’s\nout now, making it a baker’s dozen.”\n\n“Is she?”\n\n“Yes, Pip,” said Joe; “and what’s worse, she’s got Tickler with her.”",
+    "max_char_buffer": 1000,
+    "chunks": [
+      {
+        "text": "“Mrs. Joe has been out a dozen times, looking for you, Pip. And she’s\nout now, making it a baker’s dozen.”\n\n“Is she?”\n\n“Yes, Pip,” said Joe; “and what’s worse, she’s got Tickler with her.”",
+        "byte_start": 0,
+        "byte_end": 212
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "multibyte_boundaries_20",
+    "text": "Ahab saw the 🐳 breach. Café déjà vu — again. 日本語のテキストです。 Ça alors, señor Ahab! The 🐳🐳 returned at dawn. Fin de l'histoire.",
+    "max_char_buffer": 20,
+    "chunks": [
+      {
+        "text": "Ahab saw the 🐳",
+        "byte_start": 0,
+        "byte_end": 17
+      },
+      {
+        "text": "breach.",
+        "byte_start": 18,
+        "byte_end": 25
+      },
+      {
+        "text": "Café déjà vu — again",
+        "byte_start": 26,
+        "byte_end": 51
+      },
+      {
+        "text": ".",
+        "byte_start": 51,
+        "byte_end": 52
+      },
+      {
+        "text": "日本語のテキストです。",
+        "byte_start": 53,
+        "byte_end": 86
+      },
+      {
+        "text": "Ça alors, señor Ahab",
+        "byte_start": 87,
+        "byte_end": 109
+      },
+      {
+        "text": "!",
+        "byte_start": 109,
+        "byte_end": 110
+      },
+      {
+        "text": "The 🐳🐳 returned at",
+        "byte_start": 111,
+        "byte_end": 135
+      },
+      {
+        "text": "dawn.",
+        "byte_start": 136,
+        "byte_end": 141
+      },
+      {
+        "text": "Fin de l'histoire.",
+        "byte_start": 142,
+        "byte_end": 160
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "multibyte_boundaries_25",
+    "text": "Ahab saw the 🐳 breach. Café déjà vu — again. 日本語のテキストです。 Ça alors, señor Ahab! The 🐳🐳 returned at dawn. Fin de l'histoire.",
+    "max_char_buffer": 25,
+    "chunks": [
+      {
+        "text": "Ahab saw the 🐳 breach.",
+        "byte_start": 0,
+        "byte_end": 25
+      },
+      {
+        "text": "Café déjà vu — again.",
+        "byte_start": 26,
+        "byte_end": 52
+      },
+      {
+        "text": "日本語のテキストです。",
+        "byte_start": 53,
+        "byte_end": 86
+      },
+      {
+        "text": "Ça alors, señor Ahab!",
+        "byte_start": 87,
+        "byte_end": 110
+      },
+      {
+        "text": "The 🐳🐳 returned at dawn.",
+        "byte_start": 111,
+        "byte_end": 141
+      },
+      {
+        "text": "Fin de l'histoire.",
+        "byte_start": 142,
+        "byte_end": 160
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "multibyte_boundaries_30",
+    "text": "Ahab saw the 🐳 breach. Café déjà vu — again. 日本語のテキストです。 Ça alors, señor Ahab! The 🐳🐳 returned at dawn. Fin de l'histoire.",
+    "max_char_buffer": 30,
+    "chunks": [
+      {
+        "text": "Ahab saw the 🐳 breach.",
+        "byte_start": 0,
+        "byte_end": 25
+      },
+      {
+        "text": "Café déjà vu — again.",
+        "byte_start": 26,
+        "byte_end": 52
+      },
+      {
+        "text": "日本語のテキストです。",
+        "byte_start": 53,
+        "byte_end": 86
+      },
+      {
+        "text": "Ça alors, señor Ahab!",
+        "byte_start": 87,
+        "byte_end": 110
+      },
+      {
+        "text": "The 🐳🐳 returned at dawn.",
+        "byte_start": 111,
+        "byte_end": 141
+      },
+      {
+        "text": "Fin de l'histoire.",
+        "byte_start": 142,
+        "byte_end": 160
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "multibyte_boundaries_40",
+    "text": "Ahab saw the 🐳 breach. Café déjà vu — again. 日本語のテキストです。 Ça alors, señor Ahab! The 🐳🐳 returned at dawn. Fin de l'histoire.",
+    "max_char_buffer": 40,
+    "chunks": [
+      {
+        "text": "Ahab saw the 🐳 breach.",
+        "byte_start": 0,
+        "byte_end": 25
+      },
+      {
+        "text": "Café déjà vu — again. 日本語のテキストです。",
+        "byte_start": 26,
+        "byte_end": 86
+      },
+      {
+        "text": "Ça alors, señor Ahab!",
+        "byte_start": 87,
+        "byte_end": 110
+      },
+      {
+        "text": "The 🐳🐳 returned at dawn.",
+        "byte_start": 111,
+        "byte_end": 141
+      },
+      {
+        "text": "Fin de l'histoire.",
+        "byte_start": 142,
+        "byte_end": 160
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "multibyte_boundaries_60",
+    "text": "Ahab saw the 🐳 breach. Café déjà vu — again. 日本語のテキストです。 Ça alors, señor Ahab! The 🐳🐳 returned at dawn. Fin de l'histoire.",
+    "max_char_buffer": 60,
+    "chunks": [
+      {
+        "text": "Ahab saw the 🐳 breach. Café déjà vu — again. 日本語のテキストです。",
+        "byte_start": 0,
+        "byte_end": 86
+      },
+      {
+        "text": "Ça alors, señor Ahab! The 🐳🐳 returned at dawn.",
+        "byte_start": 87,
+        "byte_end": 141
+      },
+      {
+        "text": "Fin de l'histoire.",
+        "byte_start": 142,
+        "byte_end": 160
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "oversized_multibyte_10",
+    "text": "🐳🐳🐳 café déjà 日本語 señor — one very long sentence indeed.",
+    "max_char_buffer": 10,
+    "chunks": [
+      {
+        "text": "🐳🐳🐳 café",
+        "byte_start": 0,
+        "byte_end": 18
+      },
+      {
+        "text": "déjà 日本語",
+        "byte_start": 19,
+        "byte_end": 35
+      },
+      {
+        "text": "señor —",
+        "byte_start": 36,
+        "byte_end": 46
+      },
+      {
+        "text": "one very",
+        "byte_start": 47,
+        "byte_end": 55
+      },
+      {
+        "text": "long",
+        "byte_start": 56,
+        "byte_end": 60
+      },
+      {
+        "text": "sentence",
+        "byte_start": 61,
+        "byte_end": 69
+      },
+      {
+        "text": "indeed.",
+        "byte_start": 70,
+        "byte_end": 77
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "decimal_number_12",
+    "text": "Pi is 3.14. Next sentence.",
+    "max_char_buffer": 12,
+    "chunks": [
+      {
+        "text": "Pi is 3.14.",
+        "byte_start": 0,
+        "byte_end": 11
+      },
+      {
+        "text": "Next",
+        "byte_start": 12,
+        "byte_end": 16
+      },
+      {
+        "text": "sentence.",
+        "byte_start": 17,
+        "byte_end": 26
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "decimal_number_100",
+    "text": "Pi is 3.14. Next sentence.",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "Pi is 3.14. Next sentence.",
+        "byte_start": 0,
+        "byte_end": 26
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "cjk_terminators_6",
+    "text": "日本語の文です。次の文です。",
+    "max_char_buffer": 6,
+    "chunks": [
+      {
+        "text": "日本語の文です",
+        "byte_start": 0,
+        "byte_end": 21
+      },
+      {
+        "text": "。",
+        "byte_start": 21,
+        "byte_end": 24
+      },
+      {
+        "text": "次の文です。",
+        "byte_start": 24,
+        "byte_end": 42
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "cjk_terminators_100",
+    "text": "日本語の文です。次の文です。",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "日本語の文です。次の文です。",
+        "byte_start": 0,
+        "byte_end": 42
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "boundary_free_50",
+    "text": "word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13 word14 word15 word16 word17 word18 word19 word20 word21 word22 word23 word24 word25 word26 word27 word28 word29 word30 word31 word32 word33 word34 word35 word36 word37 word38 word39 word40 word41 word42 word43 word44 word45 word46 word47 word48 word49 word50 word51 word52 word53 word54 word55 word56 word57 word58 word59 word60",
+    "max_char_buffer": 50,
+    "chunks": [
+      {
+        "text": "word1 word2 word3 word4 word5 word6 word7 word8",
+        "byte_start": 0,
+        "byte_end": 47
+      },
+      {
+        "text": "word9 word10 word11 word12 word13 word14 word15",
+        "byte_start": 48,
+        "byte_end": 95
+      },
+      {
+        "text": "word16 word17 word18 word19 word20 word21 word22",
+        "byte_start": 96,
+        "byte_end": 144
+      },
+      {
+        "text": "word23 word24 word25 word26 word27 word28 word29",
+        "byte_start": 145,
+        "byte_end": 193
+      },
+      {
+        "text": "word30 word31 word32 word33 word34 word35 word36",
+        "byte_start": 194,
+        "byte_end": 242
+      },
+      {
+        "text": "word37 word38 word39 word40 word41 word42 word43",
+        "byte_start": 243,
+        "byte_end": 291
+      },
+      {
+        "text": "word44 word45 word46 word47 word48 word49 word50",
+        "byte_start": 292,
+        "byte_end": 340
+      },
+      {
+        "text": "word51 word52 word53 word54 word55 word56 word57",
+        "byte_start": 341,
+        "byte_end": 389
+      },
+      {
+        "text": "word58 word59 word60",
+        "byte_start": 390,
+        "byte_end": 410
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "single_long_token_25",
+    "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "max_char_buffer": 25,
+    "chunks": [
+      {
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "byte_start": 0,
+        "byte_end": 60
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "leading_trailing_ws_20",
+    "text": "   Padded sentence.   Second one.   ",
+    "max_char_buffer": 20,
+    "chunks": [
+      {
+        "text": "Padded sentence.",
+        "byte_start": 3,
+        "byte_end": 19
+      },
+      {
+        "text": "Second one.",
+        "byte_start": 22,
+        "byte_end": 33
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "leading_trailing_ws_100",
+    "text": "   Padded sentence.   Second one.   ",
+    "max_char_buffer": 100,
+    "chunks": [
+      {
+        "text": "Padded sentence.   Second one.",
+        "byte_start": 3,
+        "byte_end": 33
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "whitespace_only_10",
+    "text": "   \n\t  ",
+    "max_char_buffer": 10,
+    "chunks": [],
+    "note": null
+  },
+  {
+    "name": "empty_10",
+    "text": "",
+    "max_char_buffer": 10,
+    "chunks": [],
+    "note": null
+  },
+  {
+    "name": "no_terminator_20",
+    "text": "this is a long run on sentence without any punctuation at all",
+    "max_char_buffer": 20,
+    "chunks": [
+      {
+        "text": "this is a long run",
+        "byte_start": 0,
+        "byte_end": 18
+      },
+      {
+        "text": "on sentence without",
+        "byte_start": 19,
+        "byte_end": 38
+      },
+      {
+        "text": "any punctuation at",
+        "byte_start": 39,
+        "byte_end": 57
+      },
+      {
+        "text": "all",
+        "byte_start": 58,
+        "byte_end": 61
+      }
+    ],
+    "note": null
+  },
+  {
+    "name": "exact_budget_13",
+    "text": "Hello. World.",
+    "max_char_buffer": 13,
+    "chunks": [
+      {
+        "text": "Hello. World.",
+        "byte_start": 0,
+        "byte_end": 13
+      }
+    ],
+    "note": "chunk length exactly at the buffer is not an overflow"
+  }
+]
