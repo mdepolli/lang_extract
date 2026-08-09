@@ -73,29 +73,42 @@ defmodule LangExtract.Prompt.Validator do
   end
 
   defp validate_example(%Example{} = example, example_index, opts) do
-    texts = Enum.map(example.extractions, & &1.text)
-    spans = Aligner.align(example.text, texts, opts)
-
-    example.extractions
-    |> Enum.zip(spans)
+    example
+    |> pair_spans(opts)
     |> Enum.with_index()
-    |> Enum.flat_map(fn {{%Extraction{} = extraction, span}, extraction_index} ->
-      case span.status do
-        :exact ->
-          []
-
-        status ->
-          [
-            %Issue{
-              example_index: example_index,
-              extraction_index: extraction_index,
-              example_text: example.text,
-              extraction_text: extraction.text,
-              extraction_class: extraction.class,
-              status: status
-            }
-          ]
-      end
+    |> Enum.map(fn {{extraction, span}, extraction_index} ->
+      issue_for(example, example_index, extraction, extraction_index, span)
     end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  # Aligner takes bare texts; extractions rejoin at this boundary only.
+  # The texts list never outlives pair_spans/2.
+  defp pair_spans(%Example{text: source, extractions: extractions}, opts) do
+    texts = Enum.map(extractions, & &1.text)
+
+    source
+    |> Aligner.align(texts, opts)
+    |> Enum.zip_with(extractions, fn span, extraction -> {extraction, span} end)
+  end
+
+  defp issue_for(_example, _example_index, _extraction, _extraction_index, %{status: :exact}),
+    do: nil
+
+  defp issue_for(
+         %Example{text: example_text},
+         example_index,
+         %Extraction{text: extraction_text, class: extraction_class},
+         extraction_index,
+         %{status: status}
+       ) do
+    %Issue{
+      example_index: example_index,
+      extraction_index: extraction_index,
+      example_text: example_text,
+      extraction_text: extraction_text,
+      extraction_class: extraction_class,
+      status: status
+    }
   end
 end

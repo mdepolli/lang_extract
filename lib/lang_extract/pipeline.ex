@@ -14,15 +14,19 @@ defmodule LangExtract.Pipeline do
   def extract(source, raw_llm_output, opts) do
     with {:ok, normalized} <- WireFormat.normalize(raw_llm_output),
          {:ok, extractions} <- Parser.parse(normalized) do
-      texts = Enum.map(extractions, & &1.text)
-      spans = Aligner.align(source, texts, opts)
-
-      enriched =
-        Enum.zip_with(extractions, spans, fn extraction, %Span{} = span ->
-          %Span{span | class: extraction.class, attributes: extraction.attributes}
-        end)
-
-      {:ok, enriched}
+      {:ok, enrich_spans(source, extractions, opts)}
     end
+  end
+
+  # Aligner takes bare texts; class/attributes rejoin at this boundary only.
+  # The texts list never outlives enrich_spans/3.
+  defp enrich_spans(source, extractions, opts) do
+    texts = Enum.map(extractions, & &1.text)
+
+    source
+    |> Aligner.align(texts, opts)
+    |> Enum.zip_with(extractions, fn %Span{} = span, extraction ->
+      %Span{span | class: extraction.class, attributes: extraction.attributes}
+    end)
   end
 end
