@@ -228,6 +228,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **LCS fuzzy alignment is ~12× faster** — the DP now uses upstream's
+  rolling-row layout (tuples read via `elem/2`) instead of building a
+  fresh `{j, k}`-keyed map per source token, and source tokens are
+  stemmed only when the occurrence DP leaves leftover extractions.
+  Behavior is unchanged; the cost drop lands on fallthrough-heavy calls
+  (measured 209 ms → 17.5 ms for five fuzzy extractions over a
+  3,000-token source).
+
 - **Serializer known-reason round-trip tests cover the full library
   shape set** — including `{:bad_request, _}`, the remaining atom reasons
   (`:missing_api_key`, `:empty_response`, `:server_error`, `:drained`,
