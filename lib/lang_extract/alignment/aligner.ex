@@ -100,11 +100,11 @@ defmodule LangExtract.Alignment.Aligner do
   # mirror that so a fully placed call never pays the stem pass. LCS is
   # the only stem reader, and stemmed stays a list — it is only ever
   # walked sequentially by the LCS scan.
-  defp stem_for_leftovers(index, selection, ext_token_lists) do
+  defp stem_for_leftovers(%{texts: texts} = index, selection, ext_token_lists) do
     if map_size(selection) == length(ext_token_lists) do
       index
     else
-      %{index | stemmed: index.texts |> Tuple.to_list() |> Enum.map(&stem_token/1)}
+      %{index | stemmed: texts |> Tuple.to_list() |> Enum.map(&stem_token/1)}
     end
   end
 
@@ -154,11 +154,11 @@ defmodule LangExtract.Alignment.Aligner do
     spans
   end
 
-  defp place_one(extraction, ext_texts, idx, selection, index, _config, claimed)
+  defp place_one(extraction, ext_texts, idx, selection, %{words: words}, _config, claimed)
        when is_map_key(selection, idx) do
     start_idx = Map.fetch!(selection, idx)
     end_idx = start_idx + length(ext_texts) - 1
-    {found_span(extraction, index.words, start_idx, end_idx, :exact), claimed}
+    {found_span(extraction, words, start_idx, end_idx, :exact), claimed}
   end
 
   defp place_one(extraction, ext_texts, _idx, _selection, index, config, claimed) do
@@ -277,13 +277,13 @@ defmodule LangExtract.Alignment.Aligner do
 
   defp exact_match(_extraction, _index, [], _claimed), do: :no_match
 
-  defp exact_match(extraction, index, ext_texts, claimed) do
+  defp exact_match(extraction, %{texts: texts, words: words}, ext_texts, claimed) do
     ext_length = length(ext_texts)
-    last_start = tuple_size(index.texts) - ext_length
+    last_start = tuple_size(texts) - ext_length
 
     start_idx =
       Enum.find(0..last_start//1, fn start ->
-        subslice_at?(index.texts, ext_texts, start) and
+        subslice_at?(texts, ext_texts, start) and
           free?(claimed, {start, start + ext_length})
       end)
 
@@ -294,7 +294,7 @@ defmodule LangExtract.Alignment.Aligner do
       start_idx ->
         interval = {start_idx, start_idx + ext_length}
 
-        {:ok, found_span(extraction, index.words, start_idx, start_idx + ext_length - 1, :exact),
+        {:ok, found_span(extraction, words, start_idx, start_idx + ext_length - 1, :exact),
          interval}
     end
   end
@@ -313,17 +313,17 @@ defmodule LangExtract.Alignment.Aligner do
 
   defp lesser_match(_extraction, _index, [], _config, _claimed), do: :no_match
 
-  defp lesser_match(extraction, index, ext_texts, _config, claimed) do
+  defp lesser_match(extraction, %{texts: texts, words: words}, ext_texts, _config, claimed) do
     ext_tuple = List.to_tuple(ext_texts)
 
-    case free_prefix_block(index.texts, ext_tuple, claimed) do
+    case free_prefix_block(texts, ext_tuple, claimed) do
       nil ->
         :no_match
 
       {start_idx, block_len} ->
         interval = {start_idx, start_idx + block_len}
 
-        {:ok, found_span(extraction, index.words, start_idx, start_idx + block_len - 1, :lesser),
+        {:ok, found_span(extraction, words, start_idx, start_idx + block_len - 1, :lesser),
          interval}
     end
   end
@@ -402,20 +402,25 @@ defmodule LangExtract.Alignment.Aligner do
 
   defp lcs_match(_extraction, _index, [], _config, _claimed), do: :no_match
 
-  defp lcs_match(extraction, index, ext_texts, config, claimed) do
+  defp lcs_match(
+         extraction,
+         %{stemmed: stemmed, words: words},
+         ext_texts,
+         %{threshold: threshold} = config,
+         claimed
+       ) do
     ext_stemmed = Enum.map(ext_texts, &stem_token/1)
     # Coverage gate as upstream _accept_lcs_match computes it: the float
     # error in m * threshold is part of the spec (25 * 0.28 floats to
     # 7.000000000000001, so ceil demands 8 matches, not 7).
-    needed = ceil(length(ext_stemmed) * config.threshold)
+    needed = ceil(length(ext_stemmed) * threshold)
 
-    case free_lcs_span(index.stemmed, ext_stemmed, needed, config, claimed) do
+    case free_lcs_span(stemmed, ext_stemmed, needed, config, claimed) do
       nil ->
         :no_match
 
       {start_idx, end_idx} ->
-        {:ok, found_span(extraction, index.words, start_idx, end_idx, :fuzzy),
-         {start_idx, end_idx + 1}}
+        {:ok, found_span(extraction, words, start_idx, end_idx, :fuzzy), {start_idx, end_idx + 1}}
     end
   end
 
@@ -446,7 +451,13 @@ defmodule LangExtract.Alignment.Aligner do
   # Highest match count whose tightest span passes the coverage, density,
   # and reservation gates (per count the span map already holds the
   # tightest span, earliest start on ties — upstream's preference).
-  defp accepted_lcs_span(source_stemmed, ext_stemmed, needed, config, claimed) do
+  defp accepted_lcs_span(
+         source_stemmed,
+         ext_stemmed,
+         needed,
+         %{min_density: min_density},
+         claimed
+       ) do
     spans = best_lcs_spans(source_stemmed, ext_stemmed)
 
     spans
@@ -456,7 +467,7 @@ defmodule LangExtract.Alignment.Aligner do
       {start_idx, end_idx} = spans[matches]
       density = matches / (end_idx - start_idx + 1)
 
-      if matches >= needed and density >= config.min_density and
+      if matches >= needed and density >= min_density and
            free?(claimed, {start_idx, end_idx + 1}) do
         {start_idx, end_idx}
       end
