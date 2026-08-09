@@ -158,8 +158,10 @@ defmodule LangExtract.Alignment.Aligner do
   end
 
   defp claimed_from_selection(selection, ext_token_lists) do
+    lengths = ext_token_lists |> Enum.map(&length/1) |> List.to_tuple()
+
     Enum.map(selection, fn {idx, start_idx} ->
-      {start_idx, start_idx + length(Enum.at(ext_token_lists, idx))}
+      {start_idx, start_idx + elem(lengths, idx)}
     end)
   end
 
