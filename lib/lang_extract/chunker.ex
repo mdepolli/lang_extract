@@ -77,9 +77,23 @@ defmodule LangExtract.Chunker do
             "max_chunk_chars must be a positive integer, got: #{inspect(max_chars)}"
     end
 
+    text
+    |> index_source()
+    |> build_chunks(0, _broken? = false, max_chars, [])
+  end
+
+  # Source views the walk reads: the raw text (chunk slicing), the
+  # annotated word tokens with char/byte positions, and each position's
+  # precomputed sentence end.
+  defp index_source(text) do
     tokens = annotate_tokens(text)
-    boundaries = sentence_boundaries(tokens)
-    build_chunks(text, tokens, tuple_size(tokens), boundaries, 0, false, max_chars, [])
+
+    %{
+      text: text,
+      tokens: tokens,
+      count: tuple_size(tokens),
+      boundaries: sentence_boundaries(tokens)
+    }
   end
 
   # The chunker's token stream: the tokenizer's non-whitespace tokens,
@@ -155,41 +169,37 @@ defmodule LangExtract.Chunker do
   # wider than the budget is its own chunk; otherwise the sentence grows
   # token-by-token (cutting at the budget), and only an unbroken sentence
   # may then absorb following whole sentences.
-  defp build_chunks(_text, _tokens, count, _boundaries, pos, _broken?, _max_chars, acc)
-       when pos >= count do
+  defp build_chunks(%{count: count}, pos, _broken?, _max_chars, acc) when pos >= count do
     Enum.reverse(acc)
   end
 
-  defp build_chunks(text, tokens, count, boundaries, pos, broken?, max_chars, acc) do
+  defp build_chunks(
+         %{tokens: tokens, boundaries: boundaries} = index,
+         pos,
+         broken?,
+         max_chars,
+         acc
+       ) do
     sentence_end = elem(boundaries, pos)
 
     if span_exceeds?(tokens, pos, pos + 1, max_chars) do
-      chunk = emit_chunk(text, tokens, pos, pos + 1)
+      chunk = emit_chunk(index, pos, pos + 1)
       still_broken? = pos + 1 < sentence_end
-
-      build_chunks(text, tokens, count, boundaries, pos + 1, still_broken?, max_chars, [
-        chunk | acc
-      ])
+      build_chunks(index, pos + 1, still_broken?, max_chars, [chunk | acc])
     else
       case fit_within_sentence(tokens, pos, pos + 1, sentence_end, -1, max_chars) do
         {:cut, cut_end} ->
-          chunk = emit_chunk(text, tokens, pos, cut_end)
-          build_chunks(text, tokens, count, boundaries, cut_end, true, max_chars, [chunk | acc])
+          chunk = emit_chunk(index, pos, cut_end)
+          build_chunks(index, cut_end, true, max_chars, [chunk | acc])
 
         :fits when broken? ->
-          chunk = emit_chunk(text, tokens, pos, sentence_end)
-
-          build_chunks(text, tokens, count, boundaries, sentence_end, false, max_chars, [
-            chunk | acc
-          ])
+          chunk = emit_chunk(index, pos, sentence_end)
+          build_chunks(index, sentence_end, false, max_chars, [chunk | acc])
 
         :fits ->
-          chunk_end = append_sentences(tokens, count, boundaries, pos, sentence_end, max_chars)
-          chunk = emit_chunk(text, tokens, pos, chunk_end)
-
-          build_chunks(text, tokens, count, boundaries, chunk_end, false, max_chars, [
-            chunk | acc
-          ])
+          chunk_end = append_sentences(index, pos, sentence_end, max_chars)
+          chunk = emit_chunk(index, pos, chunk_end)
+          build_chunks(index, chunk_end, false, max_chars, [chunk | acc])
       end
     end
   end
@@ -220,18 +230,23 @@ defmodule LangExtract.Chunker do
   # Upstream's trailing sentence loop: keep absorbing whole sentences while
   # the chunk stays within budget. Sentences are contiguous, so the chunk
   # ends exactly where the first non-fitting sentence starts.
-  defp append_sentences(_tokens, count, _boundaries, _start, chunk_end, _max_chars)
+  defp append_sentences(%{count: count}, _start, chunk_end, _max_chars)
        when chunk_end >= count do
     chunk_end
   end
 
-  defp append_sentences(tokens, count, boundaries, start, chunk_end, max_chars) do
+  defp append_sentences(
+         %{tokens: tokens, boundaries: boundaries} = index,
+         start,
+         chunk_end,
+         max_chars
+       ) do
     next_end = elem(boundaries, chunk_end)
 
     if span_exceeds?(tokens, start, next_end, max_chars) do
       chunk_end
     else
-      append_sentences(tokens, count, boundaries, start, next_end, max_chars)
+      append_sentences(index, start, next_end, max_chars)
     end
   end
 
@@ -242,7 +257,7 @@ defmodule LangExtract.Chunker do
     elem(tokens, stop - 1).char_end - elem(tokens, start).char_start > max_chars
   end
 
-  defp emit_chunk(text, tokens, start, stop) do
+  defp emit_chunk(%{text: text, tokens: tokens}, start, stop) do
     first = elem(tokens, start)
     last = elem(tokens, stop - 1)
 
@@ -265,19 +280,19 @@ defmodule LangExtract.Chunker do
   @doc false
   @spec find_sentences(String.t()) :: [String.t()]
   def find_sentences(text) when is_binary(text) do
-    tokens = annotate_tokens(text)
-    boundaries = sentence_boundaries(tokens)
-    collect_sentences(text, tokens, tuple_size(tokens), boundaries, 0, [])
+    text
+    |> index_source()
+    |> collect_sentences(0, [])
   end
 
-  defp collect_sentences(_text, _tokens, count, _boundaries, pos, acc) when pos >= count do
+  defp collect_sentences(%{count: count}, pos, acc) when pos >= count do
     Enum.reverse(acc)
   end
 
-  defp collect_sentences(text, tokens, count, boundaries, pos, acc) do
+  defp collect_sentences(%{text: text, tokens: tokens, boundaries: boundaries} = index, pos, acc) do
     sentence_end = elem(boundaries, pos)
     sentence = slice_tokens(text, elem(tokens, pos), elem(tokens, sentence_end - 1))
-    collect_sentences(text, tokens, count, boundaries, sentence_end, [sentence | acc])
+    collect_sentences(index, sentence_end, [sentence | acc])
   end
 
   defp sentence_end_by_punctuation?(%{type: :punctuation, text: text}, idx, tokens) do
