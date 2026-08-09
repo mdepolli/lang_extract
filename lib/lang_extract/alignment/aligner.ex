@@ -424,47 +424,54 @@ defmodule LangExtract.Alignment.Aligner do
 
   # Port of upstream _best_lcs_spans (resolver.py): for each achievable match
   # count k, the tightest source span containing k extraction tokens as a
-  # subsequence. dp[{j, k}] holds the latest source start covering k matches
-  # within the first j extraction tokens; later starts yield minimal spans,
-  # earliest start wins ties.
+  # subsequence. Rolling rows over the source dimension, upstream's layout:
+  # row[j][k] holds the latest source start covering k matches within the
+  # first j extraction tokens; later starts yield minimal spans, earliest
+  # start wins ties. A row is a tuple of m+1 k-vectors (tuples) — cells are
+  # written once in build order and only ever read back through elem/2.
   defp best_lcs_spans(source, extraction) do
     m = length(extraction)
     ext = List.to_tuple(extraction)
+    init_vec = List.to_tuple([0 | List.duplicate(-1, m)])
+    initial_row = Tuple.duplicate(init_vec, m + 1)
 
-    initial_dp =
-      for j <- 0..m, k <- 0..m, into: %{} do
-        {{j, k}, if(k == 0, do: 0, else: -1)}
-      end
-
-    {best, _dp} =
+    {best, _row} =
       source
       |> Enum.with_index(1)
-      |> Enum.reduce({%{}, initial_dp}, fn {src_tok, i}, {best, prev} ->
-        curr = dp_row(src_tok, i, m, ext, prev)
+      |> Enum.reduce({%{}, initial_row}, fn {src_tok, i}, {best, prev_row} ->
+        curr = dp_row(src_tok, i, m, ext, prev_row)
         {harvest_spans(best, curr, i, m), curr}
       end)
 
     best
   end
 
-  defp dp_row(src_tok, i, m, ext, prev) do
-    base = for k <- 0..m, into: %{}, do: {{0, k}, if(k == 0, do: i, else: -1)}
+  # dp_cell only reads finished vectors: the previous row's j and j-1
+  # (skip a source token / take a match), and the current row's j-1
+  # (skip an extraction token) — so each j-vector seals as it is built
+  # and no in-place tuple update is ever needed.
+  defp dp_row(src_tok, i, m, ext, prev_row) do
+    j0 = List.to_tuple([i | List.duplicate(-1, m)])
 
-    Enum.reduce(1..m, base, fn j, acc ->
-      matches_here = src_tok == elem(ext, j - 1)
-      acc = Map.put(acc, {j, 0}, i)
+    {vectors, _last} =
+      Enum.map_reduce(1..m, j0, fn j, curr_jm1 ->
+        matches_here = src_tok == elem(ext, j - 1)
+        prev_j = elem(prev_row, j)
+        prev_jm1 = elem(prev_row, j - 1)
+        cells = Enum.map(1..m, &dp_cell(prev_j, prev_jm1, curr_jm1, i, &1, matches_here))
+        vec = List.to_tuple([i | cells])
 
-      Enum.reduce(1..m, acc, fn k, acc ->
-        Map.put(acc, {j, k}, dp_cell(prev, acc, i, j, k, matches_here))
+        {vec, vec}
       end)
-    end)
+
+    List.to_tuple([j0 | vectors])
   end
 
-  defp dp_cell(prev, acc, i, j, k, matches_here) do
-    skip = max(Map.fetch!(prev, {j, k}), Map.fetch!(acc, {j - 1, k}))
+  defp dp_cell(prev_j, prev_jm1, curr_jm1, i, k, matches_here) do
+    skip = max(elem(prev_j, k), elem(curr_jm1, k))
 
     if matches_here do
-      candidate = if k == 1, do: i - 1, else: Map.fetch!(prev, {j - 1, k - 1})
+      candidate = if k == 1, do: i - 1, else: elem(prev_jm1, k - 1)
       max(skip, candidate)
     else
       skip
@@ -473,9 +480,10 @@ defmodule LangExtract.Alignment.Aligner do
 
   defp harvest_spans(best, curr, i, m) do
     end_idx = i - 1
+    last_vec = elem(curr, m)
 
     Enum.reduce(1..m, best, fn k, best ->
-      start_idx = Map.fetch!(curr, {m, k})
+      start_idx = elem(last_vec, k)
 
       if start_idx < 0 do
         best
