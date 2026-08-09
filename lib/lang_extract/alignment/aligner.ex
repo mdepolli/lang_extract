@@ -161,14 +161,12 @@ defmodule LangExtract.Alignment.Aligner do
 
   # --- Placement: selected hits vs leftovers under claims ---
 
-  # :dp seeds claims from phase-0 selections and grows them on leftover
-  # hits; claims mask only the lesser phase. :first_occurrence never claims.
-  defp place(index, items, %{exact_algorithm: :dp} = config) do
+  # Claims seed from phase-0 selections and grow on leftover hits,
+  # masking only the lesser phase. Under :first_occurrence no item is
+  # ever selected, so the seed is naturally empty — reserve_claim/3 is
+  # what keeps it empty through the fold.
+  defp place(index, items, config) do
     fold_placements(index, items, config, claims_from_selected(items))
-  end
-
-  defp place(index, items, %{exact_algorithm: :first_occurrence} = config) do
-    fold_placements(index, items, config, _claimed = [])
   end
 
   defp fold_placements(index, items, config, claimed) do
