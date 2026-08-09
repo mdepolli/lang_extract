@@ -13,6 +13,13 @@ defmodule LangExtract.Alignment.AlignerParityTest do
 
   alias LangExtract.Alignment.Aligner
   alias LangExtract.Span
+  alias LangExtract.Test.AlignerBaseline
+
+  # Both implementations answer to upstream's verdicts on every run: the
+  # production aligner and the frozen baseline (which must track deliberate
+  # behavior changes — a botched redo fails here at the spec level, not
+  # just against production in the differential).
+  @implementations [production: Aligner, baseline: AlignerBaseline]
 
   @fixtures "test/fixtures/alignment_parity.json"
             |> File.read!()
@@ -53,7 +60,8 @@ defmodule LangExtract.Alignment.AlignerParityTest do
     "accept_lesser" => :accept_lesser
   }
 
-  for fixture <- @fixtures do
+  for {label, aligner} <- @implementations, fixture <- @fixtures do
+    @aligner aligner
     @fixture fixture
 
     # Computed at module level: inside the test the unrolled fixture literal
@@ -62,10 +70,10 @@ defmodule LangExtract.Alignment.AlignerParityTest do
           |> Map.get("config", %{})
           |> Enum.map(fn {key, value} -> {Map.fetch!(config_keys, key), value} end)
 
-    test "matches upstream on #{fixture["name"]}" do
+    test "#{label} matches upstream on #{fixture["name"]}" do
       %{"source" => source, "extractions" => extractions, "results" => results} = @fixture
 
-      spans = Aligner.align(source, extractions, @opts)
+      spans = @aligner.align(source, extractions, @opts)
       # Enum.count, not length: 1.20's type checker can't see through the
       # heterogeneous fixture-map literal and unions its value types.
       assert length(spans) == Enum.count(results)

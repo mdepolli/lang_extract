@@ -15,20 +15,26 @@ defmodule LangExtract.ChunkerParityTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Chunker
+  alias LangExtract.Test.ChunkerBaseline
+
+  # Both implementations answer to upstream's verdicts on every run: the
+  # production chunker and the frozen line-comparable baseline.
+  @implementations [production: Chunker, baseline: ChunkerBaseline]
 
   @fixtures "test/fixtures/chunker_parity.json"
             |> File.read!()
             |> Jason.decode!()
 
-  for fixture <- @fixtures do
+  for {label, chunker} <- @implementations, fixture <- @fixtures do
+    @chunker chunker
     @fixture fixture
 
-    test "matches upstream on #{fixture["name"]}" do
+    test "#{label} matches upstream on #{fixture["name"]}" do
       %{"text" => text, "max_char_buffer" => max_chars, "chunks" => expected} = @fixture
 
       chunks =
         text
-        |> Chunker.chunk(max_chunk_chars: max_chars)
+        |> @chunker.chunk(max_chunk_chars: max_chars)
         |> Enum.map(
           &%{"text" => &1.text, "byte_start" => &1.byte_start, "byte_end" => &1.byte_end}
         )
