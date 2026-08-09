@@ -49,17 +49,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   queued work in the gap between separate `release` and `pause` casts.
   `Request` uses it on rate-limited retries.
 
-- **Aligner fallthrough cannot nest inside a DP placement** — phase-0
-  token intervals are reserved: exact scans past claimed occurrences,
-  and the lesser and LCS searches share one rescue shape — the plain
-  search runs first and its winner stands on free source (claims
-  elsewhere never disturb an uncontested grounding); a winner that
-  itself overlaps a claim reruns with claimed tokens masked, grounding
-  on a later free occurrence when one qualifies, and a rescued LCS span
-  that still straddles a claim is rejected. Each fallthrough hit
-  reserves its own interval for later leftovers. `:first_occurrence`
-  still allows independent first-match (including overlaps). Parity
-  known-divergences updated for contested leftovers.
+- **A paraphrase of an already-claimed repeat no longer grounds its
+  prefix** — DP claims mask the lesser block search: the plain difflib
+  pass runs first and its winner stands on free source; a winner whose
+  block lands inside a phase-0 placement reruns with claimed tokens
+  masked, grounding on a later free occurrence when one qualifies and
+  returning `:not_found` when none does (matching upstream, which never
+  grounds these paraphrases). Each fallthrough hit reserves its interval
+  for later leftovers the same way. Claims mask *only* the lesser phase:
+  exact and LCS fallthrough tolerate overlap, because upstream grounds
+  nested and contested mentions inside sibling placements — pinned by
+  the new `dp_nested_*` parity fixtures, generated from upstream's
+  `WordAligner`. The parity ledger is now split by severity: label
+  divergences (we ground exactly upstream's bytes under a different
+  status) versus existence divergences (a span dropped or invented
+  relative to upstream — lossy, requires a decision-log entry, and the
+  table stays empty).
 
 - **LCS coverage gate uses upstream's ceil arithmetic** — acceptance
   requires `matches >= ceil(extraction_tokens * fuzzy_threshold)` exactly
