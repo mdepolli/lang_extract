@@ -311,10 +311,11 @@ defmodule LangExtract.Chunker do
 
   defp sentence_break_after_newline?(_idx, _tokens, _count), do: false
 
+  # Total for this pipeline: the tokenizer rejects invalid UTF-8 at the
+  # shared boundary and never emits empty tokens, so the head always
+  # decodes. Anything else is an invariant breach; let the clause miss.
   defp lowercase_start?(<<first::utf8, _rest::binary>>) do
     char = <<first::utf8>>
     String.downcase(char) == char and String.upcase(char) != char
   end
-
-  defp lowercase_start?(_), do: false
 end

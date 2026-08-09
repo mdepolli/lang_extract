@@ -104,6 +104,17 @@ defmodule LangExtract.ChunkerTest do
       assert chunk.text == text
     end
 
+    # An oversized token mid-sentence leaves the remainder marked broken:
+    # it must finish its sentence alone, not absorb the following sentence
+    # — even though "ends." plus "Tail." (11 chars) would fit the budget.
+    test "sentence remainder after an oversized token does not absorb the next sentence" do
+      text = "Word extraordinarily ends. Tail."
+
+      chunks = Chunker.chunk(text, max_chunk_chars: 13)
+
+      assert Enum.map(chunks, & &1.text) == ["Word", "extraordinarily", "ends.", "Tail."]
+    end
+
     test "empty text returns empty list" do
       assert Chunker.chunk("", max_chunk_chars: 100) == []
     end
@@ -147,6 +158,16 @@ defmodule LangExtract.ChunkerTest do
       chunks = Chunker.chunk(text, max_chunk_chars: String.length(text))
       assert length(chunks) == 1
       assert hd(chunks).text == text
+    end
+
+    test "CRLF line endings: chunk byte ranges slice the source verbatim" do
+      # Windows corpora arrive with \r\n; every offset downstream depends
+      # on chunk ranges slicing the original bytes back out verbatim.
+      text = "First sentence here.\r\nSecond sentence there.\r\nThird one closes it."
+      chunks = Chunker.chunk(text, max_chunk_chars: 25)
+
+      assert length(chunks) > 1
+      assert_covers_source(chunks, text)
     end
   end
 
@@ -206,16 +227,6 @@ defmodule LangExtract.ChunkerTest do
       text = "Hello world. Goodbye world. How are you?"
       sentences = Chunker.find_sentences(text)
       assert sentences == ["Hello world.", "Goodbye world.", "How are you?"]
-    end
-
-    test "CRLF line endings: chunk byte ranges slice the source verbatim" do
-      # Windows corpora arrive with \r\n; every offset downstream depends
-      # on chunk ranges slicing the original bytes back out verbatim.
-      text = "First sentence here.\r\nSecond sentence there.\r\nThird one closes it."
-      chunks = Chunker.chunk(text, max_chunk_chars: 25)
-
-      assert length(chunks) > 1
-      assert_covers_source(chunks, text)
     end
   end
 end
