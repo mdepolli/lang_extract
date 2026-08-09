@@ -24,13 +24,22 @@ defmodule LangExtract.Runner.LimiterTest do
 
   # blocked_acquire is asynchronous: nothing orders one spawn's acquire
   # call ahead of the next one's. FIFO assertions need the earlier waiter
-  # confirmed in the queue before spawning the later one.
-  defp await_waiting(limiter, n) do
+  # confirmed in the queue before spawning the later one. Bounded so a
+  # waiter that never enqueues flunks with a diagnostic instead of
+  # hanging until the ExUnit timeout.
+  defp await_waiting(limiter, n, tries \\ 1_000)
+
+  defp await_waiting(limiter, n, 0) do
+    %{waiting: waiting} = :sys.get_state(limiter)
+    flunk("waiting queue never reached #{n} (at #{:queue.len(waiting)})")
+  end
+
+  defp await_waiting(limiter, n, tries) do
     %{waiting: waiting} = :sys.get_state(limiter)
 
     if :queue.len(waiting) < n do
       Process.sleep(1)
-      await_waiting(limiter, n)
+      await_waiting(limiter, n, tries - 1)
     else
       :ok
     end
