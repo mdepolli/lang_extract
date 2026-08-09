@@ -104,8 +104,11 @@ model to invent all of that.
 Each extraction's `text` must appear verbatim in its example's `text`: the
 examples double as alignment ground truth, and `LangExtract.template/2`
 checks this at construction, unconditionally — a template that builds is a
-template whose examples align. (Use `LangExtract.template/2` for tagged
-tuples instead of raises when the task definition arrives at runtime.)
+template whose examples align. Malformed definitions raise
+(`ArgumentError` for shape and type errors,
+`LangExtract.Prompt.Validator.ValidationError` when an example's
+extractions don't align), so a loader taking task definitions from
+external data at runtime should wrap the call and rescue those two.
 
 ```elixir
 template =
