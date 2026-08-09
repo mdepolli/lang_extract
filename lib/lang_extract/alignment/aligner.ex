@@ -30,8 +30,11 @@ defmodule LangExtract.Alignment.Aligner do
   aligner_parity_test.exs for the observable consequences.
 
   Fallthrough respects DP claims: a token interval placed in phase 0 is
-  reserved, so exact/lesser/LCS leftovers cannot nest inside it (and each
-  fallthrough placement reserves its interval for later leftovers).
+  reserved, so leftovers cannot nest inside it — exact scans past claimed
+  occurrences, the lesser block search masks claimed source tokens (its
+  block lands on the next free occurrence), and LCS rejects spans that
+  overlap a claim. Each fallthrough placement reserves its own interval
+  for later leftovers the same way.
   """
 
   alias LangExtract.Alignment.Tokenizer
@@ -298,59 +301,66 @@ defmodule LangExtract.Alignment.Aligner do
 
   defp lesser_match(extraction, index, ext_texts, _config, claimed) do
     ext_tuple = List.to_tuple(ext_texts)
+    masked = claimed_token_set(claimed)
 
-    case prefix_block(index.texts, ext_tuple, tuple_size(index.texts), tuple_size(ext_tuple)) do
+    case prefix_block(index.texts, ext_tuple, tuple_size(index.texts), tuple_size(ext_tuple),
+           masked
+         ) do
       nil ->
         :no_match
 
       {start_idx, block_len} ->
         interval = {start_idx, start_idx + block_len}
 
-        if free?(claimed, interval) do
-          {:ok,
-           found_span(extraction, index.words, start_idx, start_idx + block_len - 1, :lesser),
-           interval}
-        else
-          :no_match
-        end
+        {:ok, found_span(extraction, index.words, start_idx, start_idx + block_len - 1, :lesser),
+         interval}
     end
+  end
+
+  defp claimed_token_set(claimed) do
+    for {a, b} <- claimed, idx <- a..(b - 1)//1, into: MapSet.new(), do: idx
   end
 
   # difflib decomposes matches by recursively taking the longest common block
   # (ties: lowest source index, then lowest extraction index). Only a block
   # anchored at extraction token 0 grounds MATCH_LESSER, and such a block can
   # only come from the leftmost recursion path — so chase it directly.
-  defp prefix_block(_source_tuple, _ext_tuple, source_hi, ext_hi)
+  # Claimed source tokens are masked out of runs, so the decomposition lands
+  # on free source: a leftover whose block sits inside a claimed span grounds
+  # on the next free occurrence instead. With no claims this is difflib
+  # exactly.
+  defp prefix_block(_source_tuple, _ext_tuple, source_hi, ext_hi, _masked)
        when source_hi <= 0 or ext_hi <= 0,
        do: nil
 
-  defp prefix_block(source_tuple, ext_tuple, source_hi, ext_hi) do
-    case longest_block(source_tuple, ext_tuple, source_hi, ext_hi) do
+  defp prefix_block(source_tuple, ext_tuple, source_hi, ext_hi, masked) do
+    case longest_block(source_tuple, ext_tuple, source_hi, ext_hi, masked) do
       {_i, _j, 0} -> nil
       {i, 0, n} -> {i, n}
-      {i, j, _n} -> prefix_block(source_tuple, ext_tuple, i, j)
+      {i, j, _n} -> prefix_block(source_tuple, ext_tuple, i, j, masked)
     end
   end
 
   # Longest common contiguous run of source[0..source_hi) and ext[0..ext_hi);
   # among maximal runs prefers the lowest source index, then lowest extraction
   # index (difflib find_longest_match tie-breaks).
-  defp longest_block(source_tuple, ext_tuple, source_hi, ext_hi) do
+  defp longest_block(source_tuple, ext_tuple, source_hi, ext_hi, masked) do
     Enum.reduce(0..(source_hi - 1), {0, 0, 0}, fn i, best ->
       Enum.reduce(0..(ext_hi - 1), best, fn j, acc ->
-        best_at(source_tuple, ext_tuple, i, j, source_hi, ext_hi, acc)
+        best_at(source_tuple, ext_tuple, i, j, source_hi, ext_hi, masked, acc)
       end)
     end)
   end
 
-  defp best_at(source_tuple, ext_tuple, i, j, source_hi, ext_hi, {_, _, best_n} = acc) do
-    n = run_length(source_tuple, ext_tuple, i, j, source_hi, ext_hi)
+  defp best_at(source_tuple, ext_tuple, i, j, source_hi, ext_hi, masked, {_, _, best_n} = acc) do
+    n = run_length(source_tuple, ext_tuple, i, j, source_hi, ext_hi, masked)
     if n > best_n, do: {i, j, n}, else: acc
   end
 
-  defp run_length(source_tuple, ext_tuple, i, j, source_hi, ext_hi) do
-    if i < source_hi and j < ext_hi and elem(source_tuple, i) == elem(ext_tuple, j) do
-      1 + run_length(source_tuple, ext_tuple, i + 1, j + 1, source_hi, ext_hi)
+  defp run_length(source_tuple, ext_tuple, i, j, source_hi, ext_hi, masked) do
+    if i < source_hi and j < ext_hi and not MapSet.member?(masked, i) and
+         elem(source_tuple, i) == elem(ext_tuple, j) do
+      1 + run_length(source_tuple, ext_tuple, i + 1, j + 1, source_hi, ext_hi, masked)
     else
       0
     end

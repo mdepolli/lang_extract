@@ -332,6 +332,47 @@ defmodule LangExtract.Alignment.AlignerTest do
     end
   end
 
+  describe "fallthrough claim reservations" do
+    # The lesser block search masks claimed source tokens, so a leftover
+    # whose prefix block sits inside a DP placement grounds on the next
+    # free occurrence instead of giving up.
+    test "lesser leftover grounds outside a DP placement" do
+      source = "alpha beta x alpha beta y"
+
+      assert [
+               %Span{status: :exact, byte_start: 0, byte_end: 10},
+               %Span{status: :lesser, byte_start: 13, byte_end: 23}
+             ] = Aligner.align(source, ["alpha beta", "alpha beta zzz"])
+    end
+
+    # Each fallthrough hit reserves its interval for later leftovers: the
+    # second extraction must skip the first leftover's reservation, not
+    # just DP claims.
+    test "lesser leftovers ground on successive free occurrences" do
+      source = "x alpha beta y alpha beta z"
+
+      assert [
+               %Span{status: :lesser, byte_start: 2, byte_end: 12},
+               %Span{status: :lesser, byte_start: 15, byte_end: 25}
+             ] = Aligner.align(source, ["alpha beta zzz", "alpha beta qqq"])
+    end
+
+    test "lesser leftover with no free occurrence left is not_found" do
+      source = "x alpha beta y alpha beta z"
+
+      assert [
+               %Span{status: :lesser},
+               %Span{status: :lesser},
+               %Span{status: :not_found}
+             ] =
+               Aligner.align(source, [
+                 "alpha beta zzz",
+                 "alpha beta qqq",
+                 "alpha beta www"
+               ])
+    end
+  end
+
   describe ":exact_algorithm option" do
     test ":dp (default) grounds repeated mentions to successive occurrences" do
       source = "hello world again hello world"
