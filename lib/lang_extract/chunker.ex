@@ -101,8 +101,10 @@ defmodule LangExtract.Chunker do
   defp annotate_token(token, {acc, char_pos, newline?}) do
     # Code points, not graphemes: upstream's budget unit is Python's len().
     # String.length/1 would undercount "\r\n" (one grapheme, two code
-    # points) by one char per hard-wrapped line, drifting every cut.
-    char_end = char_pos + length(String.codepoints(token.text))
+    # points) by one char per hard-wrapped line, drifting every cut. A
+    # charlist is one integer per code point — same count as
+    # String.codepoints/1 without allocating a binary per char.
+    char_end = char_pos + length(String.to_charlist(token.text))
 
     if token.type == :whitespace do
       gap_breaks? = newline? or String.contains?(token.text, ["\n", "\r"])
