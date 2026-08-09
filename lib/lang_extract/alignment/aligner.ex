@@ -19,9 +19,10 @@ defmodule LangExtract.Alignment.Aligner do
      do not qualify. Status `:lesser`.
   3. **LCS fuzzy** — for extractions the lesser phase couldn't anchor
      (no matching block at the extraction's first token), an LCS
-     subsequence match over lightly stemmed tokens, accepted when coverage
-     (matched / extraction tokens) ≥ `:fuzzy_threshold` and density
-     (matched / span length) ≥ `:min_density`, preferring the tightest span.
+     subsequence match over lightly stemmed tokens, accepted when matched
+     tokens ≥ `ceil(extraction tokens × :fuzzy_threshold)` (upstream's
+     coverage gate, float error included) and density (matched / span
+     length) ≥ `:min_density`, preferring the tightest span.
      Status `:fuzzy`.
 
   Known divergence from upstream: our fallthrough phases treat each leftover
@@ -386,7 +387,10 @@ defmodule LangExtract.Alignment.Aligner do
 
   defp lcs_match(extraction, index, ext_texts, config, claimed) do
     ext_stemmed = Enum.map(ext_texts, &stem_token/1)
-    ext_length = length(ext_stemmed)
+    # Coverage gate as upstream _accept_lcs_match computes it: the float
+    # error in m * threshold is part of the spec (25 * 0.28 floats to
+    # 7.000000000000001, so ceil demands 8 matches, not 7).
+    needed = ceil(length(ext_stemmed) * config.threshold)
     spans = best_lcs_spans(index.stemmed, ext_stemmed)
 
     spans
@@ -395,11 +399,10 @@ defmodule LangExtract.Alignment.Aligner do
     |> Enum.find_value(:no_match, fn matches ->
       {start_idx, end_idx} = spans[matches]
       span_len = end_idx - start_idx + 1
-      coverage = matches / ext_length
       density = matches / span_len
       interval = {start_idx, end_idx + 1}
 
-      if coverage >= config.threshold and density >= config.min_density and
+      if matches >= needed and density >= config.min_density and
            free?(claimed, interval) do
         {:ok, found_span(extraction, index.words, start_idx, end_idx, :fuzzy), interval}
       end

@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still allows independent first-match (including overlaps). Parity
   known-divergences updated for contested leftovers.
 
+- **LCS coverage gate uses upstream's ceil arithmetic** — acceptance
+  requires `matches >= ceil(extraction_tokens * fuzzy_threshold)` exactly
+  as upstream `_accept_lcs_match` computes it, float error included. The
+  previous `matches / m >= threshold` division diverged at knife-edge
+  non-default thresholds (25 tokens at `0.28`: `25 * 0.28` floats just
+  above 7, so upstream demands 8 matches where division accepted 7).
+
 - **`Runner.resources/1` rejects non-pid children** — during
   `one_for_all` restart `which_children` can return `:restarting`;
   raises a named `ArgumentError` instead of an opaque `Agent.get` crash.

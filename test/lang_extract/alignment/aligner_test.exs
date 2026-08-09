@@ -326,6 +326,21 @@ defmodule LangExtract.Alignment.AlignerTest do
       assert [%Span{status: :not_found}] =
                Aligner.align(source, ["alpha beta gamma"], accept_lesser: false)
     end
+
+    test "coverage gate matches upstream's ceil at float-edge thresholds" do
+      # Upstream _accept_lcs_match requires matches >= ceil(m * threshold).
+      # 25 * 0.28 floats to 7.000000000000001, so ceil demands 8 matches;
+      # a plain matches / m >= threshold division would accept 7 of 25.
+      source = "alpha bravo charlie delta echo foxtrot golf"
+      junk = Enum.map_join(?a..?r, " ", &"junk#{<<&1>>}")
+      extraction = source <> " " <> junk
+
+      assert [%Span{status: :not_found}] =
+               Aligner.align(source, [extraction],
+                 accept_lesser: false,
+                 fuzzy_threshold: 0.28
+               )
+    end
   end
 
   describe "fallthrough claim reservations" do
