@@ -31,17 +31,19 @@ defmodule LangExtract.Alignment.Aligner do
 
   Fallthrough respects DP claims: a token interval placed in phase 0 is
   reserved, so leftovers cannot nest inside it — exact scans past claimed
-  occurrences, the lesser block search masks claimed source tokens (its
-  block lands on the next free occurrence), and LCS rejects spans that
-  overlap a claim. Each fallthrough placement reserves its own interval
-  for later leftovers the same way.
+  occurrences, the lesser search keeps its plain-difflib block when it
+  lands on free source and reruns with claimed tokens masked when it does
+  not (claims elsewhere never disturb an uncontested grounding), and LCS
+  rejects spans that overlap a claim. Each fallthrough placement reserves
+  its own interval for later leftovers the same way.
 
   Cost model: this module aligns whatever text it is handed, with no size
   limit (same as upstream's `WordAligner`). The fallthrough phases are
-  super-linear in source tokens — per leftover extraction, the lesser
-  block search is O(source × extraction) and LCS is O(source ×
-  extraction²) — so whole-document calls on book-length text take real
-  CPU time. That time is spent in the calling process only; BEAM
+  super-linear in source tokens — per leftover extraction, the naive
+  lesser block search examines O(source × extraction) anchor pairs and
+  walks a run from each (repetitive text pushes it past that bound), and
+  LCS is O(source × extraction²) — so whole-document calls on
+  book-length text take real CPU time. That time is spent in the calling process only; BEAM
   preemption keeps the rest of the system responsive. The chunked
   pipeline (`LangExtract.run/4`) is the bounded document path; callers
   who need a hard latency bound on a direct call wrap it in a task with
@@ -295,11 +297,8 @@ defmodule LangExtract.Alignment.Aligner do
 
   defp lesser_match(extraction, index, ext_texts, _config, claimed) do
     ext_tuple = List.to_tuple(ext_texts)
-    masked = claimed_token_set(claimed)
 
-    case prefix_block(index.texts, ext_tuple, tuple_size(index.texts), tuple_size(ext_tuple),
-           masked
-         ) do
+    case free_prefix_block(index.texts, ext_tuple, claimed) do
       nil ->
         :no_match
 
@@ -311,6 +310,29 @@ defmodule LangExtract.Alignment.Aligner do
     end
   end
 
+  # Two passes: plain difflib runs first, so claims elsewhere can never
+  # perturb the tie-breaks that guide the recursion over free source, and
+  # its block wins whenever it lands on free tokens. Only a leftover whose
+  # own difflib block is claimed reruns with claimed tokens masked out of
+  # runs, landing the decomposition on a later free occurrence (or
+  # :no_match when every anchored candidate is claimed).
+  defp free_prefix_block(source_tuple, ext_tuple, claimed) do
+    source_hi = tuple_size(source_tuple)
+    ext_hi = tuple_size(ext_tuple)
+
+    case prefix_block(source_tuple, ext_tuple, source_hi, ext_hi, MapSet.new()) do
+      nil ->
+        nil
+
+      {start_idx, block_len} = block ->
+        if free?(claimed, {start_idx, start_idx + block_len}) do
+          block
+        else
+          prefix_block(source_tuple, ext_tuple, source_hi, ext_hi, claimed_token_set(claimed))
+        end
+    end
+  end
+
   defp claimed_token_set(claimed) do
     for {a, b} <- claimed, idx <- a..(b - 1)//1, into: MapSet.new(), do: idx
   end
@@ -319,10 +341,8 @@ defmodule LangExtract.Alignment.Aligner do
   # (ties: lowest source index, then lowest extraction index). Only a block
   # anchored at extraction token 0 grounds MATCH_LESSER, and such a block can
   # only come from the leftmost recursion path — so chase it directly.
-  # Claimed source tokens are masked out of runs, so the decomposition lands
-  # on free source: a leftover whose block sits inside a claimed span grounds
-  # on the next free occurrence instead. With no claims this is difflib
-  # exactly.
+  # With an empty mask this is difflib exactly; masked tokens cannot join
+  # runs, so a masked search decomposes over free source only.
   defp prefix_block(_source_tuple, _ext_tuple, source_hi, ext_hi, _masked)
        when source_hi <= 0 or ext_hi <= 0,
        do: nil

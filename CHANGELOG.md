@@ -17,11 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Aligner fallthrough cannot nest inside a DP placement** — phase-0
   token intervals are reserved: exact scans past claimed occurrences,
-  the lesser block search masks claimed source tokens (a leftover
-  grounds on the next free occurrence instead of giving up), LCS
-  rejects spans overlapping a claim, and each fallthrough hit reserves
-  its own interval for later leftovers. `:first_occurrence` still
-  allows independent first-match (including overlaps). Parity
+  the lesser search keeps its plain-difflib block when it lands on free
+  source and reruns with claimed tokens masked when it does not (a
+  contested leftover grounds on a later free occurrence when one
+  anchors; claims elsewhere never disturb an uncontested grounding),
+  LCS rejects spans overlapping a claim, and each fallthrough hit
+  reserves its own interval for later leftovers. `:first_occurrence`
+  still allows independent first-match (including overlaps). Parity
   known-divergences updated for contested leftovers.
 
 - **`Runner.resources/1` rejects non-pid children** — during

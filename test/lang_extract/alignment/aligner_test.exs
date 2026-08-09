@@ -353,6 +353,20 @@ defmodule LangExtract.Alignment.AlignerTest do
              ] = Aligner.align(source, ["alpha beta zzz", "alpha beta qqq"])
     end
 
+    # A claim elsewhere must never disturb a grounding on free source.
+    # Masking alone loses this case: the claimed "x delta" block guides
+    # the unmasked difflib recursion toward the free "gamma", and killing
+    # it re-routes the tie-breaks into a dead end. The plain pass runs
+    # first; masking only rescues a leftover whose own block is claimed.
+    test "claims do not disturb groundings on free source" do
+      source = "beta delta alpha gamma alpha x delta z"
+
+      assert [
+               %Span{status: :lesser, byte_start: 23, byte_end: 36},
+               %Span{status: :lesser, byte_start: 17, byte_end: 22}
+             ] = Aligner.align(source, ["alpha x delta qqq", "gamma x delta"])
+    end
+
     test "lesser leftover with no free occurrence left is not_found" do
       source = "x alpha beta y alpha beta z"
 
