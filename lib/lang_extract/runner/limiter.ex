@@ -25,12 +25,13 @@ defmodule LangExtract.Runner.Limiter do
 
   use GenServer
 
-  # Ceiling on any single pause. A retry-after deadline is unauthenticated
-  # server input — proxies echo epoch timestamps into it — and obeying it
-  # verbatim would hold every caller of a shared runner indefinitely (and
-  # overflow the wake timer). Persistent throttling still stalls admission:
-  # each new 429 re-pauses, extending the deadline another window.
-  @max_pause_ms 30_000
+  # Ceiling on a single wake timer, not on the pause deadline: deadlines
+  # are honored verbatim (a server's hour-long quota reset must be waited
+  # out, not retried against), but retry-after is unauthenticated input —
+  # proxies echo epoch timestamps into it — and a send_after that far out
+  # (limit ~49 days) would crash. Long pauses chain bounded wake timers
+  # instead; each :wake re-checks and re-arms until the deadline passes.
+  @max_wake_ms 30_000
 
   @type option ::
           {:rpm, pos_integer() | :infinity}
@@ -66,8 +67,9 @@ defmodule LangExtract.Runner.Limiter do
   Pauses all admission for `ms` milliseconds (a `retry-after` deadline).
 
   Repeated pauses extend to the furthest deadline; they never shorten it.
-  A single pause is clamped to a 30-second ceiling — repeated 429s extend
-  it window by window, but no one header value can stall a run for hours.
+  The deadline is honored verbatim: a long quota-reset `retry-after`
+  stalls admission until it expires (callers cap synthesized backoff at
+  the source — see `LangExtract.Runner.Request`).
   """
   @spec pause(GenServer.server(), non_neg_integer()) :: :ok
   def pause(limiter, ms) do
@@ -155,7 +157,7 @@ defmodule LangExtract.Runner.Limiter do
   # No `|| 0` floor: monotonic time can be (and on the BEAM, is) negative,
   # which would make 0 a far-future deadline.
   defp apply_pause(state, ms) do
-    deadline = state.clock.() + min(ms, @max_pause_ms)
+    deadline = state.clock.() + ms
 
     pause_until =
       case state.pause_until do
@@ -292,7 +294,7 @@ defmodule LangExtract.Runner.Limiter do
     delay = if :queue.is_empty(state.waiting), do: nil, else: wake_delay(state)
 
     if delay do
-      ref = Process.send_after(self(), :wake, max(delay, 1))
+      ref = Process.send_after(self(), :wake, delay |> max(1) |> min(@max_wake_ms))
       %{state | wake_ref: ref}
     else
       state

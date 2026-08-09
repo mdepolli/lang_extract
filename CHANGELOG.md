@@ -257,14 +257,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corpus texts use formfeed page breaks, so this affected the benchmark
   corpus itself. Whitespace now classifies by character against `\s`.
 
-- **`retry-after` deadlines are bounded** — the Limiter clamps every pause
-  to a 30-second ceiling (repeated 429s still extend it window by window),
-  and a negative `retry-after` now parses as `nil` like any other malformed
-  value. Previously a server-supplied header was obeyed verbatim: an echoed
-  epoch timestamp paused all admission for decades — silently hanging every
-  `Runner.run/4` sharing the cell — and larger garbage overflowed the wake
-  timer, crashing the runner cell. The backoff-escalation cap moved from
-  `Request` into the Limiter, the single place pauses sleep.
+- **`retry-after` garbage cannot crash the runner cell; legitimate
+  deadlines are honored verbatim** — a server-provided `retry-after` is
+  waited out in full, however long: an hour-long quota reset pauses
+  admission for the hour instead of burning `rate_limit_retries` against
+  a still-throttled endpoint (rate-limit waits do not consume the chunk's
+  retry budget, so the run resumes where it left off). The trade is
+  explicit: a garbage deadline — a proxy echoing an epoch timestamp —
+  stalls the run until its caller gives up, but it can no longer crash
+  the cell: the Limiter's wake timer is scheduled in bounded chunks, so
+  deadlines beyond `send_after`'s ~49-day limit no longer overflow it,
+  and a negative `retry-after` parses as `nil` like any other malformed
+  value. Synthesized escalation (no header) stays capped at 30s, in
+  `Request` where it is computed.
 
 - **Crash sanitizer scrubs raised exception structs** — the Runner's
   crash-reason sanitizer formatted exceptions via `Exception.format_banner/2`

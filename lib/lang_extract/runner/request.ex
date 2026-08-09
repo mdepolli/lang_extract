@@ -9,13 +9,13 @@ defmodule LangExtract.Runner.Request do
     * `429` — `release_and_pause` in one cast (so waiters cannot slip in
       between release and pause), then retry. Rate-limit waits never
       consume the chunk's retry budget: the server asked us to wait, not
-      to give up. When `retry-after` is absent the pause escalates
-      exponentially from one backoff period; either way the Limiter clamps
-      each pause to its 30s ceiling, so a hostile deadline delays a run,
-      never hangs it. A chunk retries up to `:rate_limit_retries` times
-      after a 429 (default 10); the next 429 past that cap fails the chunk
-      with the rate-limit error — bounded, unlike a budget, only by
-      persistence of the 429s.
+      to give up. A server-provided `retry-after` is honored verbatim —
+      an hour-long quota reset is waited out, not retried against; when
+      the header is absent the pause escalates exponentially from one
+      backoff period, capped at 30s. A chunk retries up to
+      `:rate_limit_retries` times after a 429 (default 10); the next 429
+      past that cap fails the chunk with the rate-limit error — bounded,
+      unlike a budget, only by persistence of the 429s.
     * `5xx` / transport error — jittered exponential backoff, consumes one
       unit of `chunk_retries`; budget exhausted returns the last error.
     * any other error (4xx, parse-level) — returned immediately; a bad
@@ -35,6 +35,7 @@ defmodule LangExtract.Runner.Request do
   alias LangExtract.Runner.Limiter
 
   @max_backoff_ms 10_000
+  @max_rate_limit_pause_ms 30_000
   @default_rate_limit_retries 10
 
   @spec infer(GenServer.server(), Client.t(), String.t(), keyword()) ::
@@ -115,8 +116,12 @@ defmodule LangExtract.Runner.Request do
   # Absent a server deadline, escalate: a persistently throttled endpoint
   # should slow us down geometrically, not sustain a hot retry loop. The
   # Limiter clamps every pause to its ceiling, so growth here is unbounded.
+  # Synthesized only — a server-provided retry-after bypasses this and is
+  # honored verbatim. Capped here (not in the Limiter, which trusts its
+  # callers) so headerless escalation cannot outgrow a pause window:
+  # default backoff reaches 200ms * 2^9 = 102s by the last retry.
   defp rate_limit_pause(s) do
-    s.backoff * Integer.pow(2, s.rate_limited)
+    min(s.backoff * Integer.pow(2, s.rate_limited), @max_rate_limit_pause_ms)
   end
 
   defp backoff_ms(s) do

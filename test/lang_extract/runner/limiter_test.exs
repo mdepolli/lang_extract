@@ -126,23 +126,47 @@ defmodule LangExtract.Runner.LimiterTest do
       assert System.monotonic_time(:millisecond) - started >= 100
     end
 
-    # retry-after is unauthenticated server input: proxies echoing an epoch
-    # timestamp (a recurring server bug class) would otherwise hold every
-    # caller for decades — and overflow the wake timer, crashing the
-    # limiter. The ceiling turns garbage deadlines into a bounded stall.
-    test "pauses clamp to the ceiling instead of trusting the deadline" do
+    # Server retry-after is authoritative: an hour-long quota-reset 429
+    # (daily/hourly provider limits) must wait out the full deadline
+    # instead of burning the retry budget against a still-throttled
+    # endpoint. Synthesized backoff is capped at Request, not here.
+    test "server retry-after deadlines are honored verbatim" do
       clock = start_supervised!({Agent, fn -> 0 end})
       clock_fun = fn -> Agent.get(clock, & &1) end
       limiter = start_supervised!({Limiter, [max_in_flight: 10, clock: clock_fun]})
 
-      Limiter.pause(limiter, 1_000_000_000_000_000)
+      Limiter.pause(limiter, 3_600_000)
       # pause/2 is a cast; sync before moving the clock so the deadline
       # is computed from virtual time zero.
       _ = :sys.get_state(limiter)
       Agent.update(clock, fn _ -> 30_001 end)
 
       waiter = blocked_acquire(limiter)
+      # Past the old 30s ceiling: still paused.
+      refute_receive {:acquired, _}, 40
+
+      Agent.update(clock, fn _ -> 3_600_001 end)
+      # Any limiter message re-runs admission on the new virtual time.
+      Limiter.release(limiter)
       assert_receive {:acquired, ^waiter}, 500
+    end
+
+    # retry-after is still unauthenticated input: proxies echo epoch
+    # timestamps into it (a recurring server bug class). Honoring such a
+    # deadline stalls the run until the caller gives up — accepted — but
+    # it must never overflow the wake timer (send_after's ~49-day limit)
+    # and crash the limiter: the wake is scheduled in bounded chunks.
+    test "a garbage deadline stalls admission without crashing the wake timer" do
+      clock = start_supervised!({Agent, fn -> 0 end})
+      clock_fun = fn -> Agent.get(clock, & &1) end
+      limiter = start_supervised!({Limiter, [max_in_flight: 10, clock: clock_fun]})
+
+      Limiter.pause(limiter, 1_000_000_000_000_000)
+      _ = :sys.get_state(limiter)
+
+      waiter = blocked_acquire(limiter)
+      refute_receive {:acquired, ^waiter}, 40
+      assert Process.alive?(limiter)
     end
 
     # Under contention, pause/acquire paths used to stack send_after(:wake)
