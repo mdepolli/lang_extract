@@ -62,7 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Limiter.release_and_pause/2` applies release and the global
   `retry-after` deadline in one cast so `admit_waiting` cannot grant
   queued work in the gap between separate `release` and `pause` casts.
-  `Request` uses it on rate-limited retries.
+  `Request` uses it on rate-limited retries — and on the give-up path
+  once `rate_limit_retries` is exhausted, so a chunk failing out of a
+  429 storm still applies the server's final deadline instead of handing
+  its hot slot to sibling chunks mid-throttle.
 
 - **A paraphrase of an already-claimed repeat no longer grounds its
   prefix** — DP claims mask the lesser block search: the plain difflib

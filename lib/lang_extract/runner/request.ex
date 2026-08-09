@@ -15,7 +15,9 @@ defmodule LangExtract.Runner.Request do
       backoff period, capped at 30s. A chunk retries up to
       `:rate_limit_retries` times after a 429 (default 10); the next 429
       past that cap fails the chunk with the rate-limit error — bounded,
-      unlike a budget, only by persistence of the 429s.
+      unlike a budget, only by persistence of the 429s — while still
+      pausing the runner with that final 429's deadline, so giving up
+      never hands siblings a hot slot.
     * `5xx` / transport error — jittered exponential backoff, consumes one
       unit of `chunk_retries`; budget exhausted returns the last error.
     * any other error (4xx, parse-level) — returned immediately; a bad
@@ -65,15 +67,18 @@ defmodule LangExtract.Runner.Request do
     ok
   end
 
+  # Give-up keeps the pause-before-free invariant: the final 429's
+  # retry-after is in hand, and a plain release would hand a hot slot to
+  # sibling chunks mid-throttle to burn their own budgets.
   defp finish(
-         {:error, {:rate_limited, _}} = error,
+         {:error, {:rate_limited, retry_after}} = error,
          limiter,
          _client,
          _prompt,
-         %{rate_limited: n, rate_limit_retries: cap}
+         %{rate_limited: n, rate_limit_retries: cap} = s
        )
        when n >= cap do
-    Limiter.release(limiter)
+    Limiter.release_and_pause(limiter, retry_after || rate_limit_pause(s))
     error
   end
 

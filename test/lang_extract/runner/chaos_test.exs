@@ -9,6 +9,7 @@ defmodule LangExtract.Runner.ChaosTest do
   alias LangExtract.{ChunkError, ChunkResult}
   alias LangExtract.Result
   alias LangExtract.Runner
+  alias LangExtract.Runner.Limiter
   alias LangExtract.Test.FakeAnthropic
 
   # Two sentences -> two chunks at max_chunk_chars: 25.
@@ -67,6 +68,29 @@ defmodule LangExtract.Runner.ChaosTest do
 
     # initial + 2 capped retries, then the chunk gave up.
     assert FakeAnthropic.calls(probe) == 3
+  end
+
+  # The pause-before-free invariant must hold on the give-up path too: the
+  # final 429's retry-after is in hand, and freeing a hot slot without
+  # pausing admits sibling chunks straight into the throttle to burn their
+  # own budgets.
+  test "a chunk giving up on 429 still pauses the runner with the final retry-after" do
+    FakeAnthropic.install(__MODULE__, [{:status, 429, [{"retry-after", "60"}]}])
+
+    runner = start_supervised!({Runner, [client: client(), rate_limit_retries: 0]})
+
+    assert %Result{spans: [], errors: [%ChunkError{reason: {:rate_limited, 60_000}}]} =
+             Runner.run(runner, "hello world", template())
+
+    %{limiter: limiter} = Runner.resources(runner)
+    test_pid = self()
+
+    spawn(fn ->
+      Limiter.acquire(limiter)
+      send(test_pid, :acquired)
+    end)
+
+    refute_receive :acquired, 50
   end
 
   test "malformed payloads become per-chunk errors while neighbors succeed" do
