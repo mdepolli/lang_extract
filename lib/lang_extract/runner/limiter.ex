@@ -6,9 +6,9 @@ defmodule LangExtract.Runner.Limiter do
   Chunk tasks call `acquire/2` before each HTTP request and `release/1`
   after it completes. Acquirers are monitored — a killed task (stream halt,
   crash) releases its slot automatically, so budget can never leak.
-  `pause/2` holds *all* admission until a deadline: one 429 informs every
-  in-flight chunk instead of N requests independently colliding with the
-  same exhausted window.
+  `release_and_pause/2` holds *all* admission until a deadline: one 429
+  informs every in-flight chunk instead of N requests independently
+  colliding with the same exhausted window.
 
   Emits `[:lang_extract, :limiter, :wait]` whenever an acquire had to wait,
   with the wait `duration`, the `reason` that blocked it first
@@ -64,24 +64,19 @@ defmodule LangExtract.Runner.Limiter do
   end
 
   @doc """
-  Pauses all admission for `ms` milliseconds (a `retry-after` deadline).
+  Releases the caller's slot and pauses all admission for `ms`
+  milliseconds (a `retry-after` deadline) in one cast.
+
+  Used on 429: separate `release` then `pause` casts would let
+  `admit_waiting` grant queued work in the gap before the pause is
+  visible. One message applies both, then runs admission under the new
+  deadline. Releasing a pid with no slot is a no-op, so the pause half
+  stands alone for callers that hold nothing.
 
   Repeated pauses extend to the furthest deadline; they never shorten it.
   The deadline is honored verbatim: a long quota-reset `retry-after`
   stalls admission until it expires (callers cap synthesized backoff at
   the source — see `LangExtract.Runner.Request`).
-  """
-  @spec pause(GenServer.server(), non_neg_integer()) :: :ok
-  def pause(limiter, ms) do
-    GenServer.cast(limiter, {:pause, ms})
-  end
-
-  @doc """
-  Releases the caller's slot and pauses admission in one cast.
-
-  Used on 429: separate `release` then `pause` casts let `admit_waiting`
-  grant queued work in the gap before the pause is visible. One message
-  applies both, then runs admission under the new deadline.
   """
   @spec release_and_pause(GenServer.server(), non_neg_integer()) :: :ok
   def release_and_pause(limiter, ms) do
@@ -137,10 +132,6 @@ defmodule LangExtract.Runner.Limiter do
   @impl true
   def handle_cast({:release, pid}, state) do
     {:noreply, state |> drop_in_flight(pid) |> admit_waiting()}
-  end
-
-  def handle_cast({:pause, ms}, state) do
-    {:noreply, schedule_wake(apply_pause(state, ms))}
   end
 
   def handle_cast({:release_and_pause, pid, ms}, state) do

@@ -101,7 +101,7 @@ defmodule LangExtract.Runner.LimiterTest do
       attach_wait_telemetry()
       limiter = start_supervised!({Limiter, [max_in_flight: 10]})
 
-      Limiter.pause(limiter, 80)
+      Limiter.release_and_pause(limiter, 80)
       started = System.monotonic_time(:millisecond)
 
       waiter = blocked_acquire(limiter)
@@ -117,8 +117,8 @@ defmodule LangExtract.Runner.LimiterTest do
     test "pauses extend to the furthest deadline, never shorten" do
       limiter = start_supervised!({Limiter, [max_in_flight: 10]})
 
-      Limiter.pause(limiter, 120)
-      Limiter.pause(limiter, 10)
+      Limiter.release_and_pause(limiter, 120)
+      Limiter.release_and_pause(limiter, 10)
       started = System.monotonic_time(:millisecond)
 
       waiter = blocked_acquire(limiter)
@@ -135,8 +135,8 @@ defmodule LangExtract.Runner.LimiterTest do
       clock_fun = fn -> Agent.get(clock, & &1) end
       limiter = start_supervised!({Limiter, [max_in_flight: 10, clock: clock_fun]})
 
-      Limiter.pause(limiter, 3_600_000)
-      # pause/2 is a cast; sync before moving the clock so the deadline
+      Limiter.release_and_pause(limiter, 3_600_000)
+      # release_and_pause/2 is a cast; sync before moving the clock so the deadline
       # is computed from virtual time zero.
       _ = :sys.get_state(limiter)
       Agent.update(clock, fn _ -> 30_001 end)
@@ -161,7 +161,7 @@ defmodule LangExtract.Runner.LimiterTest do
       clock_fun = fn -> Agent.get(clock, & &1) end
       limiter = start_supervised!({Limiter, [max_in_flight: 10, clock: clock_fun]})
 
-      Limiter.pause(limiter, 1_000_000_000_000_000)
+      Limiter.release_and_pause(limiter, 1_000_000_000_000_000)
       _ = :sys.get_state(limiter)
 
       waiter = blocked_acquire(limiter)
@@ -174,7 +174,7 @@ defmodule LangExtract.Runner.LimiterTest do
     test "rescheduling the wake timer cancels the previous one" do
       limiter = start_supervised!({Limiter, [max_in_flight: 10]})
 
-      Limiter.pause(limiter, 60_000)
+      Limiter.release_and_pause(limiter, 60_000)
       waiter = blocked_acquire(limiter)
       await_waiting(limiter, 1)
 
@@ -182,7 +182,7 @@ defmodule LangExtract.Runner.LimiterTest do
       assert is_reference(first_ref)
       assert is_integer(Process.read_timer(first_ref))
 
-      Limiter.pause(limiter, 60_000)
+      Limiter.release_and_pause(limiter, 60_000)
       %{wake_ref: second_ref} = :sys.get_state(limiter)
 
       assert is_reference(second_ref)
