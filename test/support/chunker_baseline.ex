@@ -1,47 +1,17 @@
-defmodule LangExtract.Chunker do
+defmodule LangExtract.Test.ChunkerBaseline do
   @moduledoc """
-  Splits text into sentence-aware chunks, mirroring upstream's `ChunkIterator`.
+  Frozen line-comparable port of upstream's `ChunkIterator` — the
+  differential oracle for `LangExtract.Chunker`.
 
-  A chunk is a token interval: its text runs from its first token's start to
-  its last token's end. Whitespace between chunks belongs to no chunk, so
-  chunks do not tile the source — matching upstream, whose token stream has
-  no whitespace tokens. Byte offsets always slice the chunk's text back out
-  of the source verbatim.
-
-  Sentence boundary rules (upstream's `find_sentence_range` semantics):
-  1. A `:punctuation` token ending in a sentence terminator (`.`, `!`, `?`,
-     CJK equivalents — `...` counts, since symbol runs are one token) ends a
-     sentence, unless the previous token plus the terminator form a known
-     abbreviation (`"Dr" <> "." == "Dr."`). Whitespace is invisible here, so
-     `"Dr ."` still reads as the abbreviation.
-  2. After sentence-ending punctuation, trailing closing punctuation
-     (`"`, `'`, `)`, `]`, `}`, `»`, `”`, `’`) is consumed into the
-     same sentence — across any whitespace, so the quote opening the next
-     line's dialogue attaches to the sentence before it, exactly as upstream.
-  3. A token first on its line (its gap from the previous token contains
-     `\\n` or `\\r`) starts a new sentence unless it begins lowercase —
-     lines opening with quotes, digits, or capitals all break (upstream:
-     "assume break unless lowercase").
-
-  Chunk assembly (mirroring upstream's `ChunkIterator.__next__`):
-  1. A single token longer than the budget forms a chunk by itself.
-  2. An oversized sentence is cut at the most recent newline within budget
-     when one exists, else at the last token that fits; the remainder
-     restarts sentence discovery mid-sentence.
-  3. A chunk that completes a broken sentence never absorbs following
-     sentences.
-  4. Otherwise whole sentences pack into the chunk while they fit.
-
-  Budgets count characters (upstream's `max_char_buffer` unit — see
-  `chunk/2`); offsets are bytes.
-
-  Departure from upstream's shape: every boundary rule is position-local,
-  so sentence ends are precomputed for all positions in one backward pass,
-  where upstream rescans forward from each chunk start — quadratic on
-  boundary-free text (minified JSON, logs). Behavior is pinned two ways:
-  the parity fixtures tie the line-comparable port to upstream, and the
-  differential test ties this rewrite to that port, frozen as
-  `LangExtract.Test.ChunkerBaseline` in test support.
+  This is the implementation the chunker parity fixtures validated against
+  upstream, copied verbatim before the production module departed from
+  upstream's shape (boundary precompute; upstream rescans forward from
+  every chunk start). The differential test asserts the production chunker
+  produces identical output on generated inputs, per the project's
+  trust-chain doctrine: fixtures + line comparison prove this baseline
+  matches upstream; the differential proves the rewrite matches the
+  baseline. Do not edit this module to follow production changes — its
+  value is that it does not move.
   """
 
   alias LangExtract.Alignment.Tokenizer
@@ -78,8 +48,7 @@ defmodule LangExtract.Chunker do
     end
 
     tokens = annotate_tokens(text)
-    boundaries = sentence_boundaries(tokens)
-    build_chunks(text, tokens, tuple_size(tokens), boundaries, 0, false, max_chars, [])
+    build_chunks(text, tokens, tuple_size(tokens), 0, false, max_chars, [])
   end
 
   # The chunker's token stream: the tokenizer's non-whitespace tokens,
@@ -122,72 +91,35 @@ defmodule LangExtract.Chunker do
     end
   end
 
-  # For every position, the end of the sentence a scan started there would
-  # find (upstream find_sentence_range(idx)). One backward pass: a rule
-  # hit at idx is position-local (punctuation end at idx, or a break
-  # before idx + 1); a miss inherits the boundary of idx + 1. Entry count
-  # holds the end-of-text sentinel, so lookups never bounds-check.
-  defp sentence_boundaries(tokens) do
-    count = tuple_size(tokens)
-
-    (count - 1)..0//-1
-    |> Enum.reduce([count], fn idx, [next | _] = acc ->
-      boundary =
-        cond do
-          sentence_end_by_punctuation?(elem(tokens, idx), idx, tokens) ->
-            consume_closing_punctuation(idx + 1, tokens, count)
-
-          sentence_break_after_newline?(idx, tokens, count) ->
-            idx + 1
-
-          true ->
-            next
-        end
-
-      [boundary | acc]
-    end)
-    |> List.to_tuple()
-  end
-
   # Upstream ChunkIterator.__next__, one clause per return path: a token
   # wider than the budget is its own chunk; otherwise the sentence grows
   # token-by-token (cutting at the budget), and only an unbroken sentence
   # may then absorb following whole sentences.
-  defp build_chunks(_text, _tokens, count, _boundaries, pos, _broken?, _max_chars, acc)
-       when pos >= count do
+  defp build_chunks(_text, _tokens, count, pos, _broken?, _max_chars, acc) when pos >= count do
     Enum.reverse(acc)
   end
 
-  defp build_chunks(text, tokens, count, boundaries, pos, broken?, max_chars, acc) do
-    sentence_end = elem(boundaries, pos)
+  defp build_chunks(text, tokens, count, pos, broken?, max_chars, acc) do
+    sentence_end = find_sentence_range(tokens, count, pos)
 
     if span_exceeds?(tokens, pos, pos + 1, max_chars) do
       chunk = emit_chunk(text, tokens, pos, pos + 1)
       still_broken? = pos + 1 < sentence_end
-
-      build_chunks(text, tokens, count, boundaries, pos + 1, still_broken?, max_chars, [
-        chunk | acc
-      ])
+      build_chunks(text, tokens, count, pos + 1, still_broken?, max_chars, [chunk | acc])
     else
       case fit_within_sentence(tokens, pos, pos + 1, sentence_end, -1, max_chars) do
         {:cut, cut_end} ->
           chunk = emit_chunk(text, tokens, pos, cut_end)
-          build_chunks(text, tokens, count, boundaries, cut_end, true, max_chars, [chunk | acc])
+          build_chunks(text, tokens, count, cut_end, true, max_chars, [chunk | acc])
 
         :fits when broken? ->
           chunk = emit_chunk(text, tokens, pos, sentence_end)
-
-          build_chunks(text, tokens, count, boundaries, sentence_end, false, max_chars, [
-            chunk | acc
-          ])
+          build_chunks(text, tokens, count, sentence_end, false, max_chars, [chunk | acc])
 
         :fits ->
-          chunk_end = append_sentences(tokens, count, boundaries, pos, sentence_end, max_chars)
+          chunk_end = append_sentences(tokens, count, pos, sentence_end, max_chars)
           chunk = emit_chunk(text, tokens, pos, chunk_end)
-
-          build_chunks(text, tokens, count, boundaries, chunk_end, false, max_chars, [
-            chunk | acc
-          ])
+          build_chunks(text, tokens, count, chunk_end, false, max_chars, [chunk | acc])
       end
     end
   end
@@ -218,18 +150,17 @@ defmodule LangExtract.Chunker do
   # Upstream's trailing sentence loop: keep absorbing whole sentences while
   # the chunk stays within budget. Sentences are contiguous, so the chunk
   # ends exactly where the first non-fitting sentence starts.
-  defp append_sentences(_tokens, count, _boundaries, _start, chunk_end, _max_chars)
-       when chunk_end >= count do
+  defp append_sentences(_tokens, count, _start, chunk_end, _max_chars) when chunk_end >= count do
     chunk_end
   end
 
-  defp append_sentences(tokens, count, boundaries, start, chunk_end, max_chars) do
-    next_end = elem(boundaries, chunk_end)
+  defp append_sentences(tokens, count, start, chunk_end, max_chars) do
+    next_end = find_sentence_range(tokens, count, chunk_end)
 
     if span_exceeds?(tokens, start, next_end, max_chars) do
       chunk_end
     else
-      append_sentences(tokens, count, boundaries, start, next_end, max_chars)
+      append_sentences(tokens, count, start, next_end, max_chars)
     end
   end
 
@@ -258,20 +189,40 @@ defmodule LangExtract.Chunker do
   @spec find_sentences(String.t()) :: [String.t()]
   def find_sentences(text) when is_binary(text) do
     tokens = annotate_tokens(text)
-    boundaries = sentence_boundaries(tokens)
-    collect_sentences(text, tokens, tuple_size(tokens), boundaries, 0, [])
+    count = tuple_size(tokens)
+    collect_sentences(text, tokens, count, 0, [])
   end
 
-  defp collect_sentences(_text, _tokens, count, _boundaries, pos, acc) when pos >= count do
+  defp collect_sentences(_text, _tokens, count, pos, acc) when pos >= count do
     Enum.reverse(acc)
   end
 
-  defp collect_sentences(text, tokens, count, boundaries, pos, acc) do
-    sentence_end = elem(boundaries, pos)
+  defp collect_sentences(text, tokens, count, pos, acc) do
+    sentence_end = find_sentence_range(tokens, count, pos)
     first = elem(tokens, pos)
     last = elem(tokens, sentence_end - 1)
     sentence = binary_part(text, first.byte_start, last.byte_end - first.byte_start)
-    collect_sentences(text, tokens, count, boundaries, sentence_end, [sentence | acc])
+    collect_sentences(text, tokens, count, sentence_end, [sentence | acc])
+  end
+
+  # Upstream find_sentence_range: scan for a sentence-ending punctuation
+  # token (consuming trailing closing punctuation) or a line break followed
+  # by a non-lowercase token; end of text ends the sentence.
+  defp find_sentence_range(_tokens, count, idx) when idx >= count, do: count
+
+  defp find_sentence_range(tokens, count, idx) do
+    token = elem(tokens, idx)
+
+    cond do
+      sentence_end_by_punctuation?(token, idx, tokens) ->
+        consume_closing_punctuation(idx + 1, tokens, count)
+
+      sentence_break_after_newline?(idx, tokens, count) ->
+        idx + 1
+
+      true ->
+        find_sentence_range(tokens, count, idx + 1)
+    end
   end
 
   defp sentence_end_by_punctuation?(%{type: :punctuation, text: text}, idx, tokens) do

@@ -43,6 +43,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   code points, not graphemes (`\r\n` is two, so hard-wrapped CRLF text
   no longer drifts one char per line).
 
+- **Chunking is linear in document size** — the `ChunkIterator` port
+  inherited upstream's shape of rescanning forward from every chunk start,
+  which is quadratic when sentence boundaries are scarce: a boundary-free
+  3.2 MB document (minified JSON, logs, terminator-free prose) took ~17s
+  where sentence-rich prose stayed fast. Every boundary rule is
+  position-local, so sentence ends are now precomputed for all positions
+  in one backward pass and chunk assembly looks them up — same 3.2 MB
+  document in ~1.1s, doubling cleanly with size (the residue is
+  tokenization). Behavior is unchanged and pinned twice over: the parity
+  fixtures tie the line-comparable port to upstream, and a new
+  differential suite ties the rewrite to that port — frozen verbatim as
+  `LangExtract.Test.ChunkerBaseline` — across a seeded adversarial corpus
+  (abbreviation clusters, closing-punctuation walls, CRLF prose,
+  boundary-free runs, budget knife-edges), byte-identical throughout.
+
 - **429 paths pause before freeing the in-flight slot** —
   `Limiter.release_and_pause/2` applies release and the global
   `retry-after` deadline in one cast so `admit_waiting` cannot grant
