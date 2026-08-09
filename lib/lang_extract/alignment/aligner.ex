@@ -32,10 +32,12 @@ defmodule LangExtract.Alignment.Aligner do
 
   Fallthrough respects DP claims: a token interval placed in phase 0 is
   reserved, so leftovers cannot nest inside it — exact scans past claimed
-  occurrences, the lesser search keeps its plain-difflib block when it
-  lands on free source and reruns with claimed tokens masked when it does
-  not (claims elsewhere never disturb an uncontested grounding), and LCS
-  rejects spans that overlap a claim. Each fallthrough placement reserves
+  occurrences, and the lesser and LCS searches share one rescue shape:
+  the plain search runs first and its winner stands when it lands on free
+  source (claims elsewhere never disturb an uncontested grounding); only
+  a winner that itself overlaps a claim reruns with claimed tokens masked,
+  landing on a free occurrence when one qualifies. A rescued LCS span that
+  still straddles a claim is rejected. Each fallthrough placement reserves
   its own interval for later leftovers the same way.
 
   Cost model: this module aligns whatever text it is handed, with no size
@@ -404,21 +406,64 @@ defmodule LangExtract.Alignment.Aligner do
     # error in m * threshold is part of the spec (25 * 0.28 floats to
     # 7.000000000000001, so ceil demands 8 matches, not 7).
     needed = ceil(length(ext_stemmed) * config.threshold)
-    spans = best_lcs_spans(index.stemmed, ext_stemmed)
+
+    case free_lcs_span(index.stemmed, ext_stemmed, needed, config, claimed) do
+      nil ->
+        :no_match
+
+      {start_idx, end_idx} ->
+        {:ok, found_span(extraction, index.words, start_idx, end_idx, :fuzzy),
+         {start_idx, end_idx + 1}}
+    end
+  end
+
+  # Two passes, same shape as free_prefix_block: plain LCS runs first, so
+  # claims elsewhere never disturb a winner on free source. Only a winner
+  # that itself overlaps a claim reruns with claimed source tokens masked
+  # to a sentinel no extraction token can equal, landing on a free
+  # occurrence when one passes the gates. The rerun keeps the free? check:
+  # masks stop claimed tokens from matching, but a window can still
+  # straddle a claim (matches on both sides), and such spans fall through
+  # to lower match counts instead of grounding over claimed bytes.
+  defp free_lcs_span(source_stemmed, ext_stemmed, needed, config, claimed) do
+    case accepted_lcs_span(source_stemmed, ext_stemmed, needed, config, []) do
+      nil ->
+        nil
+
+      {start_idx, end_idx} = span ->
+        if free?(claimed, {start_idx, end_idx + 1}) do
+          span
+        else
+          source_stemmed
+          |> mask_tokens(claimed_token_set(claimed))
+          |> accepted_lcs_span(ext_stemmed, needed, config, claimed)
+        end
+    end
+  end
+
+  # Highest match count whose tightest span passes the coverage, density,
+  # and reservation gates (per count the span map already holds the
+  # tightest span, earliest start on ties — upstream's preference).
+  defp accepted_lcs_span(source_stemmed, ext_stemmed, needed, config, claimed) do
+    spans = best_lcs_spans(source_stemmed, ext_stemmed)
 
     spans
     |> Map.keys()
     |> Enum.sort(:desc)
-    |> Enum.find_value(:no_match, fn matches ->
+    |> Enum.find_value(fn matches ->
       {start_idx, end_idx} = spans[matches]
-      span_len = end_idx - start_idx + 1
-      density = matches / span_len
-      interval = {start_idx, end_idx + 1}
+      density = matches / (end_idx - start_idx + 1)
 
       if matches >= needed and density >= config.min_density and
-           free?(claimed, interval) do
-        {:ok, found_span(extraction, index.words, start_idx, end_idx, :fuzzy), interval}
+           free?(claimed, {start_idx, end_idx + 1}) do
+        {start_idx, end_idx}
       end
+    end)
+  end
+
+  defp mask_tokens(source_stemmed, claimed_set) do
+    Enum.with_index(source_stemmed, fn token, idx ->
+      if MapSet.member?(claimed_set, idx), do: :claimed, else: token
     end)
   end
 

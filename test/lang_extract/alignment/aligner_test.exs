@@ -396,6 +396,46 @@ defmodule LangExtract.Alignment.AlignerTest do
                  "alpha beta www"
                ])
     end
+
+    # The LCS search mirrors the lesser rescue: a fuzzy leftover whose
+    # winning span is claimed reruns over masked source and grounds on
+    # the free occurrence instead of giving up.
+    test "fuzzy leftover grounds outside a DP placement" do
+      source = "the striped cat sat down and the striped cat sat up"
+
+      assert [
+               %Span{status: :exact, byte_start: 0, byte_end: 24},
+               %Span{status: :fuzzy, byte_start: 29, byte_end: 48}
+             ] =
+               Aligner.align(source, ["the striped cat sat down", "the striped cats sat"],
+                 accept_lesser: false
+               )
+    end
+
+    test "fuzzy leftover with no free occurrence left is not_found" do
+      source = "the striped cat sat down"
+
+      assert [
+               %Span{status: :exact},
+               %Span{status: :not_found}
+             ] =
+               Aligner.align(source, ["the striped cat sat down", "the striped cats sat"],
+                 accept_lesser: false
+               )
+    end
+
+    # The masked rerun keeps the reservation check: matches on both sides
+    # of a claim can produce a span that straddles it, and such a span
+    # must be rejected, not grounded over the claimed bytes.
+    test "fuzzy span straddling a claim is rejected" do
+      source = "alpha beta mid gamma delta"
+
+      assert [
+               %Span{status: :exact, byte_start: 11, byte_end: 14},
+               %Span{status: :not_found}
+             ] =
+               Aligner.align(source, ["mid", "alpha beta gamma delta"], accept_lesser: false)
+    end
   end
 
   describe ":exact_algorithm option" do
