@@ -63,19 +63,24 @@ defmodule LangExtract.Alignment.Aligner do
   @default_fuzzy_threshold 0.75
   @default_min_density 1 / 3
 
-  # Grounding: half-open token interval [start, end) plus alignment status.
-  # @type grounding :: %{status: :exact | :lesser | :fuzzy, start: non_neg_integer(), end: non_neg_integer()}
+  # Two units of work: index (document views) and item (one extraction).
+  # After assign_phase0, item.placement is {:selected, start} | :leftover.
+  # Claims are fold state only — not a third unit.
+  # Grounding: half-open [start, end) plus status, produced when placing.
 
   @spec align(String.t(), [String.t()], keyword()) :: [Span.t()]
   def align(source, extractions, opts \\ []) do
     config = build_config(opts)
-    items = tokenize_items(extractions)
     index = index_source(source)
-    selection = occurrence_selection(index, items, config)
+
+    items =
+      extractions
+      |> tokenize_items()
+      |> assign_phase0(index, config)
 
     index
-    |> stem_for_leftovers(selection, items)
-    |> place_extractions(items, selection, config)
+    |> stem_if_leftovers(items)
+    |> place(items, config)
   end
 
   defp build_config(opts) do
@@ -87,11 +92,9 @@ defmodule LangExtract.Alignment.Aligner do
     }
   end
 
-  # --- Setup: items, source index, optional stems ---
+  # --- Setup: items, source index, phase-0 placement, optional stems ---
 
-  # One work item per input extraction: original text (for Span.text),
-  # downcased non-whitespace tokens (for matching), and its model-output
-  # index (for phase-0 selection and claim lengths).
+  # Raw work item: text (Span.text), downcased tokens (matching), model-output index.
   defp tokenize_items(extractions) do
     extractions
     |> Enum.with_index()
@@ -103,6 +106,23 @@ defmodule LangExtract.Alignment.Aligner do
         |> Enum.map(&String.downcase(&1.text))
 
       %{text: text, tokens: tokens, idx: idx}
+    end)
+  end
+
+  # Phase 0 as a routing decision on each item. The DP may still use an
+  # internal %{idx => start} map; it does not escape this boundary.
+  defp assign_phase0(items, _index, %{exact_algorithm: :first_occurrence}) do
+    Enum.map(items, &Map.put(&1, :placement, :leftover))
+  end
+
+  defp assign_phase0(items, index, %{exact_algorithm: :dp}) do
+    selection = occurrence_selection(index, items)
+
+    Enum.map(items, fn item ->
+      case Map.fetch(selection, item.idx) do
+        {:ok, start} -> Map.put(item, :placement, {:selected, start})
+        :error -> Map.put(item, :placement, :leftover)
+      end
     end)
   end
 
@@ -129,40 +149,41 @@ defmodule LangExtract.Alignment.Aligner do
   # mirror that so a fully placed call never pays the stem pass. LCS is
   # the only stem reader, and stemmed stays a list — it is only ever
   # walked sequentially by the LCS scan.
-  defp stem_for_leftovers(%{texts: texts} = index, selection, items) do
-    if map_size(selection) == length(items) do
-      index
-    else
+  defp stem_if_leftovers(%{texts: texts} = index, items) do
+    if Enum.any?(items, &(&1.placement == :leftover)) do
       %{index | stemmed: texts |> Tuple.to_list() |> Enum.map(&stem_token/1)}
+    else
+      index
     end
   end
 
-  # --- Placement: selection hits vs leftovers under claims ---
+  # --- Placement: selected hits vs leftovers under claims ---
 
-  # :dp seeds claims from phase 0 and grows them on leftover hits.
-  # :first_occurrence skips phase 0 and never claims, so overlaps remain allowed.
-  defp place_extractions(index, items, selection, %{exact_algorithm: :dp} = config) do
-    fold_placements(index, items, selection, config, claimed_from_selection(selection, items))
+  # :dp seeds claims from phase-0 selections and grows them on leftover hits.
+  # :first_occurrence never claims, so overlaps remain allowed.
+  defp place(index, items, %{exact_algorithm: :dp} = config) do
+    fold_placements(index, items, config, claims_from_selected(items))
   end
 
-  defp place_extractions(index, items, selection, %{exact_algorithm: :first_occurrence} = config) do
-    fold_placements(index, items, selection, config, _claimed = [])
+  defp place(index, items, %{exact_algorithm: :first_occurrence} = config) do
+    fold_placements(index, items, config, _claimed = [])
   end
 
-  defp fold_placements(index, items, selection, config, claimed) do
+  defp fold_placements(index, items, config, claimed) do
     {spans, _claimed} =
       Enum.map_reduce(items, claimed, fn item, claimed ->
-        place_one(item, selection, index, config, claimed)
+        place_one(item, index, config, claimed)
       end)
 
     spans
   end
 
-  defp place_one(item, selection, index, config, claimed) do
-    case Map.fetch(selection, item.idx) do
-      {:ok, start} -> from_selection(item, start, index, claimed)
-      :error -> place_leftover(item, index, config, claimed)
-    end
+  defp place_one(%{placement: {:selected, start}} = item, index, _config, claimed) do
+    from_selection(item, start, index, claimed)
+  end
+
+  defp place_one(%{placement: :leftover} = item, index, config, claimed) do
+    place_leftover(item, index, config, claimed)
   end
 
   defp from_selection(%{text: text, tokens: tokens}, start, %{words: words}, claimed) do
@@ -185,12 +206,10 @@ defmodule LangExtract.Alignment.Aligner do
 
   defp reserve_claim(claimed, _grounding, %{exact_algorithm: :first_occurrence}), do: claimed
 
-  defp claimed_from_selection(selection, items) do
-    lengths = Map.new(items, fn %{idx: idx, tokens: tokens} -> {idx, length(tokens)} end)
-
-    Enum.map(selection, fn {idx, start} ->
-      {start, start + Map.fetch!(lengths, idx)}
-    end)
+  defp claims_from_selected(items) do
+    for %{placement: {:selected, start}, tokens: tokens} <- items do
+      {start, start + length(tokens)}
+    end
   end
 
   defp interval(%{start: start, end: end_}), do: {start, end_}
@@ -237,9 +256,8 @@ defmodule LangExtract.Alignment.Aligner do
   # earliest-ending chain, which is what maps repeated mentions to
   # successive occurrences. Nodes are {extraction_index, start, parent}.
 
-  defp occurrence_selection(_index, _items, %{exact_algorithm: :first_occurrence}), do: %{}
-
-  defp occurrence_selection(%{texts: source_texts}, items, %{exact_algorithm: :dp}) do
+  # Internal %{idx => start} for the DP only; assign_phase0 writes placement on items.
+  defp occurrence_selection(%{texts: source_texts}, items) do
     items
     |> Enum.reduce([], fn %{tokens: ext_texts, idx: idx}, frontier ->
       add_extraction(frontier, idx, ext_texts, contiguous_starts(source_texts, ext_texts))
