@@ -126,7 +126,7 @@ defmodule LangExtract.Runner do
     %{config: config, limiter: limiter, task_supervisor: task_sup} = resources(runner)
 
     chunks = Orchestrator.chunk_source(source, opts)
-    buffer = Keyword.get(opts, :buffer, config.buffer)
+    buffer = pos_integer!(Keyword.get(opts, :buffer, config.buffer), :buffer)
 
     retry_opts = [
       chunk_retries: config.chunk_retries,

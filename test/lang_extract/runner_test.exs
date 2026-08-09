@@ -153,6 +153,20 @@ defmodule LangExtract.RunnerTest do
 
     defp template, do: LangExtract.template("Extract words.")
 
+    # The per-call override must hit the same validation as the startup
+    # option: unvalidated, buffer: 0 dies as a bare CondClauseError deep in
+    # Delivery's admit loop, and buffer: nil disables the bound entirely
+    # (map_size(tasks) >= nil is false in term order — unbounded admission).
+    test "stream/4 validates the per-call :buffer override" do
+      runner = start_supervised!({Runner, [client: client()]})
+
+      for bad <- [0, nil, -1] do
+        assert_raise ArgumentError, ~r/:buffer must be a positive integer/, fn ->
+          Runner.stream(runner, @source, template(), buffer: bad)
+        end
+      end
+    end
+
     test "stream/4 yields chunk results through the shared budget" do
       word_stub()
       runner = start_supervised!({Runner, [client: client()]})
