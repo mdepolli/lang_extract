@@ -336,6 +336,13 @@ HTTP defaults suit LLM latency: 120s receive timeout and transient retries
 (429/5xx/transport errors). Override either via `:req_options`, e.g.
 `req_options: [receive_timeout: 30_000, retry: false]`.
 
+`:base_url` and `:req_options` are trusted configuration, not data. The
+provider attaches its API key to every request, so whatever host `:base_url`
+names receives your credentials — and `:req_options` can re-enable redirects
+or otherwise change transport behavior. Never build either from end-user
+input: doing so hands an attacker your API key and a request-forging
+primitive against internal hosts (SSRF).
+
 Provider-specific options:
 
 | Provider  | Option       | Default | Description                                                                   |
