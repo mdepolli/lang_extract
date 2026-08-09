@@ -119,8 +119,7 @@ defmodule LangExtract.Runner.Request do
   end
 
   # Absent a server deadline, escalate: a persistently throttled endpoint
-  # should slow us down geometrically, not sustain a hot retry loop. The
-  # Limiter clamps every pause to its ceiling, so growth here is unbounded.
+  # should slow us down geometrically, not sustain a hot retry loop.
   # Synthesized only — a server-provided retry-after bypasses this and is
   # honored verbatim. Capped here (not in the Limiter, which trusts its
   # callers) so headerless escalation cannot outgrow a pause window:

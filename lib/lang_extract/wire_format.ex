@@ -172,7 +172,8 @@ defmodule LangExtract.WireFormat do
   # malformed echo of the canonical schema for Parser to skip — never a
   # dynamic-key group whose key names should become data
   # (class: "class", text: "drug"). This reserves "class" and "text" as
-  # dynamic class names, a deliberate divergence from upstream.
+  # dynamic class names, a deliberate divergence from upstream. The guard
+  # spells out @marker_keys literally — guards cannot walk a list.
   defp normalize_entry(entry) when is_map_key(entry, "class") or is_map_key(entry, "text"),
     do: [entry]
 
