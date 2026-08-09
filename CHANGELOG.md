@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING: OpenAI no longer defaults `temperature` to `0`** — the
+  payload sends `temperature` only when the caller sets it, matching the
+  Claude provider's stance (o-series/reasoning models reject any
+  non-default temperature with a 400 on every chunk). Migration: existing
+  non-reasoning users (`gpt-4o` etc.) now sample at the server default
+  (1.0) — materially noisier extractions; set `temperature: 0` on
+  `LangExtract.new/2` to keep the previous deterministic behavior.
+  Gemini still defaults to `0`.
+
+- **BREAKING: OpenAI sends `max_completion_tokens` by default** — the
+  deprecated `max_tokens` wire key is gone from the default payload
+  (reasoning models on openai.com reject it). Migration: OpenAI-compatible
+  endpoints whose servers predate the new key (older Ollama, LocalAI,
+  llama.cpp builds) silently drop it and truncate replies at their own
+  default length, surfacing as `{:invalid_format, _}` chunk errors — set
+  `token_limit_key: :max_tokens` alongside `base_url` for those (see
+  Added).
+
 - **Chunks are token intervals, mirroring upstream** — a chunk's text now
   runs from its first token's start to its last token's end, so
   whitespace between chunks belongs to no chunk and chunks no longer tile
@@ -155,12 +173,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `:headers` value that is neither map nor list raises `ArgumentError`
   instead of being silently dropped.
 
-- **OpenAI omits `temperature` unless the caller sets it** —
-  `max_completion_tokens` alone was not enough for o-series/reasoning
-  models: the payload still defaulted to `"temperature": 0`, which those
-  models reject with a 400 on every chunk. Matches Claude — no default,
-  optional key only when set. Gemini still defaults to `0`.
-
 - **Multi-fence replies no longer keep a silent empty echo** — first
   JSON-parse-wins plus lazy fence capture preferred an earlier
   few-shot-echo fence (`{"extractions": []}`) over a later answer fence,
@@ -225,7 +237,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   logs entry shape, never model-echoed payload; user `req_options`
   headers merge per-key instead of wiping provider auth (map shape; list
   shapes closed in a later fix above); OpenAI requests send
-  `max_completion_tokens` (reasoning models reject the deprecated key);
+  `max_completion_tokens` (a breaking default — see Changed for the
+  migration and the compat-endpoint escape);
   `{}` responses route to `:missing_extractions` like every other
   extractions-less object; extraction-shaped maps passed as template
   examples raise instead of building a teach-nothing template; plus
