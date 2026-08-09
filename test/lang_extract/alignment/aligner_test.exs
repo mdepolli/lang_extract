@@ -41,15 +41,15 @@ defmodule LangExtract.Alignment.AlignerTest do
              ] = Aligner.align(source, ["quick brown", "lazy dog"])
     end
 
-    # DP places "quick brown fox" non-overlapping; fallthrough used to
-    # re-claim the nested "brown" as a second :exact. Claimed intervals
-    # are reserved so leftovers cannot ground inside a DP span.
-    test "fallthrough does not nest an exact span inside a DP placement" do
+    # DP places "quick brown fox"; the nested "brown" leftover rediscovers
+    # its tokens inside that placement. Upstream grounds it there too —
+    # MATCH_FUZZY over the same bytes (dp_nested_inside_placement fixture).
+    test "fallthrough grounds a nested mention inside a DP placement" do
       source = "the quick brown fox jumps"
 
       assert [
                %Span{text: "quick brown fox", status: :exact, byte_start: 4, byte_end: 19},
-               %Span{text: "brown", status: :not_found}
+               %Span{text: "brown", status: :exact, byte_start: 10, byte_end: 15}
              ] = Aligner.align(source, ["quick brown fox", "brown"])
     end
 
@@ -343,7 +343,7 @@ defmodule LangExtract.Alignment.AlignerTest do
     end
   end
 
-  describe "fallthrough claim reservations" do
+  describe "DP claims in fallthrough" do
     # The lesser block search masks claimed source tokens, so a leftover
     # whose prefix block sits inside a DP placement grounds on the next
     # free occurrence instead of giving up.
@@ -397,42 +397,42 @@ defmodule LangExtract.Alignment.AlignerTest do
                ])
     end
 
-    # The LCS search mirrors the lesser rescue: a fuzzy leftover whose
-    # winning span is claimed reruns over masked source and grounds on
-    # the free occurrence instead of giving up.
-    test "fuzzy leftover grounds outside a DP placement" do
+    # LCS ignores claims: upstream grounds fuzzy leftovers inside sibling
+    # placements (dp_nested_* fixtures), so the plain optimum stands even
+    # when it lands inside a DP claim — the tightest-span, earliest-start
+    # tie-break runs exactly as if no claim existed.
+    test "fuzzy leftover grounds at the plain optimum inside a DP placement" do
       source = "the striped cat sat down and the striped cat sat up"
 
       assert [
                %Span{status: :exact, byte_start: 0, byte_end: 24},
-               %Span{status: :fuzzy, byte_start: 29, byte_end: 48}
+               %Span{status: :fuzzy, byte_start: 0, byte_end: 19}
              ] =
                Aligner.align(source, ["the striped cat sat down", "the striped cats sat"],
                  accept_lesser: false
                )
     end
 
-    test "fuzzy leftover with no free occurrence left is not_found" do
+    test "fuzzy leftover grounds inside the only occurrence" do
       source = "the striped cat sat down"
 
       assert [
-               %Span{status: :exact},
-               %Span{status: :not_found}
+               %Span{status: :exact, byte_start: 0, byte_end: 24},
+               %Span{status: :fuzzy, byte_start: 0, byte_end: 19}
              ] =
                Aligner.align(source, ["the striped cat sat down", "the striped cats sat"],
                  accept_lesser: false
                )
     end
 
-    # The masked rerun keeps the reservation check: matches on both sides
-    # of a claim can produce a span that straddles it, and such a span
-    # must be rejected, not grounded over the claimed bytes.
-    test "fuzzy span straddling a claim is rejected" do
+    # Matches on both sides of a claimed token produce one grounded window
+    # over it — a fuzzy span may straddle a claim.
+    test "fuzzy span may straddle a claim" do
       source = "alpha beta mid gamma delta"
 
       assert [
                %Span{status: :exact, byte_start: 11, byte_end: 14},
-               %Span{status: :not_found}
+               %Span{status: :fuzzy, byte_start: 0, byte_end: 26}
              ] =
                Aligner.align(source, ["mid", "alpha beta gamma delta"], accept_lesser: false)
     end

@@ -217,5 +217,25 @@ defmodule LangExtractTest do
         )
       end
     end
+
+    # Validation runs the production aligner, so aligner behavior changes
+    # are silently template/2 API changes. Nested mentions are the most
+    # common few-shot shape; upstream grounds them (dp_nested_* fixtures),
+    # and examples using them must keep building.
+    test "examples with nested extractions build" do
+      example = %{
+        text: "Patient has type 2 diabetes.",
+        extractions: [
+          %{class: "condition", text: "type 2 diabetes"},
+          %{class: "entity", text: "diabetes"}
+        ]
+      }
+
+      assert %Template{examples: [%Example{extractions: [container, nested]}]} =
+               LangExtract.template("Extract conditions.", examples: [example])
+
+      assert container.text == "type 2 diabetes"
+      assert nested.text == "diabetes"
+    end
   end
 end

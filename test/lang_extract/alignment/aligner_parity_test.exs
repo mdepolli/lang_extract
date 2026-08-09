@@ -6,8 +6,8 @@ defmodule LangExtract.Alignment.AlignerParityTest do
   which runs each case — a source text plus a LIST of extractions in model
   output order — through the upstream aligner (v1.6.0 + #485) and freezes
   its statuses and byte spans. Upstream behavior is the executable spec;
-  any case where we intentionally differ must be listed in
-  @known_divergences with its reason.
+  any case where we intentionally differ must be listed in the divergence
+  ledger below with its reason.
   """
   use ExUnit.Case, async: true
 
@@ -18,26 +18,33 @@ defmodule LangExtract.Alignment.AlignerParityTest do
             |> File.read!()
             |> Jason.decode!()
 
-  # Keyed by {case name, extraction index}. One divergence family:
-  # (the contraction-tokenization family closed when the tokenizer adopted
-  # upstream's letter/digit/symbol-run splitting — smart_quote_contraction
-  # now asserts the fixture's real upstream result.)
+  # Divergence ledger, keyed by {case name, extraction index} and split by
+  # severity. One divergence family feeds it: leftover phases are
+  # per-extraction here, joint upstream — after the occurrence DP, upstream
+  # reruns difflib over the concatenated tokens of ALL sibling extractions,
+  # so siblings change block decomposition for the leftovers. We run each
+  # leftover through the standalone phases instead; DP claims mask only the
+  # lesser phase (so a paraphrase of an already-claimed repeat is
+  # :not_found on both sides — no entry needed).
   #
-  # Leftover phases are per-extraction here, joint upstream: after the
-  # occurrence DP, upstream reruns difflib over the concatenated tokens of
-  # ALL sibling extractions, so siblings change block decomposition for the
-  # leftovers. We run each leftover through the standalone phases instead,
-  # and reserve DP token intervals so fallthrough cannot nest inside a
-  # phase-0 placement.
-  # Consequences: out-of-order leftovers still ground as :exact where
-  # upstream is fuzzy (favorable); contested leftovers that only fit inside
-  # a claimed span are :not_found here (upstream fuzzy); a paraphrase of an
-  # already-claimed repeat is :not_found on both sides after the claim
-  # reservation (was a lesser prefix here before claims).
-  @known_divergences %{
+  # Label divergences ground exactly upstream's bytes under a different
+  # status — favorable (we say :exact where upstream degrades to fuzzy);
+  # a table comment suffices to add one.
+  @label_divergences %{
     {"dp_out_of_order_emission", 0} => %{status: :exact, byte_start: 10, byte_end: 13},
-    {"dp_contested_overlap", 1} => %{status: :not_found, byte_start: nil, byte_end: nil}
+    {"dp_contested_overlap", 1} => %{status: :exact, byte_start: 4, byte_end: 11},
+    {"dp_nested_inside_placement", 1} => %{status: :exact, byte_start: 10, byte_end: 15},
+    {"dp_nested_mention_punctuated", 1} => %{status: :exact, byte_start: 19, byte_end: 27}
   }
+
+  # Existence divergences drop or invent a grounded span relative to
+  # upstream. They are lossy: adding one requires an entry in CLAUDE.md's
+  # decision log stating the trade, not just a line here. Empty today —
+  # keep it that way absent a strong reason (see the 32599f3 lesson in the
+  # decision log).
+  @existence_divergences %{}
+
+  @known_divergences Map.merge(@label_divergences, @existence_divergences)
 
   # Fixture config keys map onto align/3 options; unknown keys fail loudly.
   config_keys = %{

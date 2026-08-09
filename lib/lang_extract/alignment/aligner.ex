@@ -12,7 +12,7 @@ defmodule LangExtract.Alignment.Aligner do
      mentions resolve to successive occurrences. Status `:exact`.
      Extractions the DP cannot place fall through to the phases below.
   1. **Exact** — the extraction's tokens appear contiguously in the source
-     (linear scan, first free occurrence wins). Status `:exact`.
+     (linear scan, first occurrence wins). Status `:exact`.
   2. **Lesser** — difflib-style block decomposition: if a matching block is
      anchored at the extraction's first token, its source run grounds the
      extraction (upstream `MATCH_LESSER`). Blocks elsewhere in the extraction
@@ -30,19 +30,21 @@ defmodule LangExtract.Alignment.Aligner do
   tokens of all sibling extractions — see @known_divergences in
   aligner_parity_test.exs for the observable consequences.
 
-  Fallthrough respects DP claims when `:exact_algorithm` is `:dp` (the
-  default). Token intervals are half-open `[start, end)` throughout.
+  DP claims narrow only the lesser phase when `:exact_algorithm` is `:dp`
+  (the default). Token intervals are half-open `[start, end)` throughout.
   Phase-0 placements seed the claim list; each successful leftover
-  reserves its interval for later items. Exact fallthrough is "first free
-  occurrence" (filter candidates with claims). Lesser and LCS are
+  reserves its interval for later items. Exact and LCS fallthrough ignore
+  claims: upstream grounds nested and contested mentions inside sibling
+  placements (see the dp_nested_* and dp_contested_overlap fixtures), so
+  rediscovering claimed tokens is correct there. The lesser phase is
   "plain optimum, then claim-rescue" via `accept_free_or_masked/3`: the
-  plain search runs first and its winner stands on free source; only a
-  winner that overlaps a claim reruns under a claimed-token mask. A
-  rescued LCS span that still straddles a claim is rejected.
+  plain difflib block stands when it lands on free source; a winner that
+  overlaps a claim reruns under a claimed-token mask, so a paraphrase of
+  an already-claimed repeat cannot ground its prefix inside the claim
+  (upstream returns not_found for those too).
 
   With `:exact_algorithm` `:first_occurrence`, phase 0 is skipped and
-  claims stay empty so independent first-match (including overlaps) is
-  allowed.
+  claims stay empty.
 
   Cost model: this module aligns whatever text it is handed, with no size
   limit (same as upstream's `WordAligner`). The fallthrough phases are
@@ -159,8 +161,8 @@ defmodule LangExtract.Alignment.Aligner do
 
   # --- Placement: selected hits vs leftovers under claims ---
 
-  # :dp seeds claims from phase-0 selections and grows them on leftover hits.
-  # :first_occurrence never claims, so overlaps remain allowed.
+  # :dp seeds claims from phase-0 selections and grows them on leftover
+  # hits; claims mask only the lesser phase. :first_occurrence never claims.
   defp place(index, items, %{exact_algorithm: :dp} = config) do
     fold_placements(index, items, config, claims_from_selected(items))
   end
@@ -219,9 +221,9 @@ defmodule LangExtract.Alignment.Aligner do
     not Enum.any?(claimed, fn {a, b} -> c < b and a < d end)
   end
 
-  # Shared claim policy for lesser and LCS ("plain optimum, then rescue").
-  # on_claimed is invoked only when the plain winner overlaps a claim —
-  # callers build the mask / re-run there so free winners pay nothing.
+  # Lesser-phase claim policy ("plain optimum, then rescue"). on_claimed is
+  # invoked only when the plain winner overlaps a claim — the caller builds
+  # the mask and re-runs there, so free winners pay nothing.
   defp accept_free_or_masked(nil, _claimed, _on_claimed), do: nil
 
   defp accept_free_or_masked(interval, claimed, on_claimed) do
@@ -240,9 +242,9 @@ defmodule LangExtract.Alignment.Aligner do
   # with pattern and becomes align_one's result; exhausting every phase
   # yields :not_found.
   defp align_one(item, index, config, claimed) do
-    with :no_match <- exact_match(item, index, claimed),
+    with :no_match <- exact_match(item, index),
          :no_match <- lesser_match(item, index, config, claimed),
-         :no_match <- lcs_match(item, index, config, claimed) do
+         :no_match <- lcs_match(item, index, config) do
       :not_found
     end
   end
@@ -329,20 +331,15 @@ defmodule LangExtract.Alignment.Aligner do
     end
   end
 
-  # Exact fallthrough strategy: first contiguous start whose half-open
-  # interval is free of claims (not "plain optimum then rescue").
-  defp first_free_contiguous(texts, ext_texts, claimed) do
+  # Exact fallthrough strategy: plain first contiguous occurrence. Claims
+  # are not consulted — nested/contested rediscovery is upstream behavior.
+  defp first_contiguous(texts, ext_texts) do
     case start_range(texts, ext_texts) do
       nil ->
         nil
 
       first..last//1 ->
-        ext_length = length(ext_texts)
-
-        Enum.find(first..last//1, fn start ->
-          subslice_at?(texts, ext_texts, start) and
-            free?(claimed, {start, start + ext_length})
-        end)
+        Enum.find(first..last//1, &subslice_at?(texts, ext_texts, &1))
     end
   end
 
@@ -362,12 +359,12 @@ defmodule LangExtract.Alignment.Aligner do
     elem(texts, start_idx) == text and subslice_at?(texts, rest, start_idx + 1)
   end
 
-  # --- Phase 1: exact contiguous match ("first free occurrence") ---
+  # --- Phase 1: exact contiguous match (first occurrence wins) ---
 
-  defp exact_match(%{tokens: []}, _index, _claimed), do: :no_match
+  defp exact_match(%{tokens: []}, _index), do: :no_match
 
-  defp exact_match(%{tokens: ext_texts}, %{texts: texts}, claimed) do
-    case first_free_contiguous(texts, ext_texts, claimed) do
+  defp exact_match(%{tokens: ext_texts}, %{texts: texts}) do
+    case first_contiguous(texts, ext_texts) do
       nil ->
         :no_match
 
@@ -454,23 +451,18 @@ defmodule LangExtract.Alignment.Aligner do
     end
   end
 
-  # --- Phase 3: LCS fuzzy ("plain optimum, then claim-rescue") ---
+  # --- Phase 3: LCS fuzzy over stemmed tokens ---
 
-  defp lcs_match(%{tokens: []}, _index, _config, _claimed), do: :no_match
+  defp lcs_match(%{tokens: []}, _index, _config), do: :no_match
 
-  defp lcs_match(
-         %{tokens: ext_texts},
-         %{stemmed: stemmed},
-         %{threshold: threshold} = config,
-         claimed
-       ) do
+  defp lcs_match(%{tokens: ext_texts}, %{stemmed: stemmed}, %{threshold: threshold} = config) do
     ext_stemmed = Enum.map(ext_texts, &stem_token/1)
     # Coverage gate as upstream _accept_lcs_match computes it: the float
     # error in m * threshold is part of the spec (25 * 0.28 floats to
     # 7.000000000000001, so ceil demands 8 matches, not 7).
     needed = ceil(length(ext_stemmed) * threshold)
 
-    case free_lcs_span(stemmed, ext_stemmed, needed, config, claimed) do
+    case accepted_lcs_span(stemmed, ext_stemmed, needed, config) do
       nil ->
         :no_match
 
@@ -479,51 +471,25 @@ defmodule LangExtract.Alignment.Aligner do
     end
   end
 
-  # Returns half-open [start, end) or nil. The masked rerun keeps free?
-  # inside accepted_lcs_span: masks stop claimed tokens from matching, but a
-  # window can still straddle a claim (matches on both sides), and such
-  # spans fall through to lower match counts.
-  defp free_lcs_span(source_stemmed, ext_stemmed, needed, config, claimed) do
-    source_stemmed
-    |> accepted_lcs_span(ext_stemmed, needed, config, [])
-    |> accept_free_or_masked(claimed, fn ->
-      source_stemmed
-      |> mask_tokens(claimed_token_set(claimed))
-      |> accepted_lcs_span(ext_stemmed, needed, config, claimed)
-    end)
-  end
-
-  # Highest match count whose tightest span passes the coverage, density,
-  # and reservation gates (per count the span map already holds the
-  # tightest span, earliest start on ties — upstream's preference).
+  # Highest match count whose tightest span passes the coverage and
+  # density gates (per count the span map already holds the tightest span,
+  # earliest start on ties — upstream's preference).
   # Returns half-open [start, end).
-  defp accepted_lcs_span(
-         source_stemmed,
-         ext_stemmed,
-         needed,
-         %{min_density: min_density},
-         claimed
-       ) do
+  defp accepted_lcs_span(source_stemmed, ext_stemmed, needed, %{min_density: min_density}) do
     spans = best_lcs_spans(source_stemmed, ext_stemmed)
 
     spans
     |> Map.keys()
     |> Enum.sort(:desc)
     |> Enum.find_value(fn matches ->
-      # DP harvest stores inclusive ends; convert to half-open for claims.
+      # DP harvest stores inclusive ends; convert to half-open.
       {start, last} = spans[matches]
       end_ = last + 1
       density = matches / (end_ - start)
 
-      if matches >= needed and density >= min_density and free?(claimed, {start, end_}) do
+      if matches >= needed and density >= min_density do
         {start, end_}
       end
-    end)
-  end
-
-  defp mask_tokens(source_stemmed, claimed_set) do
-    Enum.with_index(source_stemmed, fn token, idx ->
-      if MapSet.member?(claimed_set, idx), do: :claimed, else: token
     end)
   end
 

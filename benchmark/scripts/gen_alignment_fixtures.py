@@ -133,6 +133,18 @@ CASES = [
         ["Queequeg", "Queequeg", "Queequeg vanished"],
         "third extraction has no exact occurrence; falls to legacy phases",
     ),
+    (
+        "dp_nested_inside_placement",
+        "the quick brown fox jumps",
+        ["quick brown fox", "brown"],
+        "nested mention only fits inside the DP placement; upstream grounds it",
+    ),
+    (
+        "dp_nested_mention_punctuated",
+        "Patient has type 2 diabetes.",
+        ["type 2 diabetes", "diabetes"],
+        "common LLM shape: entity nested in its container extraction",
+    ),
     # --- Non-default configs and adversarial gates: threshold knife-edges,
     #     density boundaries, stemming edges, fuzzy tie-breaks ---
     (

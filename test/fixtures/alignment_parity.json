@@ -422,6 +422,52 @@
     "note": "third extraction has no exact occurrence; falls to legacy phases"
   },
   {
+    "name": "dp_nested_inside_placement",
+    "source": "the quick brown fox jumps",
+    "extractions": [
+      "quick brown fox",
+      "brown"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 4,
+        "byte_end": 19
+      },
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 10,
+        "byte_end": 15
+      }
+    ],
+    "note": "nested mention only fits inside the DP placement; upstream grounds it"
+  },
+  {
+    "name": "dp_nested_mention_punctuated",
+    "source": "Patient has type 2 diabetes.",
+    "extractions": [
+      "type 2 diabetes",
+      "diabetes"
+    ],
+    "results": [
+      {
+        "status": "exact",
+        "raw_status": "match_exact",
+        "byte_start": 12,
+        "byte_end": 27
+      },
+      {
+        "status": "fuzzy",
+        "raw_status": "match_fuzzy",
+        "byte_start": 19,
+        "byte_end": 27
+      }
+    ],
+    "note": "common LLM shape: entity nested in its container extraction"
+  },
+  {
     "name": "threshold_boundary_default_accepts",
     "source": "Patient shows chronic inflammation markers today.",
     "extractions": [
