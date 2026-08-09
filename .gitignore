@@ -35,6 +35,9 @@ lang_extract-*.tar
 .claude/
 CLAUDE.md
 
+# Grok Build (local skills, workflows, session state)
+.grok/
+
 # Elixir LS
 /.expert/
 
