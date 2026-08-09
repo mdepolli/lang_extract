@@ -38,6 +38,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Provider error bodies flatten to a bounded preview** — Req decodes
+  JSON content-types before `map_response/2` sees them, so the 2 MiB
+  binary transport cap never fired on that path and an unbounded decoded
+  error map rode `{:bad_request, body}` / `{:api_error, status, body}`
+  into `Result.errors`, serialized files, and memory for the life of the
+  run. Every error body is now one capped string (4 KB, mirroring
+  WireFormat's invalid-format preview): binaries truncate on a valid
+  boundary, decoded terms `inspect` with limits — fresh binaries, so
+  nothing pins the reply. The `Provider.error/0` union narrows to
+  `String.t()` payloads accordingly, which also makes live reasons match
+  Serializer-loaded ones by construction.
+
 - **Chunker boundaries match upstream's `ChunkIterator` exactly** — the
   sentence splitter and packer are now a faithful port, verified by a new
   parity fixture suite (`chunker_parity_test.exs`, generated from the

@@ -156,6 +156,48 @@ defmodule LangExtract.ProviderTest do
     end
   end
 
+  describe "error body bounds" do
+    # Req decodes JSON content-types before map_response sees the body, so
+    # the 2 MiB binary transport cap never fires on this path — an
+    # unbounded decoded map would otherwise ride the reason term into
+    # Result.errors and serialized files for the life of the run.
+    test "decoded JSON error bodies flatten to a bounded preview string" do
+      huge = Jason.encode!(%{"error" => %{"message" => String.duplicate("x", 500_000)}})
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(400, huge)
+      end)
+
+      assert {:error, {:bad_request, preview}} =
+               Claude.infer("prompt",
+                 api_key: "sk-test",
+                 req_options: [plug: {Req.Test, __MODULE__}, retry: false]
+               )
+
+      assert is_binary(preview)
+      assert byte_size(preview) < 8_192
+    end
+
+    test "unexpected-status bodies flatten the same way, keeping the content" do
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(418, Jason.encode!(%{"error" => "teapot"}))
+      end)
+
+      assert {:error, {:api_error, 418, preview}} =
+               Claude.infer("prompt",
+                 api_key: "sk-test",
+                 req_options: [plug: {Req.Test, __MODULE__}, retry: false]
+               )
+
+      assert is_binary(preview)
+      assert preview =~ "teapot"
+    end
+  end
+
   describe "[:lang_extract, :request] telemetry span" do
     # Telemetry handlers are global: concurrent async tests calling infer
     # emit events too. Each test uses a unique model name and matches

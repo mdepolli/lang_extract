@@ -30,9 +30,9 @@ defmodule LangExtract.Provider do
           | :empty_response
           | :unauthorized
           | :server_error
-          | {:bad_request, term()}
+          | {:bad_request, String.t()}
           | {:rate_limited, non_neg_integer() | nil}
-          | {:api_error, pos_integer(), term()}
+          | {:api_error, pos_integer(), String.t()}
           | {:request_error, Exception.t()}
 
   @callback build_http_client(opts :: keyword()) :: {:ok, Req.Request.t()} | {:error, term()}
@@ -108,10 +108,12 @@ defmodule LangExtract.Provider do
   # streaming size cap). 2 MiB is well above any sane extraction JSON
   # reply. Binary bodies only: an endpoint answering with a JSON
   # content-type bypasses this cap — Req decodes the body before we see
-  # it, and the decoded map's sub-binaries can still pin the full reply
-  # via {:api_error, _, body} / {:bad_request, body} reasons. The cap
-  # stops plain-text floods and decode_body: false paths, not that route.
+  # it. Error reasons are bounded separately: body_preview/1 flattens
+  # every error body to a capped string, so a decoded map cannot ride
+  # {:api_error, _, body} / {:bad_request, body} into Result.errors.
   @max_response_body_bytes 2 * 1024 * 1024
+  # Reason-payload ceiling, mirroring WireFormat's invalid-format preview.
+  @max_error_body_bytes 4_096
 
   @doc """
   Merges caller-supplied `:req_options` into the provider's Req options.
@@ -272,7 +274,7 @@ defmodule LangExtract.Provider do
   end
 
   def map_response({:ok, %Req.Response{status: 400, body: body}}, _) do
-    {:error, {:bad_request, body}}
+    {:error, {:bad_request, body_preview(body)}}
   end
 
   def map_response({:ok, %Req.Response{status: 401}}, _) do
@@ -290,11 +292,43 @@ defmodule LangExtract.Provider do
   end
 
   def map_response({:ok, %Req.Response{status: status, body: body}}, _) do
-    {:error, {:api_error, status, body}}
+    {:error, {:api_error, status, body_preview(body)}}
   end
 
   def map_response({:error, exception}, _) do
     {:error, {:request_error, exception}}
+  end
+
+  # Every error body flattens to one bounded string — Req decodes JSON
+  # content-types before map_response sees them, so without this a huge
+  # decoded map (and the reply it pins via sub-binaries) lives as long as
+  # any Result holding the ChunkError. inspect output is fresh binaries,
+  # never sub-binaries of the reply; the Serializer already flattens
+  # these payloads to strings on encode, so live and loaded reasons now
+  # match by construction.
+  defp body_preview(body) when is_binary(body), do: bounded_preview(body)
+
+  defp body_preview(body) do
+    body
+    |> inspect(limit: 100, printable_limit: 500)
+    |> bounded_preview()
+  end
+
+  defp bounded_preview(text) when byte_size(text) <= @max_error_body_bytes, do: text
+
+  defp bounded_preview(text) do
+    prefix = valid_prefix(binary_part(text, 0, @max_error_body_bytes))
+    prefix <> "…(#{byte_size(text)} bytes total, truncated)"
+  end
+
+  # The cut can land mid-character; trim trailing bytes until the prefix
+  # is valid on its own — at most 3 steps for UTF-8 input.
+  defp valid_prefix(prefix) do
+    if String.valid?(prefix) do
+      prefix
+    else
+      valid_prefix(binary_part(prefix, 0, byte_size(prefix) - 1))
+    end
   end
 
   defp retry_after_ms(response) do

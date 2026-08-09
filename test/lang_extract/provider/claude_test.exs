@@ -156,13 +156,17 @@ defmodule LangExtract.Provider.ClaudeTest do
       assert {:error, :empty_response} = Claude.parse_response({:ok, response})
     end
 
-    test "maps HTTP 400 to bad_request with body" do
+    # Decoded bodies flatten to a bounded preview string (see
+    # Provider.body_preview/1); the server's message must survive into it.
+    test "maps HTTP 400 to bad_request with a bounded body preview" do
       response = %Req.Response{
         status: 400,
         body: %{"error" => %{"message" => "invalid model"}}
       }
 
-      assert {:error, {:bad_request, %{"error" => _}}} = Claude.parse_response({:ok, response})
+      assert {:error, {:bad_request, preview}} = Claude.parse_response({:ok, response})
+      assert is_binary(preview)
+      assert preview =~ "invalid model"
     end
 
     test "maps HTTP 401 to unauthorized" do
