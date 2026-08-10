@@ -26,7 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returns `{url, json}` instead of `{:ok, {req, request_opts}}`; one-shot
   calls become `LangExtract.new/2` (or `build_http_client/1`) plus
   `YourProvider.infer(client, prompt)`. `LangExtract.new/2`, `run/4`,
-  `stream/4`, and the Runner are unchanged.
+  `stream/4`, and the Runner are unchanged. The behaviour also moves
+  from the Core API tier to Advanced (amending the 0.8.0 freeze): with
+  no known third-party implementors it may be reshaped in minor releases
+  with changelog notice — exactly what this cycle did — while
+  `Provider.Response` stays Core and the `t:Provider.error/0` union
+  stays contract (it is what `ChunkError.reason` consumers match on),
+  evolving additively.
 
 - **`req` upgraded to 0.7** (`~> 0.7.0`, from the deliberate `~> 0.6.0`
   pin) — the planned transport-dependency project, landed together with

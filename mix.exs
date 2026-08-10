@@ -100,7 +100,6 @@ defmodule LangExtract.MixProject do
           LangExtract.Prompt.Validator,
           LangExtract.Prompt.Validator.Issue,
           LangExtract.Prompt.Validator.ValidationError,
-          LangExtract.Provider,
           LangExtract.Provider.Response,
           LangExtract.Result,
           LangExtract.Runner,
@@ -115,6 +114,7 @@ defmodule LangExtract.MixProject do
           LangExtract.Chunker.Chunk,
           LangExtract.Pipeline,
           LangExtract.Prompt.Builder,
+          LangExtract.Provider,
           LangExtract.WireFormat
         ],
         Providers: [

@@ -472,19 +472,23 @@ entry points. The structs they hand out are stable to match on: `Result`,
 `Span`, `ChunkError`, `ChunkResult`, and `Provider.Response` freely;
 `Template`, `Template.Example`, and `Extraction` are public for matching
 and introspection but constructed via `template/2`, not struct literals.
-`Client` is opaque — build it with `new/2`, hold it, pass it. The
-`Provider` behaviour (callbacks plus `t:LangExtract.Provider.error/0`),
+`Client` is opaque — build it with `new/2`, hold it, pass it.
 `Serializer`, `Prompt.Validator`, and the telemetry events documented in
-the telemetry guide complete the contract.
+the telemetry guide complete the contract. The
+`t:LangExtract.Provider.error/0` union is also contract — it is what you
+match through `ChunkError.reason` — and evolves additively even though
+its home module sits in Advanced.
 
-**Advanced** — public and documented, best-effort stability: `WireFormat`,
-`Chunker`, `Aligner`, `Pipeline`, `Prompt.Builder`. Changes land in minor
-releases with changelog notice.
+**Advanced** — public and documented, best-effort stability: the
+`Provider` behaviour (implementable, but with no known third-party
+implementors it may be reshaped in minor releases — changelog-noticed,
+as in this cycle), `WireFormat`, `Chunker`, `Aligner`, `Pipeline`,
+`Prompt.Builder`.
 
 **Providers** — the built-in implementations behind `new/2`'s `:claude`,
-`:openai`, and `:gemini`. Use them via the atom; the modules themselves
-carry no stability guarantee beyond the `Provider` behaviour they
-implement.
+`:openai`, `:gemini`, and `:grok`. Use them via the atom (or their
+`infer/2` for a one-shot call); the modules themselves carry no
+stability guarantee beyond the `Provider` behaviour they implement.
 
 **Internal** — no guarantees: `Orchestrator`, `Pipeline.Parser`,
 `Runner.{Limiter,Request,Delivery}`, `Tokenizer`, `Token`. Their docs
