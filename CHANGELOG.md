@@ -28,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `YourProvider.infer(client, prompt)`. `LangExtract.new/2`, `run/4`,
   `stream/4`, and the Runner are unchanged.
 
+- **`req` upgraded to 0.7** (`~> 0.7.0`, from the deliberate `~> 0.6.0`
+  pin) — the planned transport-dependency project, landed together with
+  the behaviour reshape since both touch the same layer. The 0.7 changes
+  audited against this codebase's usage: retry jitter and
+  `:retry_delay`-over-`Retry-After` precedence only apply to options we
+  don't set (the Runner disables Req retry and owns its own policy; the
+  standalone path sets no `:retry_delay`); the plug/finch step-to-adapter
+  moves are transparent through the `:plug` option every test rides; and
+  `redirect: false`, JSON body decoding, and header semantics are
+  unchanged for our shapes. Full suite, wire tests, and a live provider
+  call verified against 0.7.2.
+
 ### Added
 
 - **Grok (xAI) provider** — `LangExtract.new(:grok, api_key: ...)` calls
