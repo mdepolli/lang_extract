@@ -1,6 +1,20 @@
 defmodule LangExtract.ClientTest do
   use ExUnit.Case, async: true
 
+  describe "provider registry" do
+    test "every provider atom resolves to its module" do
+      for {atom, module} <- [
+            claude: LangExtract.Provider.Claude,
+            openai: LangExtract.Provider.OpenAI,
+            gemini: LangExtract.Provider.Gemini,
+            grok: LangExtract.Provider.Grok
+          ] do
+        client = LangExtract.new(atom, api_key: "test-key")
+        assert client.provider == module
+      end
+    end
+  end
+
   describe "Inspect redaction" do
     test "inspect output never contains the API key" do
       client = LangExtract.new(:claude, api_key: "sk-ant-supersecret-123")

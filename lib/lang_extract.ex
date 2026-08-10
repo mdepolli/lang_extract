@@ -354,7 +354,7 @@ defmodule LangExtract do
     end
   end
 
-  @type provider :: :claude | :openai | :gemini
+  @type provider :: :claude | :openai | :gemini | :grok
 
   @doc """
   Creates a configured LLM client for extraction.
@@ -370,6 +370,7 @@ defmodule LangExtract do
       client = LangExtract.new(:claude, api_key: "sk-...")
       client = LangExtract.new(:openai, api_key: "sk-...", model: "gpt-4o")
       client = LangExtract.new(:gemini, api_key: "gm-...")
+      client = LangExtract.new(:grok, api_key: "xai-...")
 
   """
   @spec new(provider(), keyword()) :: Client.t()
@@ -385,9 +386,10 @@ defmodule LangExtract do
   defp resolve_provider(:claude), do: Provider.Claude
   defp resolve_provider(:openai), do: Provider.OpenAI
   defp resolve_provider(:gemini), do: Provider.Gemini
+  defp resolve_provider(:grok), do: Provider.Grok
 
   defp resolve_provider(other) do
     raise ArgumentError,
-          "unknown provider: #{inspect(other)}. Expected :claude, :openai, or :gemini"
+          "unknown provider: #{inspect(other)}. Expected :claude, :openai, :gemini, or :grok"
   end
 end

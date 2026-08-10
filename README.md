@@ -65,7 +65,7 @@ additional adapter configuration is needed.
 client = LangExtract.new(:claude, api_key: "sk-ant-...")
 ```
 
-Supported providers: `:claude`, `:openai`, `:gemini`.
+Supported providers: `:claude`, `:openai`, `:gemini`, `:grok`.
 
 Provider-specific options are passed as keyword arguments:
 
@@ -75,6 +75,9 @@ client = LangExtract.new(:openai, api_key: "sk-...", model: "gpt-4o")
 
 # Gemini
 client = LangExtract.new(:gemini, api_key: "gm-...")
+
+# Grok (xAI)
+client = LangExtract.new(:grok, api_key: "xai-...")
 
 # OpenAI-compatible endpoint (Ollama, vLLM, etc.)
 client = LangExtract.new(:openai,

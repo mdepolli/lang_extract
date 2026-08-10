@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Grok (xAI) provider** — `LangExtract.new(:grok, api_key: ...)` calls
+  the xAI Chat Completions API (OpenAI-compatible wire shape at
+  `https://api.x.ai`, `XAI_API_KEY` env fallback, default model
+  `grok-4.5`). xAI accepts `max_completion_tokens` natively, so the
+  provider needs no wire-key option; `temperature` is sent only when the
+  caller sets it, the stance every provider here converged on.
+
 ## [0.11.0] - 2026-08-09
 
 ### Added
