@@ -120,7 +120,7 @@ defmodule LangExtract.Orchestrator do
   defp chunk_stream(client, chunks, template, opts) do
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
     timeout = Keyword.get(opts, :task_timeout, :infinity)
-    infer_fun = fn prompt -> client.provider.infer(prompt, Client.infer_opts(client)) end
+    infer_fun = fn prompt -> client.provider.infer(client, prompt) end
 
     Task.async_stream(
       chunks,

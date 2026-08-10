@@ -2,7 +2,7 @@ defmodule LangExtract.ProviderTest do
   use ExUnit.Case, async: true
 
   alias LangExtract.Provider
-  alias LangExtract.Provider.{Claude, Gemini, OpenAI, Response}
+  alias LangExtract.Provider.Response
 
   describe "req_options/2" do
     # Headers are resolved before the keyword merge: normalize map/list
@@ -156,6 +156,50 @@ defmodule LangExtract.ProviderTest do
     end
   end
 
+  # All executor tests drive a real client through the generic entry
+  # point: build the client once, run one inference over it.
+  defp infer(provider, prompt, opts) do
+    client = LangExtract.new(provider, opts)
+    client.provider.infer(client, prompt)
+  end
+
+  describe "provider infer/2 dispatch" do
+    test "builds the provider request and executes it over the client transport" do
+      Req.Test.stub(__MODULE__, fn conn ->
+        Req.Test.json(conn, %{
+          "content" => [%{"type" => "text", "text" => "extracted entities"}]
+        })
+      end)
+
+      assert {:ok, %Response{text: "extracted entities"}} =
+               infer(:claude, "Extract entities.",
+                 api_key: "sk-test",
+                 req_options: [plug: {Req.Test, __MODULE__}]
+               )
+    end
+
+    # 2 MiB library cap on binary bodies (JSON is already a map by the
+    # time Req returns it). A flood of plain text must fail the chunk
+    # without being passed to the provider parser.
+    test "rejects an oversize binary response body" do
+      oversize = String.duplicate("x", 2 * 1024 * 1024 + 1)
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/plain")
+        |> Plug.Conn.send_resp(200, oversize)
+      end)
+
+      assert {:error, {:api_error, 413, message}} =
+               infer(:claude, "prompt",
+                 api_key: "sk-test",
+                 req_options: [plug: {Req.Test, __MODULE__}]
+               )
+
+      assert message =~ "response body exceeds"
+    end
+  end
+
   describe "error body bounds" do
     # Req decodes JSON content-types before map_response sees the body, so
     # the 2 MiB binary transport cap never fires on this path — an
@@ -171,7 +215,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:error, {:bad_request, preview}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  req_options: [plug: {Req.Test, __MODULE__}, retry: false]
                )
@@ -188,7 +232,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:error, {:api_error, 418, preview}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  req_options: [plug: {Req.Test, __MODULE__}, retry: false]
                )
@@ -235,7 +279,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:ok, %Response{text: "hi"}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  model: model,
                  req_options: req_options()
@@ -261,7 +305,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:ok, %Response{text: "hi"}} =
-               OpenAI.infer("prompt",
+               infer(:openai, "prompt",
                  api_key: "sk-test",
                  model: model,
                  req_options: req_options()
@@ -283,7 +327,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:ok, %Response{text: "hi"}} =
-               Gemini.infer("prompt",
+               infer(:gemini, "prompt",
                  api_key: "gm-test",
                  model: model,
                  req_options: req_options()
@@ -302,7 +346,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:error, {:rate_limited, nil}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  model: model,
                  req_options: [plug: {Req.Test, __MODULE__}, retry: false]
@@ -323,7 +367,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:error, {:rate_limited, 7000}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  model: model,
                  req_options: [plug: {Req.Test, __MODULE__}, retry: false]
@@ -342,7 +386,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:error, {:rate_limited, nil}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  model: model,
                  req_options: [plug: {Req.Test, __MODULE__}, retry: false]
@@ -353,7 +397,7 @@ defmodule LangExtract.ProviderTest do
       Req.Test.stub(__MODULE__, fn conn -> Req.Test.transport_error(conn, :timeout) end)
 
       assert {:error, {:request_error, _}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  model: model,
                  req_options: [plug: {Req.Test, __MODULE__}, retry: false]
@@ -372,7 +416,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:error, {:api_error, 302, _body}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  model: model,
                  req_options: req_options()
@@ -387,7 +431,7 @@ defmodule LangExtract.ProviderTest do
       end)
 
       assert {:ok, %Response{text: "hi"}} =
-               Claude.infer("prompt",
+               infer(:claude, "prompt",
                  api_key: "sk-test",
                  model: model,
                  req_options: req_options()

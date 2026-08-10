@@ -1,13 +1,43 @@
 defmodule LangExtract.Provider.ClaudeTest do
-  # async: false - these tests exercise the env-var fallback by mutating
-  # global API-key vars; running concurrently with any env-reading test
-  # would be flaky by design.
+  # async: false - the build_http_client tests exercise the env-var
+  # fallback by mutating global API-key vars; running concurrently with
+  # any env-reading test would be flaky by design.
   use ExUnit.Case, async: false
 
   alias LangExtract.Provider.Claude
-  alias LangExtract.Provider.Response
 
-  describe "build_request/2" do
+  describe "build_inference_request/2" do
+    test "builds correct request with default opts" do
+      # Pure: no api_key, no transport — the payload is data.
+      {url, body} = Claude.build_inference_request("Extract entities.", [])
+
+      assert url == "/v1/messages"
+      assert body["model"] == "claude-sonnet-5"
+      assert body["max_tokens"] == 4096
+      refute Map.has_key?(body, "temperature")
+      assert body["messages"] == [%{"role" => "user", "content" => "Extract entities."}]
+    end
+
+    test "temperature is sent only when explicitly set" do
+      {_url, body} = Claude.build_inference_request("prompt", temperature: 0)
+      assert body["temperature"] == 0
+    end
+
+    test "custom opts override defaults" do
+      {_url, body} =
+        Claude.build_inference_request("prompt",
+          model: "claude-opus-4-20250514",
+          max_tokens: 1024,
+          temperature: 0.5
+        )
+
+      assert body["model"] == "claude-opus-4-20250514"
+      assert body["max_tokens"] == 1024
+      assert body["temperature"] == 0.5
+    end
+  end
+
+  describe "build_http_client/1" do
     setup do
       original = System.get_env("ANTHROPIC_API_KEY")
 
@@ -20,49 +50,19 @@ defmodule LangExtract.Provider.ClaudeTest do
       :ok
     end
 
-    test "builds correct request with default opts" do
-      assert {:ok, {req, request_opts}} =
-               Claude.build_request("Extract entities.", api_key: "sk-test")
+    test "builds the transport with defaults and auth" do
+      assert {:ok, req} = Claude.build_http_client(api_key: "sk-test")
 
-      assert request_opts[:url] == "/v1/messages"
       assert req.options.base_url == "https://api.anthropic.com"
       assert req.options.receive_timeout == 120_000
       assert req.options.retry == :transient
-
-      body = request_opts[:json]
-      assert body["model"] == "claude-sonnet-5"
-      assert body["max_tokens"] == 4096
-      refute Map.has_key?(body, "temperature")
-      assert body["messages"] == [%{"role" => "user", "content" => "Extract entities."}]
-    end
-
-    test "temperature is sent only when explicitly set" do
-      assert {:ok, {_req, request_opts}} =
-               Claude.build_request("prompt", api_key: "sk-test", temperature: 0)
-
-      assert request_opts[:json]["temperature"] == 0
-    end
-
-    test "custom opts override defaults" do
-      assert {:ok, {_req, request_opts}} =
-               Claude.build_request("prompt",
-                 api_key: "sk-test",
-                 model: "claude-opus-4-20250514",
-                 max_tokens: 1024,
-                 temperature: 0.5
-               )
-
-      body = request_opts[:json]
-      assert body["model"] == "claude-opus-4-20250514"
-      assert body["max_tokens"] == 1024
-      assert body["temperature"] == 0.5
+      assert req.headers["x-api-key"] == ["sk-test"]
     end
 
     test "api_key from opts takes precedence over env var" do
       System.put_env("ANTHROPIC_API_KEY", "sk-env")
 
-      assert {:ok, {req, _request_opts}} =
-               Claude.build_request("prompt", api_key: "sk-opts")
+      assert {:ok, req} = Claude.build_http_client(api_key: "sk-opts")
 
       assert req.headers["x-api-key"] == ["sk-opts"]
     end
@@ -70,25 +70,24 @@ defmodule LangExtract.Provider.ClaudeTest do
     test "falls back to ANTHROPIC_API_KEY env var" do
       System.put_env("ANTHROPIC_API_KEY", "sk-env")
 
-      assert {:ok, {req, _request_opts}} =
-               Claude.build_request("prompt", [])
+      assert {:ok, req} = Claude.build_http_client([])
 
       assert req.headers["x-api-key"] == ["sk-env"]
     end
 
     test "returns error when api key is missing" do
       System.delete_env("ANTHROPIC_API_KEY")
-      assert {:error, :missing_api_key} = Claude.build_request("prompt", [])
+      assert {:error, :missing_api_key} = Claude.build_http_client([])
     end
 
     test "returns error when api key is empty string" do
       System.put_env("ANTHROPIC_API_KEY", "")
-      assert {:error, :missing_api_key} = Claude.build_request("prompt", [])
+      assert {:error, :missing_api_key} = Claude.build_http_client([])
     end
 
     test "req_options override HTTP defaults" do
-      assert {:ok, {req, _request_opts}} =
-               Claude.build_request("prompt",
+      assert {:ok, req} =
+               Claude.build_http_client(
                  api_key: "sk-test",
                  req_options: [receive_timeout: 5_000, retry: false]
                )
@@ -98,11 +97,8 @@ defmodule LangExtract.Provider.ClaudeTest do
     end
 
     test "custom base_url is used" do
-      assert {:ok, {req, _request_opts}} =
-               Claude.build_request("prompt",
-                 api_key: "sk-test",
-                 base_url: "https://proxy.example.com"
-               )
+      assert {:ok, req} =
+               Claude.build_http_client(api_key: "sk-test", base_url: "https://proxy.example.com")
 
       assert req.options.base_url == "https://proxy.example.com"
     end
@@ -199,60 +195,6 @@ defmodule LangExtract.Provider.ClaudeTest do
 
       assert {:error, {:request_error, %Mint.TransportError{reason: :timeout}}} =
                Claude.parse_response({:error, error})
-    end
-  end
-
-  describe "infer/2" do
-    setup do
-      original = System.get_env("ANTHROPIC_API_KEY")
-
-      on_exit(fn ->
-        if original,
-          do: System.put_env("ANTHROPIC_API_KEY", original),
-          else: System.delete_env("ANTHROPIC_API_KEY")
-      end)
-
-      :ok
-    end
-
-    test "full pipeline returns extracted text" do
-      Req.Test.stub(__MODULE__, fn conn ->
-        Req.Test.json(conn, %{
-          "content" => [%{"type" => "text", "text" => "extracted entities"}]
-        })
-      end)
-
-      assert {:ok, %Response{text: "extracted entities"}} =
-               Claude.infer("Extract entities.",
-                 api_key: "sk-test",
-                 req_options: [plug: {Req.Test, __MODULE__}]
-               )
-    end
-
-    # 2 MiB library cap on binary bodies (JSON is already a map by the
-    # time Req returns it). A flood of plain text must fail the chunk
-    # without being passed to the provider parser.
-    test "rejects an oversize binary response body" do
-      oversize = String.duplicate("x", 2 * 1024 * 1024 + 1)
-
-      Req.Test.stub(__MODULE__, fn conn ->
-        conn
-        |> Plug.Conn.put_resp_content_type("text/plain")
-        |> Plug.Conn.send_resp(200, oversize)
-      end)
-
-      assert {:error, {:api_error, 413, message}} =
-               Claude.infer("prompt",
-                 api_key: "sk-test",
-                 req_options: [plug: {Req.Test, __MODULE__}]
-               )
-
-      assert message =~ "response body exceeds"
-    end
-
-    test "returns error on missing api key" do
-      System.delete_env("ANTHROPIC_API_KEY")
-      assert {:error, :missing_api_key} = Claude.infer("prompt", [])
     end
   end
 end

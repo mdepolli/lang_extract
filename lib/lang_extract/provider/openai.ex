@@ -17,6 +17,7 @@ defmodule LangExtract.Provider.OpenAI do
 
   @behaviour LangExtract.Provider
 
+  alias LangExtract.Client
   alias LangExtract.Provider
 
   # No :temperature default — o-series/reasoning models reject any
@@ -28,7 +29,7 @@ defmodule LangExtract.Provider.OpenAI do
     base_url: "https://api.openai.com"
   ]
 
-  @impl true
+  @impl LangExtract.Provider
   @spec build_http_client(keyword()) :: {:ok, Req.Request.t()} | {:error, :missing_api_key}
   def build_http_client(opts) do
     case Provider.fetch_api_key(opts, "OPENAI_API_KEY") do
@@ -48,52 +49,43 @@ defmodule LangExtract.Provider.OpenAI do
     end
   end
 
-  @impl true
-  @spec infer(String.t(), keyword()) :: {:ok, Provider.Response.t()} | {:error, Provider.error()}
-  def infer(prompt, opts) do
-    case build_request(prompt, opts) do
-      {:ok, {req, request_opts}} ->
-        %{model: model} = Provider.common_opts(opts, @defaults)
+  @impl LangExtract.Provider
+  @spec infer(Client.t(), String.t()) ::
+          {:ok, Provider.Response.t()} | {:error, Provider.error()}
+  def infer(%Client{http_client: req, options: opts}, prompt) do
+    {url, json} = build_inference_request(prompt, opts)
+    %{model: model} = Provider.common_opts(opts, @defaults)
 
-        Provider.request(
-          req,
-          request_opts,
-          %{provider: :openai, model: model},
-          &parse_response/1
-        )
-
-      {:error, _} = error ->
-        error
-    end
+    Provider.request(
+      req,
+      [url: url, json: json],
+      %{provider: :openai, model: model},
+      &parse_response/1
+    )
   end
 
+  # Public only as a test seam: pure payload construction, no API key or
+  # transport involved.
   @doc false
-  @spec build_request(String.t(), keyword()) ::
-          {:ok, {Req.Request.t(), keyword()}} | {:error, :missing_api_key}
-  def build_request(prompt, opts) do
-    case Provider.resolve_http_client(opts, &build_http_client/1) do
-      {:ok, req} ->
-        %{model: model, max_tokens: max_tokens, temperature: temperature} =
-          Provider.common_opts(opts, @defaults)
+  @spec build_inference_request(String.t(), keyword()) :: {String.t(), map()}
+  def build_inference_request(prompt, opts) do
+    %{model: model, max_tokens: max_tokens, temperature: temperature} =
+      Provider.common_opts(opts, @defaults)
 
-        json_mode = Keyword.get(opts, :json_mode, true)
-        token_limit_key = Keyword.get(opts, :token_limit_key, :max_completion_tokens)
-        messages = build_messages(prompt, json_mode)
+    json_mode = Keyword.get(opts, :json_mode, true)
+    token_limit_key = Keyword.get(opts, :token_limit_key, :max_completion_tokens)
+    messages = build_messages(prompt, json_mode)
 
-        payload =
-          %{
-            "model" => model,
-            token_limit_wire_key!(token_limit_key) => max_tokens,
-            "messages" => messages
-          }
-          |> maybe_put_temperature(temperature)
-          |> maybe_put_response_format(json_mode)
+    payload =
+      %{
+        "model" => model,
+        token_limit_wire_key!(token_limit_key) => max_tokens,
+        "messages" => messages
+      }
+      |> maybe_put_temperature(temperature)
+      |> maybe_put_response_format(json_mode)
 
-        {:ok, {req, [url: "/v1/chat/completions", json: payload]}}
-
-      {:error, _} = error ->
-        error
-    end
+    {"/v1/chat/completions", payload}
   end
 
   @doc false

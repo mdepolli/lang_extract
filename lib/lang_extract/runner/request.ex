@@ -55,7 +55,7 @@ defmodule LangExtract.Runner.Request do
 
   defp attempt(limiter, client, prompt, s) do
     Limiter.acquire(limiter)
-    result = client.provider.infer(prompt, Client.infer_opts(client))
+    result = client.provider.infer(client, prompt)
     finish(result, limiter, client, prompt, s)
   end
 

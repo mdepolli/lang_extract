@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: `Provider` behaviour reshaped to two callbacks; the
+  transport travels as itself** — the flow is build a client, build a
+  request, execute the request, and each provider module now tells that
+  story with no intermediaries: `build_http_client/1` constructs the
+  transport, and `infer(client, prompt)` builds the provider's inference
+  request (a pure `{url, json}` — `build_inference_request/2`, kept
+  public as a test seam) and executes it via the shared
+  `Provider.request/4`. `Provider.resolve_http_client/2` and the
+  `:http_client` opts convention it fished from are gone — `infer` takes
+  the `Client` struct and reads the prebuilt transport off it, so a
+  missing transport fails at the function head instead of silently
+  rebuilding from env. Migration for behaviour implementors (none known
+  at the 0.8.0 freeze or since): `infer/2` now receives the client
+  instead of opts; `build_request/2` is `build_inference_request/2` and
+  returns `{url, json}` instead of `{:ok, {req, request_opts}}`; one-shot
+  calls become `LangExtract.new/2` (or `build_http_client/1`) plus
+  `YourProvider.infer(client, prompt)`. `LangExtract.new/2`, `run/4`,
+  `stream/4`, and the Runner are unchanged.
+
 ### Added
 
 - **Grok (xAI) provider** — `LangExtract.new(:grok, api_key: ...)` calls

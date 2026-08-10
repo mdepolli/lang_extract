@@ -9,6 +9,7 @@ defmodule LangExtract.Provider.Gemini do
 
   @behaviour LangExtract.Provider
 
+  alias LangExtract.Client
   alias LangExtract.Provider
 
   @defaults [
@@ -18,7 +19,7 @@ defmodule LangExtract.Provider.Gemini do
     base_url: "https://generativelanguage.googleapis.com"
   ]
 
-  @impl true
+  @impl LangExtract.Provider
   @spec build_http_client(keyword()) :: {:ok, Req.Request.t()} | {:error, :missing_api_key}
   def build_http_client(opts) do
     case Provider.fetch_api_key(opts, "GEMINI_API_KEY") do
@@ -38,50 +39,41 @@ defmodule LangExtract.Provider.Gemini do
     end
   end
 
-  @impl true
-  @spec infer(String.t(), keyword()) :: {:ok, Provider.Response.t()} | {:error, Provider.error()}
-  def infer(prompt, opts) do
-    case build_request(prompt, opts) do
-      {:ok, {req, request_opts}} ->
-        %{model: model} = Provider.common_opts(opts, @defaults)
+  @impl LangExtract.Provider
+  @spec infer(Client.t(), String.t()) ::
+          {:ok, Provider.Response.t()} | {:error, Provider.error()}
+  def infer(%Client{http_client: req, options: opts}, prompt) do
+    {url, json} = build_inference_request(prompt, opts)
+    %{model: model} = Provider.common_opts(opts, @defaults)
 
-        Provider.request(
-          req,
-          request_opts,
-          %{provider: :gemini, model: model},
-          &parse_response/1
-        )
-
-      {:error, _} = error ->
-        error
-    end
+    Provider.request(
+      req,
+      [url: url, json: json],
+      %{provider: :gemini, model: model},
+      &parse_response/1
+    )
   end
 
+  # Public only as a test seam: pure payload construction, no API key or
+  # transport involved.
   @doc false
-  @spec build_request(String.t(), keyword()) ::
-          {:ok, {Req.Request.t(), keyword()}} | {:error, :missing_api_key}
-  def build_request(prompt, opts) do
-    case Provider.resolve_http_client(opts, &build_http_client/1) do
-      {:ok, req} ->
-        %{model: model, max_tokens: max_tokens, temperature: temperature} =
-          Provider.common_opts(opts, @defaults)
+  @spec build_inference_request(String.t(), keyword()) :: {String.t(), map()}
+  def build_inference_request(prompt, opts) do
+    %{model: model, max_tokens: max_tokens, temperature: temperature} =
+      Provider.common_opts(opts, @defaults)
 
-        path = "/v1beta/models/#{model}:generateContent"
+    path = "/v1beta/models/#{model}:generateContent"
 
-        payload = %{
-          "contents" => [%{"parts" => [%{"text" => prompt}]}],
-          "generationConfig" => %{
-            "temperature" => temperature,
-            "maxOutputTokens" => max_tokens,
-            "responseMimeType" => "application/json"
-          }
-        }
+    payload = %{
+      "contents" => [%{"parts" => [%{"text" => prompt}]}],
+      "generationConfig" => %{
+        "temperature" => temperature,
+        "maxOutputTokens" => max_tokens,
+        "responseMimeType" => "application/json"
+      }
+    }
 
-        {:ok, {req, [url: path, json: payload]}}
-
-      {:error, _} = error ->
-        error
-    end
+    {path, payload}
   end
 
   @doc false

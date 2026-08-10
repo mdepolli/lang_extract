@@ -1,36 +1,17 @@
 defmodule LangExtract.Provider.OpenAITest do
-  # async: false - these tests exercise the env-var fallback by mutating
-  # global API-key vars; running concurrently with any env-reading test
-  # would be flaky by design.
+  # async: false - the build_http_client tests exercise the env-var
+  # fallback by mutating global API-key vars; running concurrently with
+  # any env-reading test would be flaky by design.
   use ExUnit.Case, async: false
 
   alias LangExtract.Provider.OpenAI
-  alias LangExtract.Provider.Response
 
-  describe "build_request/2" do
-    setup do
-      original = System.get_env("OPENAI_API_KEY")
-
-      on_exit(fn ->
-        if original,
-          do: System.put_env("OPENAI_API_KEY", original),
-          else: System.delete_env("OPENAI_API_KEY")
-      end)
-
-      :ok
-    end
-
+  describe "build_inference_request/2" do
     test "builds correct request with default opts" do
-      assert {:ok, {req, request_opts}} =
-               OpenAI.build_request("Extract entities.", api_key: "sk-test")
+      # Pure: no api_key, no transport — the payload is data.
+      {url, body} = OpenAI.build_inference_request("Extract entities.", [])
 
-      assert request_opts[:url] == "/v1/chat/completions"
-      assert req.options.base_url == "https://api.openai.com"
-      assert req.options.receive_timeout == 120_000
-      assert req.options.retry == :transient
-      assert req.headers["authorization"] == ["Bearer sk-test"]
-
-      body = request_opts[:json]
+      assert url == "/v1/chat/completions"
       assert body["model"] == "gpt-4o-mini"
       # max_completion_tokens replaced max_tokens in chat completions;
       # reasoning models reject the deprecated key with a 400.
@@ -48,30 +29,24 @@ defmodule LangExtract.Provider.OpenAITest do
     end
 
     test "temperature is sent only when explicitly set" do
-      assert {:ok, {_req, request_opts}} =
-               OpenAI.build_request("prompt", api_key: "sk-test", temperature: 0)
+      {_url, body} = OpenAI.build_inference_request("prompt", temperature: 0)
+      assert body["temperature"] == 0
 
-      assert request_opts[:json]["temperature"] == 0
+      {_url, body} =
+        OpenAI.build_inference_request("prompt",
+          model: "gpt-4o",
+          max_tokens: 1024,
+          temperature: 0.7
+        )
 
-      assert {:ok, {_req, request_opts}} =
-               OpenAI.build_request("prompt",
-                 api_key: "sk-test",
-                 model: "gpt-4o",
-                 max_tokens: 1024,
-                 temperature: 0.7
-               )
-
-      body = request_opts[:json]
       assert body["model"] == "gpt-4o"
       assert body["max_completion_tokens"] == 1024
       assert body["temperature"] == 0.7
     end
 
     test "reasoning model opts omit temperature and still use max_completion_tokens" do
-      assert {:ok, {_req, request_opts}} =
-               OpenAI.build_request("prompt", api_key: "sk-test", model: "o4-mini")
+      {_url, body} = OpenAI.build_inference_request("prompt", model: "o4-mini")
 
-      body = request_opts[:json]
       assert body["model"] == "o4-mini"
       assert body["max_completion_tokens"] == 4096
       refute Map.has_key?(body, "temperature")
@@ -84,64 +59,76 @@ defmodule LangExtract.Provider.OpenAITest do
     # deprecated key. No heuristic can pick per server, so the wire key
     # is an explicit option.
     test "token_limit_key: :max_tokens switches the wire key for compat endpoints" do
-      assert {:ok, {_req, request_opts}} =
-               OpenAI.build_request("prompt",
-                 api_key: "sk-test",
-                 max_tokens: 1024,
-                 token_limit_key: :max_tokens
-               )
+      {_url, body} =
+        OpenAI.build_inference_request("prompt", max_tokens: 1024, token_limit_key: :max_tokens)
 
-      body = request_opts[:json]
       assert body["max_tokens"] == 1024
       refute Map.has_key?(body, "max_completion_tokens")
     end
 
     test "unknown token_limit_key raises a named ArgumentError" do
       assert_raise ArgumentError, ~r/:token_limit_key must be/, fn ->
-        OpenAI.build_request("prompt", api_key: "sk-test", token_limit_key: :tokens)
+        OpenAI.build_inference_request("prompt", token_limit_key: :tokens)
       end
     end
 
     test "json_mode false omits response_format and system message" do
-      assert {:ok, {_req, request_opts}} =
-               OpenAI.build_request("Tell me a story.", api_key: "sk-test", json_mode: false)
+      {_url, body} = OpenAI.build_inference_request("Tell me a story.", json_mode: false)
 
-      body = request_opts[:json]
       refute Map.has_key?(body, "response_format")
       assert body["messages"] == [%{"role" => "user", "content" => "Tell me a story."}]
+    end
+  end
+
+  describe "build_http_client/1" do
+    setup do
+      original = System.get_env("OPENAI_API_KEY")
+
+      on_exit(fn ->
+        if original,
+          do: System.put_env("OPENAI_API_KEY", original),
+          else: System.delete_env("OPENAI_API_KEY")
+      end)
+
+      :ok
+    end
+
+    test "builds the transport with defaults and auth" do
+      assert {:ok, req} = OpenAI.build_http_client(api_key: "sk-test")
+
+      assert req.options.base_url == "https://api.openai.com"
+      assert req.options.receive_timeout == 120_000
+      assert req.options.retry == :transient
+      assert req.headers["authorization"] == ["Bearer sk-test"]
     end
 
     test "api_key from opts takes precedence over env var" do
       System.put_env("OPENAI_API_KEY", "sk-env")
 
-      assert {:ok, {req, _request_opts}} =
-               OpenAI.build_request("prompt", api_key: "sk-opts")
+      assert {:ok, req} = OpenAI.build_http_client(api_key: "sk-opts")
 
       assert req.headers["authorization"] == ["Bearer sk-opts"]
     end
 
     test "falls back to OPENAI_API_KEY env var" do
       System.put_env("OPENAI_API_KEY", "sk-env")
-      assert {:ok, {req, _request_opts}} = OpenAI.build_request("prompt", [])
+      assert {:ok, req} = OpenAI.build_http_client([])
       assert req.headers["authorization"] == ["Bearer sk-env"]
     end
 
     test "returns error when api key is missing" do
       System.delete_env("OPENAI_API_KEY")
-      assert {:error, :missing_api_key} = OpenAI.build_request("prompt", [])
+      assert {:error, :missing_api_key} = OpenAI.build_http_client([])
     end
 
     test "returns error when api key is empty string" do
       System.put_env("OPENAI_API_KEY", "")
-      assert {:error, :missing_api_key} = OpenAI.build_request("prompt", [])
+      assert {:error, :missing_api_key} = OpenAI.build_http_client([])
     end
 
     test "custom base_url is used" do
-      assert {:ok, {req, _request_opts}} =
-               OpenAI.build_request("prompt",
-                 api_key: "sk-test",
-                 base_url: "http://localhost:11434"
-               )
+      assert {:ok, req} =
+               OpenAI.build_http_client(api_key: "sk-test", base_url: "http://localhost:11434")
 
       assert req.options.base_url == "http://localhost:11434"
     end
@@ -229,39 +216,6 @@ defmodule LangExtract.Provider.OpenAITest do
 
       assert {:error, {:request_error, %Mint.TransportError{}}} =
                OpenAI.parse_response({:error, error})
-    end
-  end
-
-  describe "infer/2" do
-    setup do
-      original = System.get_env("OPENAI_API_KEY")
-
-      on_exit(fn ->
-        if original,
-          do: System.put_env("OPENAI_API_KEY", original),
-          else: System.delete_env("OPENAI_API_KEY")
-      end)
-
-      :ok
-    end
-
-    test "full pipeline returns extracted text" do
-      Req.Test.stub(__MODULE__, fn conn ->
-        Req.Test.json(conn, %{
-          "choices" => [%{"message" => %{"content" => "hello"}, "finish_reason" => "stop"}]
-        })
-      end)
-
-      assert {:ok, %Response{text: "hello"}} =
-               OpenAI.infer("Say hello.",
-                 api_key: "sk-test",
-                 req_options: [plug: {Req.Test, __MODULE__}]
-               )
-    end
-
-    test "returns error on missing api key" do
-      System.delete_env("OPENAI_API_KEY")
-      assert {:error, :missing_api_key} = OpenAI.infer("prompt", [])
     end
   end
 end

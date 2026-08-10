@@ -16,6 +16,7 @@ defmodule LangExtract.Provider do
   their transport in it) — no transport adapter layer is planned.
   """
 
+  alias LangExtract.Client
   alias LangExtract.Provider.Response
 
   @typedoc """
@@ -37,7 +38,7 @@ defmodule LangExtract.Provider do
 
   @callback build_http_client(opts :: keyword()) :: {:ok, Req.Request.t()} | {:error, term()}
 
-  @callback infer(prompt :: String.t(), opts :: keyword()) ::
+  @callback infer(client :: Client.t(), prompt :: String.t()) ::
               {:ok, Response.t()} | {:error, error()}
 
   @doc """
@@ -74,18 +75,6 @@ defmodule LangExtract.Provider do
       temperature: Keyword.get(opts, :temperature, defaults[:temperature]),
       base_url: Keyword.get(opts, :base_url, defaults[:base_url])
     }
-  end
-
-  @doc """
-  Returns a pre-built HTTP client from opts, or builds one via the given function.
-  """
-  @spec resolve_http_client(keyword(), (keyword() -> {:ok, Req.Request.t()} | {:error, term()})) ::
-          {:ok, Req.Request.t()} | {:error, term()}
-  def resolve_http_client(opts, build_fn) do
-    case Keyword.get(opts, :http_client) do
-      %Req.Request{} = req -> {:ok, req}
-      _ -> build_fn.(opts)
-    end
   end
 
   # LLM completions routinely exceed Req's 15s receive_timeout default, and
