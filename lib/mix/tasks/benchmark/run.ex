@@ -11,15 +11,22 @@ defmodule Mix.Tasks.Benchmark.Run do
   @default_corpus "benchmark/corpus"
   @default_out "benchmark/results/elixir"
 
-  @model "claude-sonnet-5"
   @max_tokens 8192
   @max_chunk_chars 1000
+
+  # Generation config per provider; --provider picks one. Claude stays
+  # the default — it is the cross-library comparison baseline.
+  @providers %{
+    "claude" => %{provider: :claude, model: "claude-sonnet-5", env: "ANTHROPIC_API_KEY"},
+    "grok" => %{provider: :grok, model: "grok-4.5", env: "XAI_API_KEY"}
+  }
 
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.config")
     {:ok, _} = Application.ensure_all_started(:lang_extract)
-    do_run(args, &live_extract/2)
+    %{provider: provider} = parse_args!(args)
+    do_run(args, fn source, template -> live_extract(provider, source, template) end)
   end
 
   # Seam for tests: the extractor receives (source, template) and returns
@@ -28,7 +35,8 @@ defmodule Mix.Tasks.Benchmark.Run do
   # rotation — is exercisable without network access.
   @doc false
   def do_run(args, extractor) do
-    %{task: task_name, corpus: corpus_dir, out: out_dir, document: document} = parse_args!(args)
+    %{task: task_name, corpus: corpus_dir, out: out_dir, document: document, provider: provider} =
+      parse_args!(args)
 
     task_def = load_task(task_name)
     template = LangExtract.template(task_def["description"], examples: task_def["examples"])
@@ -38,7 +46,7 @@ defmodule Mix.Tasks.Benchmark.Run do
 
     Mix.shell().info("Running task '#{task_name}' on #{length(corpus_files)} documents...")
 
-    meta = run_meta()
+    meta = run_meta(provider)
 
     Enum.each(corpus_files, fn file ->
       run_document(file, extractor, template, task_name, run_dir, meta)
@@ -52,19 +60,35 @@ defmodule Mix.Tasks.Benchmark.Run do
   defp parse_args!(args) do
     {opts, _, _} =
       OptionParser.parse(args,
-        strict: [task: :string, corpus: :string, out: :string, document: :string]
+        strict: [
+          task: :string,
+          corpus: :string,
+          out: :string,
+          document: :string,
+          provider: :string
+        ]
       )
+
+    provider_name = opts[:provider] || "claude"
+
+    provider =
+      Map.get(@providers, provider_name) ||
+        Mix.raise(
+          "Unknown provider #{inspect(provider_name)}. " <>
+            "Expected one of: #{Enum.join(Map.keys(@providers), ", ")}"
+        )
 
     %{
       task: opts[:task] || Mix.raise("Missing --task argument"),
       corpus: opts[:corpus] || @default_corpus,
       out: opts[:out] || @default_out,
-      document: opts[:document]
+      document: opts[:document],
+      provider: provider
     }
   end
 
-  defp live_extract(source, template) do
-    LangExtract.run(build_client(), source, template,
+  defp live_extract(provider, source, template) do
+    LangExtract.run(build_client(provider), source, template,
       max_chunk_chars: @max_chunk_chars,
       max_concurrency: 2
     )
@@ -116,11 +140,12 @@ defmodule Mix.Tasks.Benchmark.Run do
     File.write!(Path.join(run_dir, "#{slug}.json"), Jason.encode!(result, pretty: true))
   end
 
-  defp run_meta do
+  defp run_meta(%{provider: provider, model: model}) do
     %{
       "runner_commit" => git_commit(),
       "library_version" => to_string(Application.spec(:lang_extract, :vsn)),
-      "model" => @model,
+      "provider" => to_string(provider),
+      "model" => model,
       "max_tokens" => @max_tokens,
       "max_chunk_chars" => @max_chunk_chars
     }
@@ -291,12 +316,12 @@ defmodule Mix.Tasks.Benchmark.Run do
     end
   end
 
-  defp build_client do
-    api_key = System.get_env("ANTHROPIC_API_KEY") || Mix.raise("ANTHROPIC_API_KEY not set")
+  defp build_client(%{provider: provider, model: model, env: env}) do
+    api_key = System.get_env(env) || Mix.raise("#{env} not set")
 
-    LangExtract.new(:claude,
+    LangExtract.new(provider,
       api_key: api_key,
-      model: @model,
+      model: model,
       max_tokens: @max_tokens
     )
   end
