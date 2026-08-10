@@ -21,31 +21,39 @@ defmodule LangExtract.Provider.Gemini do
   @impl true
   @spec build_http_client(keyword()) :: {:ok, Req.Request.t()} | {:error, :missing_api_key}
   def build_http_client(opts) do
-    with {:ok, api_key} <- Provider.fetch_api_key(opts, "GEMINI_API_KEY") do
-      %{base_url: base_url} = Provider.common_opts(opts, @defaults)
+    case Provider.fetch_api_key(opts, "GEMINI_API_KEY") do
+      {:ok, api_key} ->
+        %{base_url: base_url} = Provider.common_opts(opts, @defaults)
 
-      req_opts =
-        Provider.req_options(opts,
-          base_url: base_url,
-          headers: %{"x-goog-api-key" => api_key}
-        )
+        req_opts =
+          Provider.req_options(opts,
+            base_url: base_url,
+            headers: %{"x-goog-api-key" => api_key}
+          )
 
-      {:ok, Req.new(req_opts)}
+        {:ok, Req.new(req_opts)}
+
+      {:error, _} = error ->
+        error
     end
   end
 
   @impl true
   @spec infer(String.t(), keyword()) :: {:ok, Provider.Response.t()} | {:error, Provider.error()}
   def infer(prompt, opts) do
-    with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
-      %{model: model} = Provider.common_opts(opts, @defaults)
+    case build_request(prompt, opts) do
+      {:ok, {req, request_opts}} ->
+        %{model: model} = Provider.common_opts(opts, @defaults)
 
-      Provider.request(
-        req,
-        request_opts,
-        %{provider: :gemini, model: model},
-        &parse_response/1
-      )
+        Provider.request(
+          req,
+          request_opts,
+          %{provider: :gemini, model: model},
+          &parse_response/1
+        )
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -53,22 +61,26 @@ defmodule LangExtract.Provider.Gemini do
   @spec build_request(String.t(), keyword()) ::
           {:ok, {Req.Request.t(), keyword()}} | {:error, :missing_api_key}
   def build_request(prompt, opts) do
-    with {:ok, req} <- Provider.resolve_http_client(opts, &build_http_client/1) do
-      %{model: model, max_tokens: max_tokens, temperature: temperature} =
-        Provider.common_opts(opts, @defaults)
+    case Provider.resolve_http_client(opts, &build_http_client/1) do
+      {:ok, req} ->
+        %{model: model, max_tokens: max_tokens, temperature: temperature} =
+          Provider.common_opts(opts, @defaults)
 
-      path = "/v1beta/models/#{model}:generateContent"
+        path = "/v1beta/models/#{model}:generateContent"
 
-      payload = %{
-        "contents" => [%{"parts" => [%{"text" => prompt}]}],
-        "generationConfig" => %{
-          "temperature" => temperature,
-          "maxOutputTokens" => max_tokens,
-          "responseMimeType" => "application/json"
+        payload = %{
+          "contents" => [%{"parts" => [%{"text" => prompt}]}],
+          "generationConfig" => %{
+            "temperature" => temperature,
+            "maxOutputTokens" => max_tokens,
+            "responseMimeType" => "application/json"
+          }
         }
-      }
 
-      {:ok, {req, [url: path, json: payload]}}
+        {:ok, {req, [url: path, json: payload]}}
+
+      {:error, _} = error ->
+        error
     end
   end
 

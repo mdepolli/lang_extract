@@ -31,31 +31,39 @@ defmodule LangExtract.Provider.OpenAI do
   @impl true
   @spec build_http_client(keyword()) :: {:ok, Req.Request.t()} | {:error, :missing_api_key}
   def build_http_client(opts) do
-    with {:ok, api_key} <- Provider.fetch_api_key(opts, "OPENAI_API_KEY") do
-      %{base_url: base_url} = Provider.common_opts(opts, @defaults)
+    case Provider.fetch_api_key(opts, "OPENAI_API_KEY") do
+      {:ok, api_key} ->
+        %{base_url: base_url} = Provider.common_opts(opts, @defaults)
 
-      req_opts =
-        Provider.req_options(opts,
-          base_url: base_url,
-          headers: %{"authorization" => "Bearer #{api_key}"}
-        )
+        req_opts =
+          Provider.req_options(opts,
+            base_url: base_url,
+            headers: %{"authorization" => "Bearer #{api_key}"}
+          )
 
-      {:ok, Req.new(req_opts)}
+        {:ok, Req.new(req_opts)}
+
+      {:error, _} = error ->
+        error
     end
   end
 
   @impl true
   @spec infer(String.t(), keyword()) :: {:ok, Provider.Response.t()} | {:error, Provider.error()}
   def infer(prompt, opts) do
-    with {:ok, {req, request_opts}} <- build_request(prompt, opts) do
-      %{model: model} = Provider.common_opts(opts, @defaults)
+    case build_request(prompt, opts) do
+      {:ok, {req, request_opts}} ->
+        %{model: model} = Provider.common_opts(opts, @defaults)
 
-      Provider.request(
-        req,
-        request_opts,
-        %{provider: :openai, model: model},
-        &parse_response/1
-      )
+        Provider.request(
+          req,
+          request_opts,
+          %{provider: :openai, model: model},
+          &parse_response/1
+        )
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -63,24 +71,28 @@ defmodule LangExtract.Provider.OpenAI do
   @spec build_request(String.t(), keyword()) ::
           {:ok, {Req.Request.t(), keyword()}} | {:error, :missing_api_key}
   def build_request(prompt, opts) do
-    with {:ok, req} <- Provider.resolve_http_client(opts, &build_http_client/1) do
-      %{model: model, max_tokens: max_tokens, temperature: temperature} =
-        Provider.common_opts(opts, @defaults)
+    case Provider.resolve_http_client(opts, &build_http_client/1) do
+      {:ok, req} ->
+        %{model: model, max_tokens: max_tokens, temperature: temperature} =
+          Provider.common_opts(opts, @defaults)
 
-      json_mode = Keyword.get(opts, :json_mode, true)
-      token_limit_key = Keyword.get(opts, :token_limit_key, :max_completion_tokens)
-      messages = build_messages(prompt, json_mode)
+        json_mode = Keyword.get(opts, :json_mode, true)
+        token_limit_key = Keyword.get(opts, :token_limit_key, :max_completion_tokens)
+        messages = build_messages(prompt, json_mode)
 
-      payload =
-        %{
-          "model" => model,
-          token_limit_wire_key!(token_limit_key) => max_tokens,
-          "messages" => messages
-        }
-        |> maybe_put_temperature(temperature)
-        |> maybe_put_response_format(json_mode)
+        payload =
+          %{
+            "model" => model,
+            token_limit_wire_key!(token_limit_key) => max_tokens,
+            "messages" => messages
+          }
+          |> maybe_put_temperature(temperature)
+          |> maybe_put_response_format(json_mode)
 
-      {:ok, {req, [url: "/v1/chat/completions", json: payload]}}
+        {:ok, {req, [url: "/v1/chat/completions", json: payload]}}
+
+      {:error, _} = error ->
+        error
     end
   end
 
