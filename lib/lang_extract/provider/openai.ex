@@ -64,7 +64,6 @@ defmodule LangExtract.Provider.OpenAI do
     )
   end
 
-  # Pure payload construction: no API key, no transport.
   defp build_inference_request(prompt, opts) do
     %{model: model, max_tokens: max_tokens, temperature: temperature} =
       Provider.common_opts(opts, @defaults)
