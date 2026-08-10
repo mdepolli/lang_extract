@@ -25,6 +25,7 @@ from langextract.core.data import ExampleData, Extraction
 
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+XAI_URL = "https://api.x.ai/v1/chat/completions"
 RETRYABLE_STATUS = {408, 429, 500, 502, 503, 529}
 
 
@@ -32,6 +33,7 @@ class ClaudeProvider(base_model.BaseLanguageModel):
     """Minimal Anthropic Claude provider for langextract."""
 
     MAX_ATTEMPTS = 4
+    URL = ANTHROPIC_URL
 
     def __init__(self, api_key: str, model_id: str = "claude-sonnet-5",
                  temperature: float | None = None, max_tokens: int = 8192,
@@ -50,6 +52,13 @@ class ClaudeProvider(base_model.BaseLanguageModel):
         log, self.request_log = self.request_log, []
         return log
 
+    def _headers(self) -> dict:
+        return {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+
     def _request(self, body: dict) -> dict:
         """POST to the Messages API, retrying transient failures with backoff.
 
@@ -62,12 +71,8 @@ class ClaudeProvider(base_model.BaseLanguageModel):
             error: Exception | None = None
             try:
                 resp = requests.post(
-                    ANTHROPIC_URL,
-                    headers={
-                        "x-api-key": self.api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
+                    self.URL,
+                    headers=self._headers(),
                     json=body,
                     timeout=(10, 120),
                 )
@@ -142,6 +147,69 @@ class ClaudeProvider(base_model.BaseLanguageModel):
                 yield [core_types.ScoredOutput(score=1.0, output=self._complete(prompt))]
 
 
+class GrokProvider(ClaudeProvider):
+    """Minimal xAI Grok provider (OpenAI-compatible wire) for langextract.
+
+    Mirrors ClaudeProvider's minimalism: one user message per prompt, no
+    temperature unless set — upstream's prompt machinery carries the
+    format instructions, same as the Claude adapter.
+    """
+
+    URL = XAI_URL
+
+    def __init__(self, api_key: str, model_id: str = "grok-4.20-0309-non-reasoning", **kwargs):
+        super().__init__(api_key, model_id=model_id, **kwargs)
+
+    def _headers(self) -> dict:
+        return {
+            "authorization": f"Bearer {self.api_key}",
+            "content-type": "application/json",
+        }
+
+    def _complete(self, prompt: str) -> str:
+        body = {
+            "model": self.model_id,
+            "max_completion_tokens": self.max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if self.temperature is not None:
+            body["temperature"] = self.temperature
+
+        start = time.perf_counter()
+        data = self._request(body)
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+        usage = data.get("usage") or {}
+        self.request_log.append({
+            "ms": elapsed_ms,
+            "input_tokens": usage.get("prompt_tokens"),
+            "output_tokens": usage.get("completion_tokens"),
+            "status": "200",
+        })
+
+        return self._completion_text(data)
+
+    def _completion_text(self, data: dict) -> str:
+        choices = data.get("choices") or []
+        if not choices:
+            raise RuntimeError("no choices in response")
+        finish_reason = choices[0].get("finish_reason")
+        if finish_reason == "length":
+            raise RuntimeError(
+                "response truncated at max_completion_tokens - raise GrokProvider max_tokens"
+            )
+        text = (choices[0].get("message") or {}).get("content")
+        if not text:
+            raise RuntimeError(f"no message content in response (finish_reason={finish_reason})")
+        return text
+
+
+PROVIDERS = {
+    "claude": (ClaudeProvider, "ANTHROPIC_API_KEY"),
+    "grok": (GrokProvider, "XAI_API_KEY"),
+}
+
+
 STATUS_MAP = {
     "match_exact": "exact",
     # match_greater is defined upstream but never assigned; mapped defensively.
@@ -180,12 +248,13 @@ def langextract_version(repo: Path) -> str:
     return match.group(1) if match else "unknown"
 
 
-def run_meta(model: "ClaudeProvider") -> dict:
+def run_meta(model: "ClaudeProvider", provider_name: str) -> dict:
     upstream = Path.home() / "code" / "langextract"
     return {
         "runner_commit": git_commit(BENCHMARK_DIR.parent),
         "langextract_version": langextract_version(upstream),
         "langextract_commit": git_commit(upstream),
+        "provider": provider_name,
         "model": model.model_id,
         "max_tokens": model.max_tokens,
         "max_char_buffer": 1000,
@@ -315,15 +384,16 @@ def run_document(file: Path, task_def: dict, task_name: str,
 
 
 def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path,
-                  document: str | None = None):
+                  document: str | None = None, provider: str = "claude"):
     task_def = load_task(task_name)
     examples = build_examples(task_def)
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    provider_cls, env_var = PROVIDERS[provider]
+    api_key = os.environ.get(env_var)
     if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY not set", file=sys.stderr)
+        print(f"ERROR: {env_var} not set", file=sys.stderr)
         sys.exit(1)
 
-    model = ClaudeProvider(api_key=api_key)
+    model = provider_cls(api_key=api_key)
 
     if document:
         corpus_files = [corpus_dir / f"{document}.txt"]
@@ -336,7 +406,7 @@ def run_benchmark(task_name: str, corpus_dir: Path, out_dir: Path,
 
     print(f"Running task '{task_name}' on {len(corpus_files)} documents...")
 
-    meta = run_meta(model)
+    meta = run_meta(model, provider)
     for file in corpus_files:
         run_document(file, task_def, task_name, examples, model, run_dir, meta)
 
@@ -357,6 +427,9 @@ if __name__ == "__main__":
     parser.add_argument("--document", help="Single document slug to run")
     parser.add_argument("--corpus", default=str(BENCHMARK_DIR / "corpus"), help="Corpus directory")
     parser.add_argument("--out", default=str(BENCHMARK_DIR / "results" / "python"), help="Output directory")
+    parser.add_argument("--provider", default="claude", choices=sorted(PROVIDERS),
+                        help="LLM provider (default: claude)")
     args = parser.parse_args()
 
-    run_benchmark(args.task, Path(args.corpus), Path(args.out), args.document)
+    run_benchmark(args.task, Path(args.corpus), Path(args.out), args.document,
+                  provider=args.provider)
