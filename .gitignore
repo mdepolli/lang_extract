@@ -51,6 +51,8 @@ __pycache__/
 .env
 .env.*
 .envrc
+mise.toml
+mise.local.toml
 
 # Generated analysis output
 xref_graph.dot
