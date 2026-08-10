@@ -58,7 +58,7 @@ defmodule LangExtract.MixProject do
     """
     Extract structured data from text using LLMs with source grounding.
     Maps every extraction back to exact byte positions in the source.
-    Supports Claude, OpenAI, and Gemini providers. Elixir port of google/langextract.
+    Supports Claude, OpenAI, Gemini, and Grok providers. Elixir port of google/langextract.
     """
   end
 
@@ -120,7 +120,8 @@ defmodule LangExtract.MixProject do
         Providers: [
           LangExtract.Provider.Claude,
           LangExtract.Provider.OpenAI,
-          LangExtract.Provider.Gemini
+          LangExtract.Provider.Gemini,
+          LangExtract.Provider.Grok
         ],
         Internal: [
           LangExtract.Alignment.Token,
