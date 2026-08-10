@@ -26,7 +26,12 @@ defmodule LangExtract.Provider.GrokTest do
       assert req.options.base_url == "https://api.x.ai"
 
       body = request_opts[:json]
-      assert body["model"] == "grok-4.5"
+      # Non-reasoning default: extraction is structured work that gains
+      # nothing from extended reasoning — the reasoning variants cost
+      # 4-5x the latency and ~3x the input tokens for identical :exact
+      # grounding (smoke-timed 2026-08-10). Reasoning models remain one
+      # `model:` override away.
+      assert body["model"] == "grok-4.20-0309-non-reasoning"
       # xAI accepts the modern key natively — no token_limit_key needed.
       assert body["max_completion_tokens"] == 4096
       refute Map.has_key?(body, "max_tokens")

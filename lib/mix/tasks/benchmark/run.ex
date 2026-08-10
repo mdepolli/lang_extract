@@ -18,7 +18,7 @@ defmodule Mix.Tasks.Benchmark.Run do
   # the default — it is the cross-library comparison baseline.
   @providers %{
     "claude" => %{provider: :claude, model: "claude-sonnet-5", env: "ANTHROPIC_API_KEY"},
-    "grok" => %{provider: :grok, model: "grok-4.5", env: "XAI_API_KEY"}
+    "grok" => %{provider: :grok, model: "grok-4.20-0309-non-reasoning", env: "XAI_API_KEY"}
   }
 
   @impl Mix.Task

@@ -13,8 +13,12 @@ defmodule LangExtract.Provider.Grok do
 
   alias LangExtract.Provider
 
+  # Non-reasoning default: extraction gains nothing from extended
+  # reasoning, and the reasoning variants cost 4-5x the latency and ~3x
+  # the input tokens for identical grounding quality. Callers pick a
+  # reasoning model with `model:` when they want one.
   @defaults [
-    model: "grok-4.5",
+    model: "grok-4.20-0309-non-reasoning",
     max_tokens: 4096,
     base_url: "https://api.x.ai"
   ]

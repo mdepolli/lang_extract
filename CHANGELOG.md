@@ -11,10 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Grok (xAI) provider** — `LangExtract.new(:grok, api_key: ...)` calls
   the xAI Chat Completions API (OpenAI-compatible wire shape at
-  `https://api.x.ai`, `XAI_API_KEY` env fallback, default model
-  `grok-4.5`). xAI accepts `max_completion_tokens` natively, so the
-  provider needs no wire-key option; `temperature` is sent only when the
-  caller sets it, the stance every provider here converged on.
+  `https://api.x.ai`, `XAI_API_KEY` env fallback). The default model is
+  `grok-4.20-0309-non-reasoning`: extraction gains nothing from extended
+  reasoning, and the reasoning variants measured 4-5x the latency and
+  ~3x the input tokens for identical `:exact` grounding — pick one via
+  `model:` when you want it anyway. xAI accepts `max_completion_tokens`
+  natively, so the provider needs no wire-key option; `temperature` is
+  sent only when the caller sets it, the stance every provider here
+  converged on.
 
 ## [0.11.0] - 2026-08-09
 
