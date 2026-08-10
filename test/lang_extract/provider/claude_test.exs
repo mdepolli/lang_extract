@@ -6,10 +6,32 @@ defmodule LangExtract.Provider.ClaudeTest do
 
   alias LangExtract.Provider.Claude
 
-  describe "build_inference_request/2" do
+  # Payload assertions go through the real door: build a client, run
+  # infer, and capture the request exactly as the server receives it.
+  defp captured_request(prompt, opts) do
+    parent = self()
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(parent, {:request, conn.request_path, Jason.decode!(body)})
+      Req.Test.json(conn, %{"content" => [%{"type" => "text", "text" => "ok"}]})
+    end)
+
+    client =
+      LangExtract.new(
+        :claude,
+        [api_key: "sk-test", req_options: [plug: {Req.Test, __MODULE__}]] ++ opts
+      )
+
+    {:ok, _} = Claude.infer(client, prompt)
+    assert_receive {:request, path, json}
+    {path, json}
+  end
+
+  describe "the inference request on the wire" do
     test "builds correct request with default opts" do
       # Pure: no api_key, no transport — the payload is data.
-      {url, body} = Claude.build_inference_request("Extract entities.", [])
+      {url, body} = captured_request("Extract entities.", [])
 
       assert url == "/v1/messages"
       assert body["model"] == "claude-sonnet-5"
@@ -19,13 +41,13 @@ defmodule LangExtract.Provider.ClaudeTest do
     end
 
     test "temperature is sent only when explicitly set" do
-      {_url, body} = Claude.build_inference_request("prompt", temperature: 0)
+      {_url, body} = captured_request("prompt", temperature: 0)
       assert body["temperature"] == 0
     end
 
     test "custom opts override defaults" do
       {_url, body} =
-        Claude.build_inference_request("prompt",
+        captured_request("prompt",
           model: "claude-opus-4-20250514",
           max_tokens: 1024,
           temperature: 0.5

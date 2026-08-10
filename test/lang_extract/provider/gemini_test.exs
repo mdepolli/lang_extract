@@ -7,11 +7,38 @@ defmodule LangExtract.Provider.GeminiTest do
   alias LangExtract.Provider.Gemini
   alias LangExtract.Provider.Response
 
-  describe "build_inference_request/2" do
+  # Payload assertions go through the real door: build a client, run
+  # infer, and capture the request exactly as the server receives it.
+  defp captured_request(prompt, opts) do
+    parent = self()
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(parent, {:request, conn.request_path, Jason.decode!(body)})
+
+      Req.Test.json(conn, %{
+        "candidates" => [
+          %{"content" => %{"parts" => [%{"text" => "ok"}]}, "finishReason" => "STOP"}
+        ]
+      })
+    end)
+
+    client =
+      LangExtract.new(
+        :gemini,
+        [api_key: "gm-test", req_options: [plug: {Req.Test, __MODULE__}]] ++ opts
+      )
+
+    {:ok, _} = Gemini.infer(client, prompt)
+    assert_receive {:request, path, json}
+    {path, json}
+  end
+
+  describe "the inference request on the wire" do
     test "builds correct request with default opts" do
       # Pure: no api_key, no transport — the payload is data. The model
       # rides in the URL path, Gemini's addressing scheme.
-      {url, body} = Gemini.build_inference_request("Extract entities.", [])
+      {url, body} = captured_request("Extract entities.", [])
 
       assert url == "/v1beta/models/gemini-3.5-flash:generateContent"
       assert body["contents"] == [%{"parts" => [%{"text" => "Extract entities."}]}]
@@ -25,7 +52,7 @@ defmodule LangExtract.Provider.GeminiTest do
 
     test "custom opts override defaults" do
       {url, body} =
-        Gemini.build_inference_request("prompt",
+        captured_request("prompt",
           model: "gemini-2.0-pro",
           max_tokens: 2048,
           temperature: 0.3

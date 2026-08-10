@@ -64,11 +64,8 @@ defmodule LangExtract.Provider.OpenAI do
     )
   end
 
-  # Public only as a test seam: pure payload construction, no API key or
-  # transport involved.
-  @doc false
-  @spec build_inference_request(String.t(), keyword()) :: {String.t(), map()}
-  def build_inference_request(prompt, opts) do
+  # Pure payload construction: no API key, no transport.
+  defp build_inference_request(prompt, opts) do
     %{model: model, max_tokens: max_tokens, temperature: temperature} =
       Provider.common_opts(opts, @defaults)
 

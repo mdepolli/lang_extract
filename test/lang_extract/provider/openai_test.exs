@@ -6,10 +6,32 @@ defmodule LangExtract.Provider.OpenAITest do
 
   alias LangExtract.Provider.OpenAI
 
-  describe "build_inference_request/2" do
+  # Payload assertions go through the real door: build a client, run
+  # infer, and capture the request exactly as the server receives it.
+  defp captured_request(prompt, opts) do
+    parent = self()
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(parent, {:request, conn.request_path, Jason.decode!(body)})
+      Req.Test.json(conn, %{"choices" => [%{"message" => %{"content" => "ok"}}]})
+    end)
+
+    client =
+      LangExtract.new(
+        :openai,
+        [api_key: "sk-test", req_options: [plug: {Req.Test, __MODULE__}]] ++ opts
+      )
+
+    {:ok, _} = OpenAI.infer(client, prompt)
+    assert_receive {:request, path, json}
+    {path, json}
+  end
+
+  describe "the inference request on the wire" do
     test "builds correct request with default opts" do
       # Pure: no api_key, no transport — the payload is data.
-      {url, body} = OpenAI.build_inference_request("Extract entities.", [])
+      {url, body} = captured_request("Extract entities.", [])
 
       assert url == "/v1/chat/completions"
       assert body["model"] == "gpt-4o-mini"
@@ -29,11 +51,11 @@ defmodule LangExtract.Provider.OpenAITest do
     end
 
     test "temperature is sent only when explicitly set" do
-      {_url, body} = OpenAI.build_inference_request("prompt", temperature: 0)
+      {_url, body} = captured_request("prompt", temperature: 0)
       assert body["temperature"] == 0
 
       {_url, body} =
-        OpenAI.build_inference_request("prompt",
+        captured_request("prompt",
           model: "gpt-4o",
           max_tokens: 1024,
           temperature: 0.7
@@ -45,7 +67,7 @@ defmodule LangExtract.Provider.OpenAITest do
     end
 
     test "reasoning model opts omit temperature and still use max_completion_tokens" do
-      {_url, body} = OpenAI.build_inference_request("prompt", model: "o4-mini")
+      {_url, body} = captured_request("prompt", model: "o4-mini")
 
       assert body["model"] == "o4-mini"
       assert body["max_completion_tokens"] == 4096
@@ -60,7 +82,7 @@ defmodule LangExtract.Provider.OpenAITest do
     # is an explicit option.
     test "token_limit_key: :max_tokens switches the wire key for compat endpoints" do
       {_url, body} =
-        OpenAI.build_inference_request("prompt", max_tokens: 1024, token_limit_key: :max_tokens)
+        captured_request("prompt", max_tokens: 1024, token_limit_key: :max_tokens)
 
       assert body["max_tokens"] == 1024
       refute Map.has_key?(body, "max_completion_tokens")
@@ -68,12 +90,12 @@ defmodule LangExtract.Provider.OpenAITest do
 
     test "unknown token_limit_key raises a named ArgumentError" do
       assert_raise ArgumentError, ~r/:token_limit_key must be/, fn ->
-        OpenAI.build_inference_request("prompt", token_limit_key: :tokens)
+        captured_request("prompt", token_limit_key: :tokens)
       end
     end
 
     test "json_mode false omits response_format and system message" do
-      {_url, body} = OpenAI.build_inference_request("Tell me a story.", json_mode: false)
+      {_url, body} = captured_request("Tell me a story.", json_mode: false)
 
       refute Map.has_key?(body, "response_format")
       assert body["messages"] == [%{"role" => "user", "content" => "Tell me a story."}]

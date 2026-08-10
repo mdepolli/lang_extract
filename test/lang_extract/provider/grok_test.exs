@@ -6,10 +6,32 @@ defmodule LangExtract.Provider.GrokTest do
 
   alias LangExtract.Provider.Grok
 
-  describe "build_inference_request/2" do
+  # Payload assertions go through the real door: build a client, run
+  # infer, and capture the request exactly as the server receives it.
+  defp captured_request(prompt, opts) do
+    parent = self()
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(parent, {:request, conn.request_path, Jason.decode!(body)})
+      Req.Test.json(conn, %{"choices" => [%{"message" => %{"content" => "ok"}}]})
+    end)
+
+    client =
+      LangExtract.new(
+        :grok,
+        [api_key: "xai-test", req_options: [plug: {Req.Test, __MODULE__}]] ++ opts
+      )
+
+    {:ok, _} = Grok.infer(client, prompt)
+    assert_receive {:request, path, json}
+    {path, json}
+  end
+
+  describe "the inference request on the wire" do
     test "builds correct request with default opts" do
       # Pure: no api_key, no transport — the payload is data.
-      {url, body} = Grok.build_inference_request("prompt", [])
+      {url, body} = captured_request("prompt", [])
 
       assert url == "/v1/chat/completions"
       # Non-reasoning default: extraction is structured work that gains
@@ -33,7 +55,7 @@ defmodule LangExtract.Provider.GrokTest do
 
     test "temperature is sent only when explicitly set" do
       {_url, body} =
-        Grok.build_inference_request("prompt", model: "grok-3", max_tokens: 1024, temperature: 0)
+        captured_request("prompt", model: "grok-3", max_tokens: 1024, temperature: 0)
 
       assert body["model"] == "grok-3"
       assert body["max_completion_tokens"] == 1024
@@ -41,7 +63,7 @@ defmodule LangExtract.Provider.GrokTest do
     end
 
     test "json_mode false omits response_format and system message" do
-      {_url, body} = Grok.build_inference_request("Tell me a story.", json_mode: false)
+      {_url, body} = captured_request("Tell me a story.", json_mode: false)
 
       refute Map.has_key?(body, "response_format")
       assert body["messages"] == [%{"role" => "user", "content" => "Tell me a story."}]
