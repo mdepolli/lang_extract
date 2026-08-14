@@ -82,6 +82,15 @@ defmodule LangExtract.Provider.GrokTest do
       :ok
     end
 
+    test "builds the transport with defaults and auth" do
+      assert {:ok, req} = Grok.build_http_client(api_key: "xai-test")
+
+      assert req.options.base_url == "https://api.x.ai"
+      assert req.options.receive_timeout == 120_000
+      assert req.options.retry == :transient
+      assert req.headers["authorization"] == ["Bearer xai-test"]
+    end
+
     test "api_key from opts takes precedence over env var" do
       System.put_env("XAI_API_KEY", "xai-env")
 
@@ -101,6 +110,18 @@ defmodule LangExtract.Provider.GrokTest do
       System.delete_env("XAI_API_KEY")
       assert {:error, :missing_api_key} = Grok.build_http_client([])
     end
+
+    test "returns error when api key is empty string" do
+      System.put_env("XAI_API_KEY", "")
+      assert {:error, :missing_api_key} = Grok.build_http_client([])
+    end
+
+    test "custom base_url is used" do
+      assert {:ok, req} =
+               Grok.build_http_client(api_key: "xai-test", base_url: "https://proxy.example.com")
+
+      assert req.options.base_url == "https://proxy.example.com"
+    end
   end
 
   describe "parse_response/1" do
@@ -116,6 +137,43 @@ defmodule LangExtract.Provider.GrokTest do
     test "empty choices map to empty_response" do
       response = %Req.Response{status: 200, body: %{"choices" => []}}
       assert {:error, :empty_response} = Grok.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 400 to bad_request" do
+      response = %Req.Response{status: 400, body: %{"error" => "bad"}}
+      assert {:error, {:bad_request, _}} = Grok.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 401 to unauthorized" do
+      response = %Req.Response{status: 401, body: %{}}
+      assert {:error, :unauthorized} = Grok.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 429 to rate_limited" do
+      response = %Req.Response{status: 429, body: %{}}
+      assert {:error, {:rate_limited, nil}} = Grok.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 500 to server_error" do
+      response = %Req.Response{status: 500, body: %{}}
+      assert {:error, :server_error} = Grok.parse_response({:ok, response})
+    end
+
+    test "maps HTTP 503 to server_error" do
+      response = %Req.Response{status: 503, body: %{}}
+      assert {:error, :server_error} = Grok.parse_response({:ok, response})
+    end
+
+    test "maps other HTTP errors to api_error" do
+      response = %Req.Response{status: 418, body: %{"error" => "teapot"}}
+      assert {:error, {:api_error, 418, _}} = Grok.parse_response({:ok, response})
+    end
+
+    test "maps transport error to request_error" do
+      error = %Mint.TransportError{reason: :timeout}
+
+      assert {:error, {:request_error, %Mint.TransportError{reason: :timeout}}} =
+               Grok.parse_response({:error, error})
     end
   end
 end

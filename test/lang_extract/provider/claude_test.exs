@@ -106,6 +106,14 @@ defmodule LangExtract.Provider.ClaudeTest do
       assert {:error, :missing_api_key} = Claude.build_http_client([])
     end
 
+    test "new/2 raises when the HTTP client cannot be built" do
+      System.delete_env("ANTHROPIC_API_KEY")
+
+      assert_raise ArgumentError, ~r/failed to build HTTP client/, fn ->
+        LangExtract.new(:claude, [])
+      end
+    end
+
     test "req_options override HTTP defaults" do
       assert {:ok, req} =
                Claude.build_http_client(

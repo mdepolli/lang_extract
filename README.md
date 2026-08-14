@@ -338,7 +338,7 @@ All providers accept these common options:
 | `:api_key`     | From env var     | API key (falls back to provider-specific env var)                        |
 | `:model`       | Provider default | Model ID                                                                 |
 | `:max_tokens`  | `4096`           | Maximum response tokens                                                  |
-| `:temperature` | unset (OpenAI/Claude); `0` (Gemini) | Sampling temperature. OpenAI and Claude omit it unless set — o-series and `claude-sonnet-5` reject non-default values |
+| `:temperature` | unset (OpenAI/Claude/Grok); `0` (Gemini) | Sampling temperature. OpenAI, Claude, and Grok omit it unless set — o-series and `claude-sonnet-5` reject non-default values |
 | `:base_url`    | Provider default | API base URL                                                             |
 | `:req_options` | `[]`             | Extra [Req](https://hex.pm/packages/req) options merged into the request |
 
@@ -361,6 +361,7 @@ Provider-specific options:
 | Provider  | Option       | Default | Description                                                                   |
 | --------- | ------------ | ------- | ----------------------------------------------------------------------------- |
 | `:openai` | `:json_mode` | `true`  | Enable JSON mode. Set `false` for compatible endpoints that don't support it. |
+| `:grok`   | `:json_mode` | `true`  | Same as OpenAI — xAI's Chat Completions API uses the same wire key.           |
 
 ## Production: the supervised Runner
 
@@ -416,7 +417,7 @@ flowchart LR
 | Stage | Role |
 | ----- | ---- |
 | Prompt Builder | Renders a few-shot Q&A prompt with dynamic-key examples |
-| LLM Provider | Calls Claude / OpenAI / Gemini via Req |
+| LLM Provider | Calls Claude / OpenAI / Gemini / Grok via Req |
 | Wire Format | Strips fences / `<think>` tags; normalizes dynamic keys to canonical form |
 | Parser | Validates and constructs `Extraction` structs |
 | Aligner | Maps extraction text to byte positions (exact scan, then fuzzy fallbacks) |

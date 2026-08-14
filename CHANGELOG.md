@@ -23,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   silently rebuilt from env. Migration for behaviour implementors (none
   known at the 0.8.0 freeze or since): `infer/2` now receives the client
   instead of opts; `build_request/2` is gone (payload construction is
-  private); one-shot `infer(prompt, opts)` calls become `new/2` then
+  private). Callers of the deleted one-shot `infer(prompt, opts)` or
+  `@doc false build_request/2` switch to `new/2` then
   `YourProvider.infer(client, prompt)`. `LangExtract.new/2`, `run/4`,
   `stream/4`, and the Runner are unchanged.
   The behaviour also moves from the Core API tier to Advanced (amending
