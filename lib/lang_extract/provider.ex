@@ -2,7 +2,8 @@ defmodule LangExtract.Provider do
   @moduledoc """
   Behaviour for LLM inference providers.
 
-  Each provider implements `infer/2` which takes a prompt string and returns
+  Two callbacks: `c:build_http_client/1` constructs the Req transport, and
+  `c:infer/2` takes a `LangExtract.Client` plus a prompt string and returns
   a `LangExtract.Provider.Response` — the raw response text plus token usage
   when the API reported it. Parsing and normalization are the caller's
   responsibility.

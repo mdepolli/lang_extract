@@ -1,8 +1,9 @@
 defmodule LangExtract.Client do
   @moduledoc """
-  A configured LLM client for extraction.
+  A configured LLM client.
 
-  Created via `LangExtract.new/2`. Holds the provider module and its options.
+  Created via `LangExtract.new/2`. Hold it and pass it to `run/4` /
+  `stream/4`. Opaque — match on it, don't build it by hand.
   """
 
   @type t :: %__MODULE__{

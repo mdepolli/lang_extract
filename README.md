@@ -343,7 +343,7 @@ All providers accept these common options:
 | `:req_options` | `[]`             | Extra [Req](https://hex.pm/packages/req) options merged into the request |
 
 Environment variable fallbacks: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-`GEMINI_API_KEY`.
+`GEMINI_API_KEY`, `XAI_API_KEY`.
 
 HTTP defaults suit LLM latency: 120s receive timeout and transient retries
 (429/5xx/transport errors). Override either via `:req_options`, e.g.
@@ -446,7 +446,7 @@ lib/lang_extract/
 ├── alignment/              # Tokenizer, Token, Aligner
 ├── pipeline/               # Parser
 ├── prompt/                 # Builder, Validator
-├── provider/               # Claude, OpenAI, Gemini implementations
+├── provider/               # Claude, OpenAI, Gemini, Grok implementations
 ├── runner/                 # Limiter, Request, Delivery
 ├── chunk_error.ex          # Failed chunk: byte range + reason
 ├── chunk_result.ex         # Successful chunk: byte range + spans + usage
@@ -486,9 +486,9 @@ as in this cycle), `WireFormat`, `Chunker`, `Aligner`, `Pipeline`,
 `Prompt.Builder`.
 
 **Providers** — the built-in implementations behind `new/2`'s `:claude`,
-`:openai`, `:gemini`, and `:grok`. Use them via the atom (or their
-`infer/2` for a one-shot call); the modules themselves carry no
-stability guarantee beyond the `Provider` behaviour they implement.
+`:openai`, `:gemini`, and `:grok`. Use them via the atom; the modules
+themselves carry no stability guarantee beyond the `Provider` behaviour
+they implement.
 
 **Internal** — no guarantees: `Orchestrator`, `Pipeline.Parser`,
 `Runner.{Limiter,Request,Delivery}`, `Tokenizer`, `Token`. Their docs
@@ -503,7 +503,7 @@ Key differences:
 |                    | Python                            | Elixir                               |
 | ------------------ | --------------------------------- | ------------------------------------ |
 | Codebase           | ~4,000 LOC                        | ~2,000 LOC                           |
-| Providers          | Gemini, OpenAI, Ollama            | Claude, OpenAI, Gemini               |
+| Providers          | Gemini, OpenAI, Ollama            | Claude, OpenAI, Gemini, Grok         |
 | Offsets            | Character positions               | Byte positions                       |
 | Parallelism        | ThreadPoolExecutor                | Task.async_stream                    |
 | Chunking           | Always-on (1000 chars)            | Always-on (1000 chars, configurable) |

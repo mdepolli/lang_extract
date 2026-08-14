@@ -156,8 +156,8 @@ defmodule LangExtract.ProviderTest do
     end
   end
 
-  # All executor tests drive a real client through the generic entry
-  # point: build the client once, run one inference over it.
+  # All executor tests drive a real client through the provider
+  # callback: build the client once, run one inference over it.
   defp infer(provider, prompt, opts) do
     client = LangExtract.new(provider, opts)
     client.provider.infer(client, prompt)

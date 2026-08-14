@@ -12,7 +12,7 @@ defmodule LangExtract.Provider.ClaudeTest do
     parent = self()
 
     Req.Test.stub(__MODULE__, fn conn ->
-      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      body = Req.Test.raw_body(conn)
       send(parent, {:request, conn.request_path, Jason.decode!(body)})
       Req.Test.json(conn, %{"content" => [%{"type" => "text", "text" => "ok"}]})
     end)
@@ -30,7 +30,6 @@ defmodule LangExtract.Provider.ClaudeTest do
 
   describe "the inference request on the wire" do
     test "builds correct request with default opts" do
-      # Pure: no api_key, no transport — the payload is data.
       {url, body} = captured_request("Extract entities.", [])
 
       assert url == "/v1/messages"
